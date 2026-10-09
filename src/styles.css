@@ -814,3 +814,20 @@ h2 {
 .staff-tag.is-me strong {
   color: var(--nectar);
 }
+
+.sound-toggle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fffdf7;
+  color: var(--ink-soft);
+}
+.sound-toggle.on {
+  background: var(--gold);
+  border-color: var(--royal);
+  color: var(--ink);
+}

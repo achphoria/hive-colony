@@ -14,15 +14,15 @@ Saat ini misi masih **simulasi**: tidak ada panggilan ke API AI. Agent bergerak,
 - Pantau misi di Papan misi dan aktivitas di Log koloni.
 - Atur kecepatan simulasi: jeda, 1×, 2×, 4×.
 - Jam mengikuti waktu Jakarta (WIB) secara realtime.
-- Musik ambient dan dengung lebah menyala otomatis.
+- Musik latar mati secara default. Nyalakan lewat ikon speaker di header (pilihan diingat browser).
 - Di HP, layar hanya menampilkan header. Menu (lantai, kontrol, daftar agent) dan papan misi ada di laci samping, dibuka lewat tab di tepi kiri dan kanan layar.
 
 ## Staff manusia dan Hive Hall (mode demo)
 
 - **Avatar staff** (`#/avatar`): atur nama, divisi, rambut, warna, kulit, pakaian, aksesoris, tato, ekspresi, dan joget favorit. Ada 6 pilihan joget: Pargoy Lebah, Goyang Itik, Floss, Baling-baling, Robot Patah-patah, dan Koboi Galau. Avatar disimpan di browser.
 - **Outdoor**: avatar Anda dan staff contoh (Dina, Rudi, Maya, Tono) berjalan-jalan di taman pulau dan sesekali berjoget. Tombol **Joget** di panel kontrol membuat avatar Anda berjoget, dan kamera ikut terbang ke avatar Anda.
-- **Hive Hall** (`#/hall`): ruang rapat fullscreen bertema terang.
-  - Layar dindingnya membaca data koloni secara live: aktivitas terbaru, kalender minggu ini, tugas yang belum selesai, ticker statistik, staff online, dan skor skill agent.
+- **Hive Hall** (`#/hall`): ruang rapat **3D** full-wide bertema terang. Queen Bea dan para ketua AI berbentuk Hive Worker 3D duduk di meja heksagon bersama avatar staff.
+  - Lima layar di dinding membaca data koloni secara live: staff online, aktivitas terbaru, kalender minggu ini, tugas yang belum selesai, dan skor skill agent, plus ticker statistik. Klik salah satu layar untuk memperbesar.
   - Tab **Papan rencana** (kanban), **Kalender**, dan **Persetujuan** (setujui, minta revisi, atau tolak).
   - **Rapat suara demo**: tekan "Panggil Queen Bea", dan Queen Bea menjawab berdasarkan data koloni memakai text-to-speech bawaan browser.
 
@@ -43,7 +43,7 @@ Semua suara disintesis langsung di browser dengan Web Audio API, tanpa file audi
 - dengung lebah saat agent terbang di dekat kamera
 - efek misi dikirim, misi selesai, bel tamu, dan pintu lobby
 
-Musik menyala otomatis. Browser baru mengizinkan audio setelah interaksi pertama, jadi suara mulai terdengar begitu halaman disentuh atau diklik.
+Musik mati secara default. Nyalakan lewat ikon speaker kecil di header; pilihan itu diingat oleh browser.
 
 ## Alur misi
 

@@ -46,6 +46,10 @@ export const M = {
     depthWrite: false,
   }),
   window: std('#FFC93C', { emissive: '#FFB020', emissiveIntensity: 0.1 }),
+  skinBee: std('#FFE0BD'),
+  hairBee: std('#6B4416'),
+  mute: new THREE.MeshBasicMaterial({ color: '#E24B4A' }),
+  sky: std('#DCEBF7', { emissive: '#BFD9F2', emissiveIntensity: 0.5 }),
   zzz: new THREE.MeshBasicMaterial({ color: '#BFD3FF', transparent: true, opacity: 0.9 }),
   doorGlass: new THREE.MeshStandardMaterial({
     color: '#FFC93C',

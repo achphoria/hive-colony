@@ -66,6 +66,30 @@ function Clock() {
   );
 }
 
+export function SoundToggle() {
+  const [on, setOn] = useState(soundPref);
+  return (
+    <button
+      className={`sound-toggle${on ? ' on' : ''}`}
+      onClick={() => {
+        setSoundPref(!on);
+        setOn(!on);
+      }}
+      aria-label={on ? 'Matikan musik dan suara' : 'Nyalakan musik dan suara'}
+      title={on ? 'Matikan musik' : 'Nyalakan musik'}
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+        {on ? (
+          <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        ) : (
+          <path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        )}
+      </svg>
+    </button>
+  );
+}
+
 function Brand() {
   const stats = useHive((s) => s.stats);
   const agentStates = useHive((s) => s.agentStates);
@@ -78,6 +102,7 @@ function Brand() {
         <p>Kantor virtual 21 agent AI · mode simulasi</p>
       </div>
       <Clock />
+      <SoundToggle />
       <div className="stats">
         <div>
           <b>{working}</b>
@@ -361,11 +386,28 @@ function useIsMobile() {
   return mobile;
 }
 
-// Musik menyala otomatis. Browser baru mengizinkan audio setelah sentuhan/klik pertama,
-// jadi audio "dibuka" pada interaksi pertama di mana pun di halaman.
+// Musik latar mati secara default. Kalau pengguna pernah menyalakannya (ikon speaker di header),
+// pilihan itu diingat; audio baru "dibuka" pada interaksi pertama karena aturan autoplay browser.
+const SOUND_KEY = 'hive.sound';
+export function soundPref() {
+  try {
+    return localStorage.getItem(SOUND_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+export function setSoundPref(on) {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? 'on' : 'off');
+  } catch {
+    /* tidak tersimpan: berlaku untuk sesi ini saja */
+  }
+  sound.setEnabled(on);
+}
+
 export function useAutoSound() {
   useEffect(() => {
-    sound.setEnabled(true);
+    if (soundPref()) sound.setEnabled(true);
     const unlock = () => sound.unlock();
     const events = ['pointerdown', 'touchend', 'click', 'keydown'];
     events.forEach((e) => window.addEventListener(e, unlock, { passive: true }));
