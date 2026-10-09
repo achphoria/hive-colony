@@ -1,0 +1,275 @@
+/* Animasi joget avatar 2D (SVG). Origin memakai koordinat viewBox 200x250. */
+.avp {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.avp .bd,
+.avp .hd,
+.avp .al,
+.avp .ar,
+.avp .ll,
+.avp .lr,
+.avp .wg {
+  transform-box: view-box;
+}
+.avp .bd { transform-origin: 100px 235px; }
+.avp .hd { transform-origin: 100px 145px; }
+.avp .al { transform-origin: 61px 156px; }
+.avp .ar { transform-origin: 139px 156px; }
+.avp .ll { transform-origin: 92px 214px; }
+.avp .lr { transform-origin: 108px 214px; }
+.avp .wg { display: none; transform-origin: 100px 165px; }
+.avp .drop { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.avp .notes { opacity: 0; }
+.avp:not([data-pose='idle']) .notes { animation: av-notes 1.6s linear infinite; }
+@keyframes av-notes {
+  0% { opacity: 0; transform: translateY(10px); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-30px); }
+}
+
+.avp[data-pose='itik'] .bd { animation: itB 0.5s ease-in-out infinite alternate; }
+.avp[data-pose='itik'] .al { animation: itAL 0.22s ease-in-out infinite alternate; }
+.avp[data-pose='itik'] .ar { animation: itAR 0.22s ease-in-out infinite alternate; }
+.avp[data-pose='itik'] .hd { animation: itH 0.5s ease-in-out infinite alternate; }
+@keyframes itB { from { transform: translateX(-8px) rotate(-7deg); } to { transform: translateX(8px) rotate(7deg); } }
+@keyframes itAL { from { transform: rotate(15deg); } to { transform: rotate(70deg); } }
+@keyframes itAR { from { transform: rotate(-15deg); } to { transform: rotate(-70deg); } }
+@keyframes itH { from { transform: rotate(10deg); } to { transform: rotate(-10deg); } }
+
+.avp[data-pose='floss'] .bd { animation: flB 0.36s ease-in-out infinite alternate; }
+.avp[data-pose='floss'] .al,
+.avp[data-pose='floss'] .ar { animation: flA 0.36s ease-in-out infinite alternate; }
+@keyframes flB { from { transform: translateX(7px); } to { transform: translateX(-7px); } }
+@keyframes flA { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
+
+.avp[data-pose='baling'] .bd { animation: baB 0.25s ease-in-out infinite alternate; }
+.avp[data-pose='baling'] .al { animation: baL 0.45s linear infinite; }
+.avp[data-pose='baling'] .ar { animation: baR 0.45s linear infinite; }
+@keyframes baB { from { transform: translateY(0); } to { transform: translateY(-12px); } }
+@keyframes baL { to { transform: rotate(360deg); } }
+@keyframes baR { to { transform: rotate(-360deg); } }
+
+.avp[data-pose='robot'] .al { animation: roL 1.2s steps(1) infinite; }
+.avp[data-pose='robot'] .ar { animation: roR 1.2s steps(1) infinite; }
+.avp[data-pose='robot'] .hd { animation: roH 1.2s steps(1) infinite; }
+@keyframes roL { 0% { transform: rotate(90deg); } 25% { transform: rotate(0); } 50% { transform: rotate(90deg); } 75% { transform: rotate(160deg); } }
+@keyframes roR { 0% { transform: rotate(0); } 25% { transform: rotate(-90deg); } 50% { transform: rotate(-160deg); } 75% { transform: rotate(-90deg); } }
+@keyframes roH { 0% { transform: rotate(-12deg); } 25% { transform: rotate(12deg); } 50% { transform: rotate(0); } 75% { transform: rotate(12deg); } }
+
+.avp[data-pose='koboi'] .bd { animation: kbB 0.3s ease-in-out infinite alternate; }
+.avp[data-pose='koboi'] .ar { animation: kbR 0.3s ease-in-out infinite alternate; }
+.avp[data-pose='koboi'] .al { animation: kbL 0.3s ease-in-out infinite alternate; }
+.avp[data-pose='koboi'] .ll { animation: kbLL 0.3s ease-in-out infinite alternate; }
+@keyframes kbB { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-14px) rotate(3deg); } }
+@keyframes kbR { from { transform: rotate(-165deg); } to { transform: rotate(-200deg); } }
+@keyframes kbL { from { transform: rotate(-30deg); } to { transform: rotate(-55deg); } }
+@keyframes kbLL { from { transform: rotate(0); } to { transform: rotate(25deg); } }
+
+.avp[data-pose='pargoy'] .wg { display: inline; animation: pgW 0.09s ease-in-out infinite alternate; }
+.avp[data-pose='pargoy'] .bd { animation: pgB 2.4s ease-in-out infinite; }
+.avp[data-pose='pargoy'] .al { animation: pgL 2.4s ease-in-out infinite; }
+.avp[data-pose='pargoy'] .ar { animation: pgR 2.4s ease-in-out infinite; }
+.avp[data-pose='pargoy'] .hd { animation: pgH 2.4s linear infinite; }
+.avp[data-pose='pargoy'] .drop { animation: pgD 2.4s ease-out infinite; }
+@keyframes pgW { from { transform: scaleX(0.85); } to { transform: scaleX(1.12); } }
+@keyframes pgB {
+  0%, 20%, 40%, 60% { transform: translateY(0) rotate(-4deg); }
+  10%, 30%, 50%, 70% { transform: translateY(-12px) rotate(4deg); }
+  80%, 100% { transform: translateY(0) rotate(0) scale(1.04); }
+}
+@keyframes pgL {
+  0%, 20%, 40%, 60% { transform: rotate(150deg); }
+  10%, 30%, 50%, 70% { transform: rotate(178deg); }
+  80%, 100% { transform: rotate(28deg); }
+}
+@keyframes pgR {
+  0%, 20%, 40%, 60% { transform: rotate(-150deg); }
+  10%, 30%, 50%, 70% { transform: rotate(-178deg); }
+  80%, 100% { transform: rotate(-95deg); }
+}
+@keyframes pgH {
+  0%, 10%, 20%, 30%, 40%, 50%, 60%, 70% { transform: rotate(-12deg); }
+  5%, 15%, 25%, 35%, 45%, 55%, 65%, 75% { transform: rotate(12deg); }
+  80%, 100% { transform: rotate(-6deg); }
+}
+@keyframes pgD {
+  0%, 79% { opacity: 0; transform: scale(0.6); }
+  84% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avp * { animation: none !important; }
+}
+
+/* ---------- halaman pembuat avatar ---------- */
+.page {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: #fff3d6;
+  color: var(--ink);
+}
+.page-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.page-head h1 {
+  font-size: 24px;
+}
+.page-head p {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.back {
+  border: 1.5px solid var(--line);
+  background: #fffdf7;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 700;
+}
+.creator {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 16px;
+}
+.creator-preview {
+  background: #fffdf7;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  text-align: center;
+  align-self: start;
+  position: sticky;
+  top: 12px;
+}
+.creator-preview .name {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 20px;
+  margin-top: 4px;
+}
+.creator-preview .sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.creator-form {
+  background: #fffdf7;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+.field {
+  margin-bottom: 14px;
+}
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.field input[type='text'],
+.field select {
+  width: 100%;
+  font: inherit;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+.field-hint {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+.opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.opt {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+.opt.on {
+  background: var(--gold);
+  border-color: var(--royal);
+}
+.sw {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  outline: 1.5px solid var(--line);
+  padding: 0;
+}
+.sw.on {
+  outline: 2.5px solid var(--ink);
+}
+.poses {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.pose {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+}
+.pose b {
+  display: block;
+  font-size: 13px;
+}
+.pose span {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.pose.on {
+  background: var(--gold);
+  border-color: var(--royal);
+}
+.pose.on span {
+  color: var(--ink);
+}
+.save {
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--royal);
+  background: var(--gold);
+  font-family: 'Fredoka', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+}
+.error {
+  color: #a32d2d;
+  font-size: 12px;
+  margin-top: 4px;
+}
+@media (max-width: 760px) {
+  .creator {
+    grid-template-columns: 1fr;
+  }
+  .creator-preview {
+    position: static;
+    max-width: 260px;
+    margin: 0 auto;
+    width: 100%;
+  }
+}

@@ -58,6 +58,7 @@ export const world = {
   seq: 1,
   honey: 0,
   done: 0,
+  doneBy: {}, // jumlah misi selesai per agent (dasar skor skill)
 };
 
 for (const def of AGENTS) {
@@ -110,7 +111,7 @@ for (const def of GUESTS) {
 
 const emit = (type) => world.events.push(type);
 const log = (kind, text, dept) =>
-  useHive.getState().pushLog({ id: `${kind}-${world.seq++}`, kind, dept, text, time: world.time });
+  useHive.getState().pushLog({ id: `${kind}-${world.seq++}`, kind, dept, text, time: world.time, clock: world.clock });
 
 function seatDest(a) {
   return { pos: V(...a.seat.seat), tier: ROOM_BY_ID[a.seat.roomId].tier, facing: a.seat.facing, roomId: a.seat.roomId };
@@ -362,6 +363,7 @@ function completeMission(m) {
   }
   world.done++;
   world.honey += m.reward;
+  world.doneBy[m.leadId] = (world.doneBy[m.leadId] || 0) + 1;
   world.glow[m.roomId] = 1;
   const room = ROOM_BY_ID[m.roomId];
   world.effects.push({

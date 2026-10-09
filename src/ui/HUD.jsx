@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText, dayPhase, isNightHour } from '../data/hive';
 import { useHive } from '../sim/store';
 import { focusAgent } from '../sim/engine';
+import { outdoor, danceNow } from '../sim/outdoor';
+import { POSES } from '../data/staff';
+import { go } from './nav';
 import { sound } from '../audio/sound';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -215,6 +218,7 @@ function MissionBoard({ className = 'panel board', onPick }) {
 function Controls({ className = 'panel controls', onPick }) {
   const speed = useHive((s) => s.speed);
   const paused = useHive((s) => s.paused);
+  const hasProfile = useHive((s) => !!s.profile);
   const { setSpeed, togglePause } = useHive.getState();
   const resetView = () => {
     useHive.getState().resetView();
@@ -231,6 +235,38 @@ function Controls({ className = 'panel controls', onPick }) {
         </button>
       ))}
       <button onClick={resetView}>Reset kamera</button>
+      <span className="ctl-sep" />
+      <button onClick={() => go('/hall')}>Hive Hall</button>
+      <button onClick={() => go('/avatar')}>{hasProfile ? 'Avatar saya' : 'Buat avatar'}</button>
+      {hasProfile && <DanceMenu onPick={onPick} />}
+    </div>
+  );
+}
+
+function DanceMenu({ onPick }) {
+  const [open, setOpen] = useState(false);
+  const dance = (pose) => {
+    setOpen(false);
+    danceNow('me', pose);
+    const w = outdoor.byId.me;
+    if (w) useHive.getState().focusOn([w.pos.x, w.pos.y + 1, w.pos.z], 12, [Math.sin(w.facing), 0.9, Math.cos(w.facing)]);
+    onPick?.();
+  };
+  return (
+    <div className="dance-menu">
+      <button className={open ? 'on' : ''} onClick={() => setOpen(!open)} aria-expanded={open}>
+        Joget ▾
+      </button>
+      {open && (
+        <div className="dance-pop">
+          {POSES.filter((p) => p.id !== 'idle').map((p) => (
+            <button key={p.id} onClick={() => dance(p.id)}>
+              <b>{p.name}</b>
+              <span>{p.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -327,7 +363,7 @@ function useIsMobile() {
 
 // Musik menyala otomatis. Browser baru mengizinkan audio setelah sentuhan/klik pertama,
 // jadi audio "dibuka" pada interaksi pertama di mana pun di halaman.
-function useAutoSound() {
+export function useAutoSound() {
   useEffect(() => {
     sound.setEnabled(true);
     const unlock = () => sound.unlock();
@@ -401,7 +437,6 @@ function MobileHUD() {
 
 export function HUD() {
   const mobile = useIsMobile();
-  useAutoSound();
   if (mobile) return <MobileHUD />;
   return (
     <div className="hud">

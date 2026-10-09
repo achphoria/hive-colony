@@ -4,14 +4,9 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { AGENTS, GUESTS, LIFT_X, tierY, tierOf } from '../data/hive';
 import { useHive } from '../sim/store';
-import { update, world } from '../sim/engine';
+import { world } from '../sim/engine';
 import { M, Box, Cyl, Hex, Sph, Cone, HEX_START } from './materials';
 import { HiveWorker } from './HiveWorker';
-
-export function Simulation() {
-  useFrame((_, dt) => update(dt));
-  return null;
-}
 
 export function Agents() {
   return [...AGENTS, ...GUESTS].map((def) => <HiveWorker key={def.id} def={def} />);

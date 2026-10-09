@@ -17,6 +17,17 @@ Saat ini misi masih **simulasi**: tidak ada panggilan ke API AI. Agent bergerak,
 - Musik ambient dan dengung lebah menyala otomatis.
 - Di HP, layar hanya menampilkan header. Menu (lantai, kontrol, daftar agent) dan papan misi ada di laci samping, dibuka lewat tab di tepi kiri dan kanan layar.
 
+## Staff manusia dan Hive Hall (mode demo)
+
+- **Avatar staff** (`#/avatar`): atur nama, divisi, rambut, warna, kulit, pakaian, aksesoris, tato, ekspresi, dan joget favorit. Ada 6 pilihan joget: Pargoy Lebah, Goyang Itik, Floss, Baling-baling, Robot Patah-patah, dan Koboi Galau. Avatar disimpan di browser.
+- **Outdoor**: avatar Anda dan staff contoh (Dina, Rudi, Maya, Tono) berjalan-jalan di taman pulau dan sesekali berjoget. Tombol **Joget** di panel kontrol membuat avatar Anda berjoget, dan kamera ikut terbang ke avatar Anda.
+- **Hive Hall** (`#/hall`): ruang rapat fullscreen bertema terang.
+  - Layar dindingnya membaca data koloni secara live: aktivitas terbaru, kalender minggu ini, tugas yang belum selesai, ticker statistik, staff online, dan skor skill agent.
+  - Tab **Papan rencana** (kanban), **Kalender**, dan **Persetujuan** (setujui, minta revisi, atau tolak).
+  - **Rapat suara demo**: tekan "Panggil Queen Bea", dan Queen Bea menjawab berdasarkan data koloni memakai text-to-speech bawaan browser.
+
+Login sungguhan, undangan dari admin, call suara antar-staff, dan sinkronisasi live antar-perangkat butuh backend (misalnya Supabase dan WebRTC). Itu tahap berikutnya.
+
 ## Siklus siang-malam
 
 - Siang dan malam mengikuti jam WIB yang sebenarnya: kalau di Jakarta sedang malam, koloninya juga malam.
@@ -59,7 +70,10 @@ Lalu buka http://localhost:5173/hive-colony/
 | `src/sim/store.js` | State UI (zustand) |
 | `src/scene/` | Scene 3D: ruangan, furnitur, karakter Hive Worker, lift, efek, siang-malam |
 | `src/audio/sound.js` | Musik dan efek suara (Web Audio) |
-| `src/ui/HUD.jsx` | Panel UI |
+| `src/ui/HUD.jsx` | Panel UI menara |
+| `src/ui/HallView.jsx` | Hive Hall: rapat, papan rencana, kalender, persetujuan |
+| `src/ui/AvatarCreator.jsx` | Pembuat avatar staff dan joget |
+| `src/sim/outdoor.js` | Staff yang berjalan-jalan dan berjoget di taman |
 
 Deploy otomatis ke GitHub Pages lewat `.github/workflows/deploy.yml` setiap ada push ke `main`.
 
