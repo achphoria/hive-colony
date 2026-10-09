@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText, dayPhase, isNightHour } from '../data/hive';
 import { useHive } from '../sim/store';
-import { focusAgent, jumpTo } from '../sim/engine';
+import { focusAgent, jumpTo, useRealtimeClock } from '../sim/engine';
 import { sound } from '../audio/sound';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -35,6 +35,7 @@ function Dot({ st }) {
 
 function Clock() {
   const clock = useHive((s) => s.stats.clock ?? 8);
+  const wib = useHive((s) => (s.stats.clockMode ?? 'wib') === 'wib');
   const hh = String(Math.floor(clock)).padStart(2, '0');
   const mm = String(Math.floor((clock % 1) * 60)).padStart(2, '0');
   const night = isNightHour(clock);
@@ -54,9 +55,9 @@ function Clock() {
       </svg>
       <div>
         <b>
-          {hh}:{mm}
+          {hh}:{mm} <small>{wib ? 'WIB' : 'SIM'}</small>
         </b>
-        <span>{dayPhase(clock)}</span>
+        <span>{wib ? `${dayPhase(clock)} · Jakarta` : `${dayPhase(clock)} · simulasi`}</span>
       </div>
     </div>
   );
@@ -245,6 +246,7 @@ function Controls() {
   const speed = useHive((s) => s.speed);
   const paused = useHive((s) => s.paused);
   const clock = useHive((s) => s.stats.clock ?? 8);
+  const wib = useHive((s) => (s.stats.clockMode ?? 'wib') === 'wib');
   const night = isNightHour(clock);
   const { setSpeed, togglePause, resetView } = useHive.getState();
   return (
@@ -257,9 +259,14 @@ function Controls() {
           {v}×
         </button>
       ))}
-      <button onClick={() => jumpTo(night ? 6.5 : 19)} title="Lompati waktu">
-        {night ? '☀ Ke pagi' : '☾ Ke malam'}
+      <button onClick={() => jumpTo(night ? 6.5 : 19)} title="Coba suasana lain dengan jam simulasi">
+        {night ? '☀ Coba pagi' : '☾ Coba malam'}
       </button>
+      {!wib && (
+        <button className="on" onClick={useRealtimeClock} title="Kembali ke jam Jakarta realtime">
+          🕒 Kembali ke WIB
+        </button>
+      )}
       <button onClick={resetView}>Reset kamera</button>
       <SoundControl />
     </div>

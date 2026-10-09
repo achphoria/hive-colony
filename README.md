@@ -13,11 +13,12 @@ Saat ini misi masih **simulasi**: tidak ada panggilan ke API AI. Agent bergerak,
 - Klik ruangan atau agent untuk melihat detailnya.
 - Pantau misi di Papan misi dan aktivitas di Log koloni.
 - Atur kecepatan simulasi: jeda, 1×, 2×, 4×.
-- Lompat ke pagi atau malam, lalu nyalakan suara untuk musik ambient dan dengung lebah.
+- Jam mengikuti waktu Jakarta (WIB) secara realtime. Tombol Coba pagi/malam beralih ke jam simulasi cepat, dan Kembali ke WIB mengembalikannya.
+- Nyalakan suara untuk musik ambient dan dengung lebah.
 
 ## Siklus siang-malam
 
-- Satu hari dalam game berlangsung sekitar 4 menit (pada kecepatan 1×). Jamnya terlihat di panel atas.
+- Secara default, siang dan malam mengikuti jam WIB yang sebenarnya: kalau di Jakarta sedang malam, koloninya juga malam. Di mode simulasi, satu hari berlangsung sekitar 4 menit (pada kecepatan 1×).
 - Saat malam, langit berubah biru dengan bintang, bulan, dan kunang-kunang, sementara lampu ruangan dan layar menyala.
 - Agent Hybrid tidur di Charging Pods, Nectar Lounge, atau Rooftop Garden. Agent Full AI dan Full Tech (Bumble, Buzz, Bolt, Loop, Hello) tetap jaga malam, dan misi malam dikirim oleh Mission Control.
 - Pada siang hari, tamu datang lewat tangga depan dan pintu kaca lobby membuka otomatis. Bumble lalu mendapat misi untuk menyambut tamu tersebut.

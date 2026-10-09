@@ -30,6 +30,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
 
+// Jam Jakarta (WIB = UTC+7, tanpa daylight saving) dalam bentuk desimal 0-24
+export function wibHour() {
+  return (Date.now() / 3600000 + 7) % 24;
+}
+
 export const world = {
   agents: [],
   guests: [],
@@ -40,7 +45,8 @@ export const world = {
   glow: {},
   occupancy: {},
   time: 0,
-  clock: 8, // jam dalam game (0-24)
+  clock: wibHour(), // jam dalam game (0-24)
+  clockMode: 'wib', // 'wib' = ikut jam Jakarta realtime, 'sim' = jam simulasi cepat
   night: false,
   nightFactor: 0, // 0 siang, 1 malam (diisi oleh DayNight untuk visual)
   door: 0,
@@ -467,7 +473,7 @@ function syncUI() {
         { state: a.state, missionId: a.missionId, roomId: a.roomId, destRoom: a.dest ? a.dest.roomId : null },
       ]),
     ),
-    stats: { done: world.done, honey: world.honey, clock: world.clock },
+    stats: { done: world.done, honey: world.honey, clock: world.clock, clockMode: world.clockMode },
   });
 }
 
@@ -478,10 +484,11 @@ export function update(rawDt) {
     world.uiTimer = 0.25;
     syncUI();
   }
+  if (world.clockMode === 'wib') world.clock = wibHour();
   if (paused) return;
   const dt = Math.min(rawDt, 0.1) * speed;
   world.time += dt;
-  world.clock = (world.clock + (dt * 24) / DAY_LEN) % 24;
+  if (world.clockMode === 'sim') world.clock = (world.clock + (dt * 24) / DAY_LEN) % 24;
   const night = isNightHour(world.clock);
   if (night !== world.night) {
     world.night = night;
@@ -494,8 +501,16 @@ export function update(rawDt) {
   effects(dt);
 }
 
+// Lompat waktu: beralih ke jam simulasi (berjalan cepat) mulai dari jam tertentu
 export function jumpTo(hour) {
+  world.clockMode = 'sim';
   world.clock = hour;
+  syncUI();
+}
+
+export function useRealtimeClock() {
+  world.clockMode = 'wib';
+  world.clock = wibHour();
   syncUI();
 }
 
