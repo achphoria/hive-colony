@@ -508,12 +508,6 @@ export function jumpTo(hour) {
   syncUI();
 }
 
-export function useRealtimeClock() {
-  world.clockMode = 'wib';
-  world.clock = wibHour();
-  syncUI();
-}
-
 export function focusAgent(id, changeFloor = true) {
   const a = world.byId[id];
   const st = useHive.getState();

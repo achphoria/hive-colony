@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText, dayPhase, isNightHour } from '../data/hive';
 import { useHive } from '../sim/store';
-import { focusAgent, jumpTo, useRealtimeClock } from '../sim/engine';
+import { focusAgent } from '../sim/engine';
 import { sound } from '../audio/sound';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -93,9 +93,12 @@ function Brand() {
   );
 }
 
-function FloorSwitch() {
+function FloorSwitch({ onPick }) {
   const floor = useHive((s) => s.floor);
-  const setFloor = useHive((s) => s.setFloor);
+  const setFloor = (f) => {
+    useHive.getState().setFloor(f);
+    onPick?.();
+  };
   return (
     <div className="floors">
       <button className={floor === 'all' ? 'on' : ''} onClick={() => setFloor('all')}>
@@ -112,8 +115,8 @@ function FloorSwitch() {
   );
 }
 
-function Directory() {
-  const [open, setOpen] = useState(() => window.innerWidth > 900);
+function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
+  const [open, setOpen] = useState(defaultOpen);
   const agentStates = useHive((s) => s.agentStates);
   const selected = useHive((s) => s.selectedAgent);
   return (
@@ -133,7 +136,10 @@ function Directory() {
                 <button
                   key={a.id}
                   className={`dir-agent${selected === a.id ? ' on' : ''}`}
-                  onClick={() => focusAgent(a.id)}
+                  onClick={() => {
+                    focusAgent(a.id);
+                    onPick?.();
+                  }}
                   title={a.role}
                 >
                   <Dot st={agentStates[a.id]} />
@@ -149,12 +155,12 @@ function Directory() {
   );
 }
 
-function MissionBoard() {
+function MissionBoard({ className = 'panel board', onPick }) {
   const missions = useHive((s) => s.missions);
   const log = useHive((s) => s.log);
   const [tab, setTab] = useState('active');
   return (
-    <aside className="panel board">
+    <aside className={className}>
       <div className="tabs">
         <button className={tab === 'active' ? 'on' : ''} onClick={() => setTab('active')}>
           Papan misi <em>{missions.length}</em>
@@ -167,7 +173,14 @@ function MissionBoard() {
         <div className="list">
           {missions.length === 0 && <p className="empty">Queen Bea sedang menyiapkan misi berikutnya…</p>}
           {missions.map((m) => (
-            <button key={m.id} className="mission" onClick={() => useHive.getState().selectRoom(m.roomId)}>
+            <button
+              key={m.id}
+              className="mission"
+              onClick={() => {
+                useHive.getState().selectRoom(m.roomId);
+                onPick?.();
+              }}
+            >
               <div className="m-top">
                 <span className="chip" style={{ '--c': DEPTS[m.dept].color }}>
                   {DEPTS[m.dept].short}
@@ -199,58 +212,16 @@ function MissionBoard() {
   );
 }
 
-function SoundControl() {
-  const [on, setOn] = useState(false);
-  const [vol, setVol] = useState(0.7);
-  return (
-    <div className="sound">
-      <button
-        className={on ? 'on' : ''}
-        onClick={() => {
-          sound.setEnabled(!on);
-          setOn(!on);
-        }}
-        aria-label={on ? 'Matikan suara' : 'Nyalakan suara'}
-        title={on ? 'Matikan suara' : 'Nyalakan musik dan suara'}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
-          {on ? (
-            <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          ) : (
-            <path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          )}
-        </svg>
-        {on ? 'Suara' : 'Suara mati'}
-      </button>
-      {on && (
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value={vol}
-          aria-label="Volume"
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setVol(v);
-            sound.setVolume(v);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function Controls() {
+function Controls({ className = 'panel controls', onPick }) {
   const speed = useHive((s) => s.speed);
   const paused = useHive((s) => s.paused);
-  const clock = useHive((s) => s.stats.clock ?? 8);
-  const wib = useHive((s) => (s.stats.clockMode ?? 'wib') === 'wib');
-  const night = isNightHour(clock);
-  const { setSpeed, togglePause, resetView } = useHive.getState();
+  const { setSpeed, togglePause } = useHive.getState();
+  const resetView = () => {
+    useHive.getState().resetView();
+    onPick?.();
+  };
   return (
-    <div className="panel controls">
+    <div className={className}>
       <button onClick={togglePause} aria-label={paused ? 'Lanjutkan simulasi' : 'Jeda simulasi'}>
         {paused ? '▶' : '❚❚'}
       </button>
@@ -259,16 +230,7 @@ function Controls() {
           {v}×
         </button>
       ))}
-      <button onClick={() => jumpTo(night ? 6.5 : 19)} title="Coba suasana lain dengan jam simulasi">
-        {night ? '☀ Coba pagi' : '☾ Coba malam'}
-      </button>
-      {!wib && (
-        <button className="on" onClick={useRealtimeClock} title="Kembali ke jam Jakarta realtime">
-          🕒 Kembali ke WIB
-        </button>
-      )}
       <button onClick={resetView}>Reset kamera</button>
-      <SoundControl />
     </div>
   );
 }
@@ -351,7 +313,96 @@ function RoomCard() {
   );
 }
 
+function useIsMobile() {
+  const query = '(max-width: 760px)';
+  const [mobile, setMobile] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return mobile;
+}
+
+// Musik menyala otomatis. Browser baru mengizinkan audio setelah sentuhan/klik pertama,
+// jadi audio "dibuka" pada interaksi pertama di mana pun di halaman.
+function useAutoSound() {
+  useEffect(() => {
+    sound.setEnabled(true);
+    const unlock = () => sound.unlock();
+    const events = ['pointerdown', 'touchend', 'click', 'keydown'];
+    events.forEach((e) => window.addEventListener(e, unlock, { passive: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, unlock));
+  }, []);
+}
+
+function LayersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path d="M12 3l9 5-9 5-9-5z" fill="#3A2A12" />
+      <path d="M3 12.5l9 5 9-5M3 16.5l9 5 9-5" fill="none" stroke="#3A2A12" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <polygon points="12,2 20,6.5 20,15.5 12,20 4,15.5 4,6.5" fill="none" stroke="#3A2A12" strokeWidth="1.8" />
+      <path d="M8.5 9h7M8.5 12h7M8.5 15h4" stroke="#3A2A12" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Tampilan HP: hanya header; panel lain masuk laci samping yang muncul saat tab ditekan.
+function MobileHUD() {
+  const [drawer, setDrawer] = useState(null);
+  const missions = useHive((s) => s.missions);
+  const close = () => setDrawer(null);
+  return (
+    <div className="hud is-mobile">
+      <Brand />
+      <button className="edge-tab edge-menu" onClick={() => setDrawer('menu')} aria-label="Buka menu lantai dan agent">
+        <LayersIcon />
+        <span>Menu</span>
+      </button>
+      <button className="edge-tab edge-missions" onClick={() => setDrawer('missions')} aria-label="Buka papan misi">
+        <ListIcon />
+        <span>Misi</span>
+        {missions.length > 0 && <em>{missions.length}</em>}
+      </button>
+      <div className={`scrim${drawer ? ' show' : ''}`} onClick={close} />
+      <aside className={`drawer drawer-menu${drawer === 'menu' ? ' open' : ''}`} aria-hidden={drawer !== 'menu'}>
+        <div className="drawer-head">
+          <h2>Menu koloni</h2>
+          <button className="close" onClick={close} aria-label="Tutup menu">
+            ×
+          </button>
+        </div>
+        <FloorSwitch onPick={close} />
+        <Controls className="controls controls-inline" onPick={close} />
+        <Directory defaultOpen onPick={close} />
+      </aside>
+      <aside className={`drawer drawer-missions${drawer === 'missions' ? ' open' : ''}`} aria-hidden={drawer !== 'missions'}>
+        <div className="drawer-head">
+          <h2>Misi koloni</h2>
+          <button className="close" onClick={close} aria-label="Tutup papan misi">
+            ×
+          </button>
+        </div>
+        <MissionBoard className="board board-inline" onPick={close} />
+      </aside>
+      <AgentCard />
+      <RoomCard />
+    </div>
+  );
+}
+
 export function HUD() {
+  const mobile = useIsMobile();
+  useAutoSound();
+  if (mobile) return <MobileHUD />;
   return (
     <div className="hud">
       <Brand />

@@ -211,6 +211,9 @@ export const sound = {
       timer = null;
     }
   },
+  unlock() {
+    if (ctx && state.enabled && ctx.state !== 'running') ctx.resume();
+  },
   setVolume(v) {
     state.volume = v;
     if (ctx && state.enabled) master.gain.setTargetAtTime(v, ctx.currentTime, 0.1);

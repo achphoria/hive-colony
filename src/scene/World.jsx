@@ -237,9 +237,11 @@ export function CameraRig() {
   const anim = useRef(null);
 
   useEffect(() => {
+    // layar tegak (HP) butuh kamera lebih jauh supaya menara muat selebar layar
+    const fit = Math.max(1, 0.75 / camera.aspect);
     anim.current = {
       target: new THREE.Vector3(...focus.target),
-      dist: focus.dist,
+      dist: focus.dist * fit,
       dir: focus.dir ? new THREE.Vector3(...focus.dir).normalize() : null,
       t: 0,
     };
