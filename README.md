@@ -2,7 +2,9 @@
 
 Kantor virtual, 7 lantai, 28 peran. Ini desainnya dulu. Sambungan ke agen AI belum dipasang.
 
-Buka `index.html` di browser, atau aktifkan GitHub Pages dari branch `main`, folder root. Alamatnya nanti `https://achphoria.github.io/hive-colony/`.
+Situs: https://achphoria.github.io/hive-colony/
+
+Buka `index.html` di browser, atau GitHub Pages dari branch `main`, folder `/ (root)`.
 
 ## Lantai
 
