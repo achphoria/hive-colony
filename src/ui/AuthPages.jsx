@@ -115,6 +115,7 @@ export function JoinPage() {
         <button className="save" onClick={() => go('/login')}>
           Ke halaman masuk
         </button>
+        <p className="auth-foot">Belum ada email setelah beberapa menit? Cek folder Spam/Promosi. Kalau email kamu sudah pernah dipakai di aplikasi kantor lain, langsung saja Masuk dengan password akun itu.</p>
       </Shell>
     );
   }
@@ -135,7 +136,9 @@ export function JoinPage() {
         go('/avatar');
       } else {
         const res = await signUpWithInvite({ email: email.trim(), password, name: name.trim(), code: code.trim() });
-        if (res.confirmEmail) setSent(true);
+        if (res.existing) {
+          setError('Email ini sudah punya akun (mungkin dari aplikasi kantor lain). Silakan Masuk dengan password akun itu; kode undangan dipakai otomatis.');
+        } else if (res.confirmEmail) setSent(true);
         else go('/avatar');
       }
     } catch (err) {

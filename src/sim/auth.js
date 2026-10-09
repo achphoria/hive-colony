@@ -102,6 +102,10 @@ export const useAuth = create((set, get) => ({
     const redirect = `${window.location.origin}${window.location.pathname}#/login`;
     const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirect } });
     if (error) throw new Error(errText(error));
+    // Supabase tidak memberi error untuk email yang sudah terdaftar; tandanya identities kosong.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return { existing: true };
+    }
     if (!data.session) return { confirmEmail: true };
     set({ session: data.session });
     const prof = await get().loadAccount();
