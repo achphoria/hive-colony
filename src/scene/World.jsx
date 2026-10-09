@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
-import { AGENTS, LIFT_X, tierY, tierOf } from '../data/hive';
+import { AGENTS, GUESTS, LIFT_X, tierY, tierOf } from '../data/hive';
 import { useHive } from '../sim/store';
 import { update, world } from '../sim/engine';
 import { M, Box, Cyl, Hex, Sph, Cone, HEX_START } from './materials';
@@ -14,7 +14,7 @@ export function Simulation() {
 }
 
 export function Agents() {
-  return AGENTS.map((def) => <HiveWorker key={def.id} def={def} />);
+  return [...AGENTS, ...GUESTS].map((def) => <HiveWorker key={def.id} def={def} />);
 }
 
 /* ---------- pulau dasar ---------- */
@@ -37,6 +37,49 @@ function Tree({ p, s = 1 }) {
   );
 }
 
+function LampPost({ p }) {
+  return (
+    <group position={p}>
+      <Hex p={[0, 0.08, 0]} rad={0.25} h={0.16} m={M.graphite} />
+      <Cyl p={[0, 1.1, 0]} a={[0.05, 0.06, 2.1, 6]} m={M.graphite} />
+      <Hex p={[0, 2.2, 0]} rad={0.24} h={0.06} m={M.gold} />
+      <Sph p={[0, 2.38, 0]} rad={0.17} m={M.led} shadow={false} />
+      <Cone p={[0, 2.62, 0]} a={[0.26, 0.22, 6]} m={M.gold} />
+    </group>
+  );
+}
+
+// Tangga dari tanah pulau (y -2.2) ke pintu lobby (y 0)
+function LobbyStairs() {
+  const steps = 6;
+  const rise = 2.2 / steps;
+  const depth = 4.1 / steps;
+  return (
+    <group>
+      {Array.from({ length: steps }, (_, k) => {
+        const top = -2.2 + (k + 1) * rise;
+        const h = top + 2.2;
+        return (
+          <Box
+            key={k}
+            p={[0, top - h / 2, 17.5 - (k + 0.5) * depth]}
+            s={[2.6, h, depth + 0.02]}
+            m={k % 2 ? M.gold : M.nectar}
+          />
+        );
+      })}
+      {[-1, 1].map((sx) => (
+        <group key={sx}>
+          <Box p={[sx * 1.35, -0.2, 15.45]} r={[Math.atan2(2.2, 4.1), 0, 0]} s={[0.1, 0.1, 4.7]} m={M.royal} />
+          <Cyl p={[sx * 1.35, -1.55, 17.4]} a={[0.05, 0.05, 1.3, 5]} m={M.royal} />
+          <Cyl p={[sx * 1.35, 0.35, 13.6]} a={[0.05, 0.05, 0.9, 5]} m={M.royal} />
+        </group>
+      ))}
+      <Box p={[0, 0.01, 13.15]} s={[2.4, 0.04, 0.8]} m={M.amber} shadow={false} />
+    </group>
+  );
+}
+
 export function Island() {
   const rnd = seeded(7);
   const trees = [];
@@ -44,6 +87,7 @@ export function Island() {
   for (let i = 0; i < 16; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 19 + rnd() * 5;
+    if (Math.abs(r * Math.cos(a)) < 4 && r * Math.sin(a) > 10) continue; // jangan menutupi jalan ke lobby
     trees.push(<Tree key={i} p={[r * Math.cos(a), -2.2, r * Math.sin(a)]} s={0.8 + rnd() * 0.6} />);
   }
   for (let i = 0; i < 40; i++) {
@@ -67,10 +111,14 @@ export function Island() {
       {/* kolam madu */}
       <Hex p={[-15, -2.17, 11]} rad={3.2} h={0.06} m={M.honey} shadow={false} />
       <Hex p={[-15, -2.19, 11]} rad={3.6} h={0.05} m={M.royal} shadow={false} />
-      {/* jalan setapak menuju lobby */}
-      {[0, 1, 2, 3, 4].map((i) => (
-        <Hex key={i} p={[0, -2.18, 14 + i * 2.2]} rad={0.8} h={0.06} m={M.stone} shadow={false} />
+      {/* jalan setapak + tangga menuju pintu lobby */}
+      {[0, 1, 2].map((i) => (
+        <Hex key={i} p={[0, -2.18, 19 + i * 2]} rad={0.85} h={0.06} m={M.stone} shadow={false} />
       ))}
+      <LobbyStairs />
+      {[-1, 1].map((sx) =>
+        [18.4, 22.4].map((z) => <LampPost key={`${sx}-${z}`} p={[sx * 2, -2.2, z]} />),
+      )}
       {trees}
       {flowers}
     </group>

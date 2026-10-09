@@ -585,3 +585,72 @@ h2 {
     flex: none;
   }
 }
+
+/* jam, suara, status tidur */
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255, 201, 60, 0.18);
+  border: 1.5px solid var(--line);
+}
+.clock b {
+  display: block;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 18px;
+  line-height: 1.05;
+}
+.clock span {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.clock.is-night {
+  background: #262b52;
+  border-color: #4a5290;
+}
+.clock.is-night b {
+  color: #fff3c4;
+}
+.clock.is-night span {
+  color: #b9c2f0;
+}
+.sound {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sound button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sound input {
+  width: 80px;
+  accent-color: var(--amber);
+}
+.dot-sleep {
+  background: #5b6bb5;
+}
+.log-guest {
+  border-left-color: var(--silver);
+}
+.log-clock {
+  border-left-color: #5b6bb5;
+}
+@media (max-width: 900px) {
+  .controls {
+    flex-wrap: wrap;
+    right: 16px;
+  }
+}
+@media (max-width: 560px) {
+  .clock {
+    margin-left: auto;
+  }
+  .brand > div:nth-child(2) p {
+    display: none;
+  }
+}

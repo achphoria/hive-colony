@@ -45,6 +45,15 @@ export const M = {
     side: THREE.DoubleSide,
     depthWrite: false,
   }),
+  window: std('#FFC93C', { emissive: '#FFB020', emissiveIntensity: 0.1 }),
+  zzz: new THREE.MeshBasicMaterial({ color: '#BFD3FF', transparent: true, opacity: 0.9 }),
+  doorGlass: new THREE.MeshStandardMaterial({
+    color: '#FFC93C',
+    transparent: true,
+    opacity: 0.38,
+    roughness: 0.1,
+    metalness: 0.2,
+  }),
   wing: new THREE.MeshStandardMaterial({
     color: '#FFFFFF',
     transparent: true,

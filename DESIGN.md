@@ -72,6 +72,14 @@ Semua lantai terhubung lewat lift madu.
 | Product & Innovation | Scout (AI Trend Scraper), Tinker (System Prototyper) |
 | HR & General Affairs | Hello (Recruitment & Onboarding), Sunny (People & Culture), Sage (Legal & Compliance), Penny (Payroll Admin) |
 
+## Siang-malam dan suasana
+
+- Langit bergradasi dari krem ke jingga senja, lalu ke biru malam. Malam hari ditambah bintang, bulan, dan kunang-kunang.
+- Lampu ruangan, jendela heksagon, layar, dan lampu taman menyala di malam hari.
+- Agent Hybrid tidur dengan animasi "Zzz". Agent Full AI dan Full Tech tetap jaga malam.
+- Tamu berhoodie perak datang ke Hive Lobby lewat tangga, dan pintu kaca geser membuka otomatis.
+- Audio disintesis dengan Web Audio: musik pentatonik, dengung lebah, dan efek suara.
+
 ## Tahap berikutnya
 
 - Koneksi ke AI nyata (misalnya Claude API) supaya misi benar-benar dikerjakan.

@@ -63,6 +63,47 @@ function Gauge({ roomId }) {
   );
 }
 
+// Dinding depan lobby: kusen dengan pintu kaca geser yang terbuka saat tamu mendekat.
+function DoorWall({ wallH, len }) {
+  const left = useRef();
+  const right = useRef();
+  useFrame((_, dt) => {
+    world.door += ((world.doorOpen ? 1 : 0) - world.door) * Math.min(1, dt * 5);
+    left.current.position.x = -0.5 - world.door * 0.95;
+    right.current.position.x = 0.5 + world.door * 0.95;
+  });
+  const side = (len - 2) / 2;
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          <mesh position={[s * (1 + side / 2), wallH / 2, 0]} material={M.cream} castShadow receiveShadow>
+            <boxGeometry args={[side, wallH, 0.18]} />
+          </mesh>
+          <mesh position={[s * 1.02, wallH / 2, 0]} material={M.gold} castShadow>
+            <boxGeometry args={[0.12, wallH, 0.28]} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, wallH + 0.05, 0]} material={M.gold} castShadow>
+        <boxGeometry args={[len + 0.05, 0.1, 0.26]} />
+      </mesh>
+      <mesh position={[0, wallH + 0.32, 0.05]} rotation={[Math.PI / 2, 0, 0]} material={M.window}>
+        <cylinderGeometry args={[0.3, 0.3, 0.05, 6, 1, false, HEX_START]} />
+      </mesh>
+      <mesh position={[0, wallH + 0.32, 0]} rotation={[Math.PI / 2, 0, 0]} material={M.gold}>
+        <cylinderGeometry args={[0.36, 0.36, 0.04, 6, 1, false, HEX_START]} />
+      </mesh>
+      <mesh ref={left} position={[-0.5, wallH * 0.47, 0]} material={M.doorGlass}>
+        <boxGeometry args={[1, wallH * 0.92, 0.05]} />
+      </mesh>
+      <mesh ref={right} position={[0.5, wallH * 0.47, 0]} material={M.doorGlass}>
+        <boxGeometry args={[1, wallH * 0.92, 0.05]} />
+      </mesh>
+    </group>
+  );
+}
+
 export function Room({ room }) {
   const floor = useHive((s) => s.floor);
   const hover = useHive((s) => s.hoverRoom === room.id);
@@ -133,26 +174,34 @@ export function Room({ room }) {
       </mesh>
 
       {/* dinding (otomatis turun di sisi yang menghadap kamera) */}
-      {WALL_ANGLES.map((a, i) => (
-        <group
-          key={i}
-          ref={(el) => (walls.current[i] = el)}
-          position={[APOTHEM * Math.cos(a), 0, APOTHEM * Math.sin(a)]}
-          rotation={[0, -(a + Math.PI / 2), 0]}
-        >
-          <mesh position={[0, wallH / 2, 0]} material={isGarden ? M.wood : wallMat} castShadow receiveShadow>
-            <boxGeometry args={[sideLen, wallH, 0.18]} />
-          </mesh>
-          <mesh position={[0, wallH + 0.05, 0]} material={M.gold} castShadow>
-            <boxGeometry args={[sideLen + 0.05, 0.1, 0.26]} />
-          </mesh>
-          {!isGarden && room.kind !== 'server' && (
-            <mesh position={[0, wallH * 0.62, 0.1]} rotation={[Math.PI / 2, 0, 0]} material={M.nectar}>
-              <cylinderGeometry args={[0.32, 0.32, 0.03, 6, 1, false, HEX_START]} />
+      {WALL_ANGLES.map((a, i) => {
+        const transform = {
+          position: [APOTHEM * Math.cos(a), 0, APOTHEM * Math.sin(a)],
+          rotation: [0, -(a + Math.PI / 2), 0],
+        };
+        if (room.kind === 'lobby' && i === 1) {
+          return (
+            <group key={i} {...transform}>
+              <DoorWall wallH={wallH} len={sideLen} />
+            </group>
+          );
+        }
+        return (
+          <group key={i} ref={(el) => (walls.current[i] = el)} {...transform}>
+            <mesh position={[0, wallH / 2, 0]} material={isGarden ? M.wood : wallMat} castShadow receiveShadow>
+              <boxGeometry args={[sideLen, wallH, 0.18]} />
             </mesh>
-          )}
-        </group>
-      ))}
+            <mesh position={[0, wallH + 0.05, 0]} material={M.gold} castShadow>
+              <boxGeometry args={[sideLen + 0.05, 0.1, 0.26]} />
+            </mesh>
+            {!isGarden && room.kind !== 'server' && (
+              <mesh position={[0, wallH * 0.62, 0.1]} rotation={[Math.PI / 2, 0, 0]} material={M.window}>
+                <cylinderGeometry args={[0.32, 0.32, 0.03, 6, 1, false, HEX_START]} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
 
       {SEATS_BY_ROOM[room.id]?.map((s) => {
         const Desk = DESKS[s.type];

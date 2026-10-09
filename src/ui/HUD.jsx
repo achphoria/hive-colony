@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText } from '../data/hive';
+import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText, dayPhase, isNightHour } from '../data/hive';
 import { useHive } from '../sim/store';
-import { focusAgent } from '../sim/engine';
+import { focusAgent, jumpTo } from '../sim/engine';
+import { sound } from '../audio/sound';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -32,6 +33,35 @@ function Dot({ st }) {
   return <span className={`dot dot-${s}`} />;
 }
 
+function Clock() {
+  const clock = useHive((s) => s.stats.clock ?? 8);
+  const hh = String(Math.floor(clock)).padStart(2, '0');
+  const mm = String(Math.floor((clock % 1) * 60)).padStart(2, '0');
+  const night = isNightHour(clock);
+  return (
+    <div className={`clock${night ? ' is-night' : ''}`}>
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        {night ? (
+          <path d="M15.5 3.5a8.5 8.5 0 1 0 5 15.2A7 7 0 0 1 15.5 3.5z" fill="#FFF3C4" stroke="#C98A00" strokeWidth="1.2" />
+        ) : (
+          <g stroke="#FF8C1A" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="12" cy="12" r="4.5" fill="#F5B700" />
+            {[0, 45, 90, 135, 180, 225, 270, 315].map((d) => (
+              <line key={d} x1="12" y1="2.5" x2="12" y2="5" transform={`rotate(${d} 12 12)`} />
+            ))}
+          </g>
+        )}
+      </svg>
+      <div>
+        <b>
+          {hh}:{mm}
+        </b>
+        <span>{dayPhase(clock)}</span>
+      </div>
+    </div>
+  );
+}
+
 function Brand() {
   const stats = useHive((s) => s.stats);
   const agentStates = useHive((s) => s.agentStates);
@@ -43,6 +73,7 @@ function Brand() {
         <h1>Hive Colony</h1>
         <p>Kantor virtual 21 agent AI · mode simulasi</p>
       </div>
+      <Clock />
       <div className="stats">
         <div>
           <b>{working}</b>
@@ -167,9 +198,54 @@ function MissionBoard() {
   );
 }
 
+function SoundControl() {
+  const [on, setOn] = useState(false);
+  const [vol, setVol] = useState(0.7);
+  return (
+    <div className="sound">
+      <button
+        className={on ? 'on' : ''}
+        onClick={() => {
+          sound.setEnabled(!on);
+          setOn(!on);
+        }}
+        aria-label={on ? 'Matikan suara' : 'Nyalakan suara'}
+        title={on ? 'Matikan suara' : 'Nyalakan musik dan suara'}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+          {on ? (
+            <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          ) : (
+            <path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          )}
+        </svg>
+        {on ? 'Suara' : 'Suara mati'}
+      </button>
+      {on && (
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={vol}
+          aria-label="Volume"
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setVol(v);
+            sound.setVolume(v);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function Controls() {
   const speed = useHive((s) => s.speed);
   const paused = useHive((s) => s.paused);
+  const clock = useHive((s) => s.stats.clock ?? 8);
+  const night = isNightHour(clock);
   const { setSpeed, togglePause, resetView } = useHive.getState();
   return (
     <div className="panel controls">
@@ -181,7 +257,11 @@ function Controls() {
           {v}×
         </button>
       ))}
+      <button onClick={() => jumpTo(night ? 6.5 : 19)} title="Lompati waktu">
+        {night ? '☀ Ke pagi' : '☾ Ke malam'}
+      </button>
       <button onClick={resetView}>Reset kamera</button>
+      <SoundControl />
     </div>
   );
 }

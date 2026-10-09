@@ -1,13 +1,30 @@
-// Mesin simulasi: pergerakan agent, istirahat, rapat, dan alur misi.
+// Mesin simulasi: jam siang-malam, pergerakan agent, istirahat, tidur, rapat, tamu lobby, dan alur misi.
 // State per-frame disimpan di objek `world` (mutable) supaya React tidak re-render tiap frame;
 // ringkasan untuk UI dikirim ke store beberapa kali per detik.
 import * as THREE from 'three';
-import { AGENTS, SEATS, ROOM_BY_ID, MISSIONS, DEPTS, AGENT_BY_ID, LIFT_X, tierY, tierOf, roomSpots } from '../data/hive';
+import {
+  AGENTS,
+  SEATS,
+  ROOM_BY_ID,
+  MISSIONS,
+  DEPTS,
+  AGENT_BY_ID,
+  LIFT_X,
+  DAY_LEN,
+  NIGHT_SHIFT,
+  GUESTS,
+  LOBBY_DOOR,
+  tierY,
+  tierOf,
+  roomSpots,
+  isNightHour,
+} from '../data/hive';
 import { useHive } from './store';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const CRUISE = 3.5;
 const SPEED = 4.4;
+const WALK = 2.3;
 const MAX_ACTIVE = 5;
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -15,14 +32,22 @@ const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] 
 
 export const world = {
   agents: [],
+  guests: [],
   byId: {},
   missions: [],
   effects: [],
+  events: [],
   glow: {},
   occupancy: {},
   time: 0,
+  clock: 8, // jam dalam game (0-24)
+  night: false,
+  nightFactor: 0, // 0 siang, 1 malam (diisi oleh DayNight untuk visual)
+  door: 0,
+  doorOpen: false,
   nextMission: 2.5,
   nextMeeting: 28,
+  nextGuest: 10,
   uiTimer: 0,
   seq: 1,
   honey: 0,
@@ -42,6 +67,7 @@ for (const def of AGENTS) {
     roomId: s.roomId,
     path: null,
     pathIdx: 0,
+    speed: SPEED,
     dest: null,
     timer: 0,
     missionId: null,
@@ -52,6 +78,33 @@ for (const def of AGENTS) {
   world.agents.push(a);
   world.byId[a.id] = a;
 }
+
+for (const def of GUESTS) {
+  const g = {
+    id: def.id,
+    def,
+    guest: true,
+    active: false,
+    pos: V(...def.path[0]),
+    targetFacing: Math.PI,
+    state: 'hidden',
+    arriveState: null,
+    roomId: null,
+    path: null,
+    pathIdx: 0,
+    speed: WALK,
+    dest: null,
+    timer: 0,
+    missionId: null,
+    cheer: 0,
+  };
+  world.guests.push(g);
+  world.byId[g.id] = g;
+}
+
+const emit = (type) => world.events.push(type);
+const log = (kind, text, dept) =>
+  useHive.getState().pushLog({ id: `${kind}-${world.seq++}`, kind, dept, text, time: world.time });
 
 function seatDest(a) {
   return { pos: V(...a.seat.seat), tier: ROOM_BY_ID[a.seat.roomId].tier, facing: a.seat.facing, roomId: a.seat.roomId };
@@ -89,6 +142,7 @@ function sendTo(a, dest, arriveState, duration = 0) {
   }
   a.path = makePath(a.pos, tierOf(a.pos.y), dest.pos, dest.tier, a.lane);
   a.pathIdx = 1;
+  a.speed = SPEED;
   a.state = 'fly';
   a.roomId = null;
 }
@@ -123,8 +177,8 @@ function claimSpot(roomId) {
 
 function stepAgent(a, dt) {
   a.cheer = Math.max(0, a.cheer - dt * 1.6);
-  if (a.state === 'fly' && a.path) {
-    let remain = SPEED * dt;
+  if (a.path) {
+    let remain = a.speed * dt;
     const before = a.pos.clone();
     while (remain > 0 && a.pathIdx < a.path.length) {
       const target = a.path[a.pathIdx];
@@ -163,10 +217,38 @@ function goBreak(a) {
   sendTo(a, dest, roomId === 'pods' ? 'charge' : 'break', rand(9, 16));
 }
 
+const sleeping = (a) => a.state === 'sleep' || (a.state === 'fly' && a.arriveState === 'sleep');
+
+function goSleep(a) {
+  if (a.id === 'ceo') {
+    sendTo(a, seatDest(a), 'sleep');
+    return;
+  }
+  for (const roomId of ['pods', 'lounge', 'garden']) {
+    const dest = claimSpot(roomId);
+    if (dest) {
+      sendTo(a, dest, 'sleep');
+      return;
+    }
+  }
+  sendTo(a, seatDest(a), 'sleep');
+}
+
 function behaviours(dt) {
+  // malam: agent Hybrid tidur, agent Full AI / Full Tech tetap jaga malam
+  for (const a of world.agents) {
+    if (a.missionId) continue;
+    if (world.night && !NIGHT_SHIFT.has(a.id)) {
+      if (!sleeping(a) && ['desk', 'break', 'charge'].includes(a.state) && Math.random() < dt / 2.5) goSleep(a);
+    } else if (a.state === 'sleep' && Math.random() < dt / 2.5) {
+      goHome(a);
+    }
+  }
+
   let away = world.agents.filter(isAway).length;
   for (const a of world.agents) {
     if (a.state !== 'desk' || a.missionId) continue;
+    if (world.night && !NIGHT_SHIFT.has(a.id)) continue;
     if (a.id === 'ceo') {
       if (Math.random() < dt / 55) {
         const dest = claimSpot('mission');
@@ -181,7 +263,7 @@ function behaviours(dt) {
   }
 
   world.nextMeeting -= dt;
-  if (world.nextMeeting <= 0) {
+  if (world.nextMeeting <= 0 && !world.night) {
     world.nextMeeting = rand(40, 60);
     const free = shuffle(world.agents.filter((a) => a.state === 'desk' && !a.missionId && a.id !== 'ceo'));
     const seen = new Set();
@@ -197,12 +279,7 @@ function behaviours(dt) {
         const dest = claimSpot('hall');
         if (dest) sendTo(a, dest, 'meeting', rand(13, 17));
       }
-      useHive.getState().pushLog({
-        id: `meet-${world.seq++}`,
-        kind: 'meeting',
-        text: `Rapat di Comb Hall: ${team.map((a) => a.def.nick).join(', ')}`,
-        time: world.time,
-      });
+      log('meeting', `Rapat di Comb Hall: ${team.map((a) => a.def.nick).join(', ')}`);
     }
   }
 }
@@ -218,14 +295,20 @@ function visitDest(lead) {
 }
 
 function canTake(a) {
-  return a && !a.missionId && a.state !== 'meeting' && !(a.state === 'fly' && a.arriveState === 'meeting');
+  if (!a || a.missionId || a.state === 'meeting' || a.state === 'sleep') return false;
+  if (a.state === 'fly' && (a.arriveState === 'meeting' || a.arriveState === 'sleep')) return false;
+  return !world.night || NIGHT_SHIFT.has(a.id);
 }
 
-function spawnMission() {
-  const options = MISSIONS.filter((t) => canTake(world.byId[t.lead]));
-  if (!options.length) return;
-  const t = pick(options);
+function spawnMission(template) {
+  let t = template;
+  if (!t) {
+    const options = MISSIONS.filter((m) => canTake(world.byId[m.lead]));
+    if (!options.length) return;
+    t = pick(options);
+  }
   const lead = world.byId[t.lead];
+  if (!canTake(lead)) return;
   const collab = t.with && canTake(world.byId[t.with]) ? world.byId[t.with] : null;
   const m = {
     id: world.seq++,
@@ -245,23 +328,20 @@ function spawnMission() {
   if (lead.state !== 'desk') goHome(lead);
 
   const ceo = world.byId.ceo;
-  ceo.cheer = 1;
+  const from = world.night ? ROOM_BY_ID.mission : null;
+  if (!world.night) ceo.cheer = 1;
   const room = ROOM_BY_ID[m.roomId];
   world.effects.push({
     type: 'drop',
-    from: V(ceo.pos.x, ceo.pos.y + 2.4, ceo.pos.z),
+    from: from ? V(from.x, from.y + 3, from.z) : V(ceo.pos.x, ceo.pos.y + 2.4, ceo.pos.z),
     to: V(room.x, room.y + 3.4, room.z),
     t: 0,
     dur: 2.2,
   });
   world.missions.push(m);
-  useHive.getState().pushLog({
-    id: `m-${m.id}`,
-    kind: 'dispatch',
-    dept: m.dept,
-    text: `Queen Bea mengirim misi ke ${DEPTS[m.dept].short}: ${m.title}`,
-    time: world.time,
-  });
+  emit('dispatch');
+  const sender = world.night ? 'Mission Control (jaga malam)' : 'Queen Bea';
+  log('dispatch', `${sender} mengirim misi ke ${DEPTS[m.dept].short}: ${m.title}`, m.dept);
 }
 
 function completeMission(m) {
@@ -285,20 +365,15 @@ function completeMission(m) {
     t: 0,
     dur: 1.4,
   });
-  useHive.getState().pushLog({
-    id: `d-${m.id}`,
-    kind: 'done',
-    dept: m.dept,
-    text: `${AGENT_BY_ID[m.leadId].nick} menyelesaikan "${m.title}" (+${m.reward} madu)`,
-    time: world.time,
-  });
+  emit('complete');
+  log('done', `${AGENT_BY_ID[m.leadId].nick} menyelesaikan "${m.title}" (+${m.reward} madu)`, m.dept);
 }
 
 function missions(dt) {
   world.nextMission -= dt;
   const active = world.missions.filter((m) => m.phase !== 'done');
   if (world.nextMission <= 0) {
-    world.nextMission = rand(6, 11);
+    world.nextMission = world.night ? rand(11, 17) : rand(6, 11);
     if (active.length < MAX_ACTIVE) spawnMission();
   }
   for (const m of active) {
@@ -317,6 +392,55 @@ function missions(dt) {
     }
   }
   world.missions = world.missions.filter((m) => m.phase !== 'done');
+}
+
+/* ---------- tamu lobby ---------- */
+
+function walkPath(g, points, arriveState, facing) {
+  g.path = points.map((p) => V(...p));
+  g.pathIdx = 1;
+  g.speed = WALK;
+  g.pos.copy(g.path[0]);
+  g.state = 'walk';
+  g.dest = { pos: g.path[g.path.length - 1], facing, roomId: arriveState === 'idle' ? 'lobby' : null };
+  g.arriveState = arriveState;
+}
+
+function guests(dt) {
+  world.nextGuest -= dt;
+  if (world.nextGuest <= 0) {
+    world.nextGuest = rand(28, 45);
+    const g = world.guests.find((x) => !x.active);
+    if (g && !world.night) {
+      g.active = true;
+      walkPath(g, g.def.path, 'idle', Math.PI);
+    }
+  }
+  for (const g of world.guests) {
+    if (!g.active) continue;
+    stepAgent(g, dt);
+    if (g.state === 'idle' && g.timer === 0) {
+      g.timer = rand(7, 10);
+      emit('bell');
+      log('guest', 'Tamu datang ke Hive Lobby, Bumble menyambut lewat layar resepsionis');
+      const concierge = world.byId.concierge;
+      if (canTake(concierge) && world.missions.length < MAX_ACTIVE) {
+        spawnMission({ lead: 'concierge', title: 'Sambut tamu baru di Hive Lobby' });
+      }
+    } else if (g.state === 'idle') {
+      g.timer -= dt;
+      if (g.timer <= 0) walkPath(g, [...g.def.path].reverse(), 'gone', 0);
+    } else if (g.state === 'gone') {
+      g.active = false;
+      g.state = 'hidden';
+      g.timer = 0;
+    }
+  }
+  const near = world.guests.some(
+    (g) => g.active && Math.hypot(g.pos.x - LOBBY_DOOR[0], g.pos.z - LOBBY_DOOR[2]) < 3 && g.pos.y > -0.6,
+  );
+  if (near && !world.doorOpen) emit('door');
+  world.doorOpen = near;
 }
 
 function effects(dt) {
@@ -343,7 +467,7 @@ function syncUI() {
         { state: a.state, missionId: a.missionId, roomId: a.roomId, destRoom: a.dest ? a.dest.roomId : null },
       ]),
     ),
-    stats: { done: world.done, honey: world.honey },
+    stats: { done: world.done, honey: world.honey, clock: world.clock },
   });
 }
 
@@ -357,10 +481,22 @@ export function update(rawDt) {
   if (paused) return;
   const dt = Math.min(rawDt, 0.1) * speed;
   world.time += dt;
+  world.clock = (world.clock + (dt * 24) / DAY_LEN) % 24;
+  const night = isNightHour(world.clock);
+  if (night !== world.night) {
+    world.night = night;
+    log('clock', night ? 'Malam tiba. Agent Hybrid tidur, agent Full AI jaga malam.' : 'Pagi! Koloni bangun dan kembali bekerja.');
+  }
   for (const a of world.agents) stepAgent(a, dt);
   behaviours(dt);
   missions(dt);
+  guests(dt);
   effects(dt);
+}
+
+export function jumpTo(hour) {
+  world.clock = hour;
+  syncUI();
 }
 
 export function focusAgent(id, changeFloor = true) {
@@ -376,3 +512,5 @@ export function focusAgent(id, changeFloor = true) {
   const f = a.targetFacing;
   st.focusOn([a.pos.x, a.pos.y + 1, a.pos.z], 13, [Math.sin(f), 1.4, Math.cos(f)]);
 }
+
+if (import.meta.env.DEV) window.__hive = { world, jumpTo, update, useHive };

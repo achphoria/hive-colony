@@ -98,12 +98,29 @@ function BodyAccessory({ type }) {
   return null;
 }
 
+// Huruf "Z" dari tiga balok untuk agent yang tidur
+function ZMark({ zRef, size = 1 }) {
+  return (
+    <group ref={zRef} scale={size}>
+      <mesh position={[0, 0.09, 0]} material={M.zzz}>
+        <boxGeometry args={[0.2, 0.04, 0.02]} />
+      </mesh>
+      <mesh rotation={[0, 0, Math.PI / 4 + 0.2]} material={M.zzz}>
+        <boxGeometry args={[0.26, 0.04, 0.02]} />
+      </mesh>
+      <mesh position={[0, -0.09, 0]} material={M.zzz}>
+        <boxGeometry args={[0.2, 0.04, 0.02]} />
+      </mesh>
+    </group>
+  );
+}
+
 function AgentTag({ def }) {
   const st = useHive((s) => s.agentStates[def.id]);
   return (
     <div className="agent-tag">
       <strong>{def.nick}</strong>
-      <span>{statusText(st)}</span>
+      <span>{def.guest ? 'Berkunjung ke Hive Lobby' : statusText(st)}</span>
     </div>
   );
 }
@@ -120,18 +137,23 @@ export function HiveWorker({ def }) {
   const bubble = useRef();
   const bubbleMat = useMemo(() => std('#FF8C1A', { emissive: '#FF8C1A', emissiveIntensity: 0.5 }), []);
   const ring = useRef();
+  const zzz = useRef();
+  const z1 = useRef();
+  const z2 = useRef();
   const [hover, setHover] = useState(false);
   const selected = useHive((s) => s.selectedAgent === def.id);
   const off = useMemo(() => Math.random() * 10, []);
   const blink = useRef(2 + Math.random() * 4);
   const mats = useMemo(() => ({ skin: std(SKINS[def.skin]), hair: std(HAIRS[def.skin]) }), [def.skin]);
   const acc = DEPTS[def.dept].acc;
+  const hoodie = def.guest ? M.silver : M.hoodie;
+  const hood = def.guest ? M.cream : M.gold;
 
   useFrame((st, dt) => {
     const a = world.byId[def.id];
     if (!a || !g.current) return;
     const floor = useHive.getState().floor;
-    const visible = floor === 'all' || tierOf(a.pos.y) <= floor;
+    const visible = a.active !== false && (floor === 'all' || tierOf(a.pos.y) <= floor);
     g.current.visible = visible;
     if (!visible) return;
     g.current.position.copy(a.pos);
@@ -148,7 +170,21 @@ export function HiveWorker({ def }) {
     let armL = 0;
     let armR = 0;
     let turn = 0;
-    if (s === 'fly') {
+    let roll = 0;
+    if (s === 'walk') {
+      bob = Math.abs(Math.sin(t * 8)) * 0.06;
+      armL = Math.sin(t * 8) * 0.6;
+      armR = -armL;
+    } else if (s === 'idle') {
+      turn = Math.sin(t * 0.8) * 0.4;
+      armR = Math.sin(t * 5) * 0.3 - 1.4;
+    } else if (s === 'sleep') {
+      bob = Math.sin(t * 1.2) * 0.02;
+      tilt = 0.18;
+      roll = 0.28;
+      flap = 0;
+      armL = armR = 0.1;
+    } else if (s === 'fly') {
       bob = 0.2 + Math.sin(t * 7) * 0.08;
       tilt = 0.28;
       flap = Math.sin(t * 40) * 0.7;
@@ -181,6 +217,7 @@ export function HiveWorker({ def }) {
     inner.current.position.y = bob;
     inner.current.rotation.x = tilt;
     head.current.rotation.y = turn;
+    head.current.rotation.z = roll;
     wl.current.rotation.z = -(0.45 + flap);
     wr.current.rotation.z = 0.45 + flap;
     al.current.rotation.x = armL;
@@ -188,7 +225,7 @@ export function HiveWorker({ def }) {
 
     blink.current -= dt;
     let ey = 1;
-    if (s === 'charge') ey = 0.12;
+    if (s === 'charge' || s === 'sleep') ey = 0.12;
     else if (blink.current < 0) {
       ey = 0.12;
       if (blink.current < -0.13) blink.current = 2 + Math.random() * 4;
@@ -203,13 +240,21 @@ export function HiveWorker({ def }) {
       bubbleMat.emissive.set(col);
       bubble.current.position.y = 2.15 + Math.sin(t * 3) * 0.06;
     }
+    zzz.current.visible = s === 'sleep';
+    if (s === 'sleep') {
+      [z1.current, z2.current].forEach((z, i) => {
+        const k = (t * 0.5 + i * 0.5) % 1;
+        z.position.set(0.25 + k * 0.3, 1.75 + k * 0.7, 0);
+        z.scale.setScalar((0.6 + k * 0.6) * (1 - Math.max(0, k - 0.8) * 5));
+      });
+    }
     ring.current.visible = selected || hover;
     if (ring.current.visible) ring.current.rotation.z = t;
   });
 
   const onClick = (e) => {
     e.stopPropagation();
-    if (!g.current?.visible) return;
+    if (!g.current?.visible || def.guest) return;
     focusAgent(def.id, false);
   };
 
@@ -239,7 +284,7 @@ export function HiveWorker({ def }) {
           </group>
         ))}
         {/* badan hoodie */}
-        <mesh position={[0, 0.55, 0]} material={M.hoodie} castShadow>
+        <mesh position={[0, 0.55, 0]} material={hoodie} castShadow>
           <capsuleGeometry args={[0.3, 0.32, 4, 12]} />
         </mesh>
         <Cyl p={[0, 0.4, 0]} a={[0.305, 0.305, 0.07, 14]} m={M.brown} />
@@ -248,13 +293,13 @@ export function HiveWorker({ def }) {
         <BodyAccessory type={acc} />
         {/* tangan */}
         <group ref={al} position={[-0.33, 0.72, 0]}>
-          <mesh position={[0, -0.16, 0]} material={M.hoodie} castShadow>
+          <mesh position={[0, -0.16, 0]} material={hoodie} castShadow>
             <capsuleGeometry args={[0.08, 0.18, 3, 8]} />
           </mesh>
           <Sph p={[0, -0.33, 0]} rad={0.08} m={mats.skin} seg={[8, 6]} />
         </group>
         <group ref={ar} position={[0.33, 0.72, 0]}>
-          <mesh position={[0, -0.16, 0]} material={M.hoodie} castShadow>
+          <mesh position={[0, -0.16, 0]} material={hoodie} castShadow>
             <capsuleGeometry args={[0.08, 0.18, 3, 8]} />
           </mesh>
           <Sph p={[0, -0.33, 0]} rad={0.08} m={mats.skin} seg={[8, 6]} />
@@ -272,7 +317,7 @@ export function HiveWorker({ def }) {
         </group>
         {/* kepala */}
         <group ref={head} position={[0, 1.1, 0]}>
-          <Sph rad={0.44} m={M.gold} seg={[16, 12]} />
+          <Sph rad={0.44} m={hood} seg={[16, 12]} />
           <Sph p={[0, -0.02, 0.12]} rad={0.35} m={mats.skin} seg={[16, 12]} />
           <Sph p={[0, 0.17, 0.13]} rad={0.36} sc={[1, 0.5, 1]} m={mats.hair} seg={[14, 8]} />
           <group ref={eyes} position={[0, -0.02, 0]}>
@@ -299,6 +344,10 @@ export function HiveWorker({ def }) {
           <Accessory type={acc} />
         </group>
       </group>
+      <Billboard ref={zzz} visible={false}>
+        <ZMark zRef={z1} />
+        <ZMark zRef={z2} />
+      </Billboard>
       <Billboard ref={bubble} position={[0, 2.15, 0]} visible={false}>
         <mesh rotation={[Math.PI / 2, 0, 0]} material={bubbleMat}>
           <cylinderGeometry args={[0.13, 0.13, 0.04, 6]} />

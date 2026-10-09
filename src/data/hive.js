@@ -9,6 +9,19 @@ export const LIFT_X = 14.5;
 export const tierY = (t) => t * TIER_GAP;
 export const tierOf = (y) => Math.max(0, Math.min(2, Math.floor((y + 1.5) / TIER_GAP)));
 
+// Siklus siang-malam
+export const DAY_LEN = 240; // detik simulasi untuk satu hari penuh
+export const isNightHour = (h) => h >= 20 || h < 5.5;
+export const sunElevation = (h) => Math.sin(((h - 6) / 12) * Math.PI); // 1 = tengah hari, -1 = tengah malam
+export function dayPhase(h) {
+  if (h >= 5 && h < 7) return 'Fajar';
+  if (h >= 7 && h < 11) return 'Pagi';
+  if (h >= 11 && h < 15) return 'Siang';
+  if (h >= 15 && h < 18) return 'Sore';
+  if (h >= 18 && h < 20) return 'Senja';
+  return 'Malam';
+}
+
 export const TIERS = [
   { id: 2, name: 'Lantai 3', sub: 'Puncak' },
   { id: 1, name: 'Lantai 2', sub: 'Ruang divisi' },
@@ -34,6 +47,7 @@ export const DEPTS = {
   fin: { name: 'Finance & Data Analytics', short: 'Finance', color: '#B8860B', acc: 'bowtie' },
   prod: { name: 'Product & Innovation', short: 'Product', color: '#FFC93C', acc: 'goggles' },
   hr: { name: 'HR & General Affairs', short: 'HR & GA', color: '#D99A2B', acc: 'scarf' },
+  guest: { name: 'Tamu', short: 'Tamu', color: '#C0C5CE', acc: 'none' },
 };
 
 export const SKINS = ['#FFE0BD', '#F1C27D', '#E0AC69', '#C68642'];
@@ -63,6 +77,32 @@ export const AGENTS = [
   { id: 'payroll', nick: 'Penny', role: 'Automated Payroll Admin', dept: 'hr', mode: 'Hybrid', desk: 'pod', skin: 1 },
 ];
 export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+
+// Agent yang tetap bekerja saat malam (jaga malam)
+export const NIGHT_SHIFT = new Set(AGENTS.filter((a) => a.mode !== 'Hybrid').map((a) => a.id));
+
+// Tamu yang datang ke Hive Lobby lewat tangga depan
+export const LOBBY_DOOR = [0, 0, 8.66 + 4.07];
+export const GUESTS = [
+  {
+    id: 'guest-a',
+    nick: 'Tamu',
+    role: 'Pengunjung',
+    dept: 'guest',
+    guest: true,
+    skin: 1,
+    path: [[0.4, -2.2, 23], [0.4, -2.2, 17.8], [0.4, 0, 13.4], [0.4, 0, 12.2], [1.7, 0, 10.3], [1.0, 0, 6.7]],
+  },
+  {
+    id: 'guest-b',
+    nick: 'Tamu',
+    role: 'Pengunjung',
+    dept: 'guest',
+    guest: true,
+    skin: 3,
+    path: [[-0.4, -2.2, 23], [-0.4, -2.2, 17.8], [-0.4, 0, 13.4], [-0.4, 0, 12.2], [-1.3, 0, 10.6], [-1.0, 0, 6.7]],
+  },
+];
 
 // q, r = koordinat axial heksagon (flat-top)
 const ROOMS = [
@@ -215,6 +255,8 @@ export function statusText(st) {
       return 'Rapat di Comb Hall';
     case 'visit':
       return `Kolaborasi di ${room(st.roomId)}`;
+    case 'sleep':
+      return `Tidur di ${room(st.roomId)}`;
     default:
       return '';
   }
