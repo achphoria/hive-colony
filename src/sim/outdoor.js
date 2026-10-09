@@ -78,3 +78,9 @@ export function updateOutdoor(dt) {
     }
   }
 }
+
+export function removeWalker(id) {
+  const i = outdoor.walkers.findIndex((w) => w.id === id);
+  if (i >= 0) outdoor.walkers.splice(i, 1);
+  delete outdoor.byId[id];
+}

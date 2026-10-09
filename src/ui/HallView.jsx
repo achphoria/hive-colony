@@ -9,6 +9,21 @@ import { HallScene, DEFAULT_VIEW } from '../scene/HallScene';
 import { cut, MONTH, wibNow, dayStart, demoEvents, useHallData } from './hallData';
 import { SoundToggle } from './HUD';
 import { go } from './nav';
+import { useAuth } from '../sim/auth';
+import { decideApproval, advanceTask } from '../sim/hallSync';
+
+function useActionError() {
+  const [msg, setMsg] = useState('');
+  const run = async (fn) => {
+    try {
+      setMsg('');
+      await fn();
+    } catch (e) {
+      setMsg(e.message);
+    }
+  };
+  return [msg, run];
+}
 
 function speak(text) {
   const synth = window.speechSynthesis;
@@ -94,7 +109,7 @@ function PlanBoard() {
   const tasks = useHive((s) => s.planTasks);
   const missions = useHive((s) => s.missions);
   const log = useHive((s) => s.log);
-  const advance = useHive((s) => s.advanceTask);
+  const [err, run] = useActionError();
   const done = log.filter((e) => e.kind === 'done').slice(0, 4);
   const cols = [
     { id: 'todo', name: 'Belum', color: '#C0C5CE' },
@@ -102,6 +117,8 @@ function PlanBoard() {
     { id: 'done', name: 'Selesai', color: '#8DBF5A' },
   ];
   return (
+    <>
+    {err && <div className="error hall-error">{err}</div>}
     <div className="kanban">
       {cols.map((c) => (
         <div key={c.id} className="kcol">
@@ -114,7 +131,7 @@ function PlanBoard() {
           {tasks
             .filter((t) => t.col === c.id)
             .map((t) => (
-              <button key={t.id} className={`kcard ${t.kind}`} onClick={() => advance(t.id)} title="Klik untuk pindah kolom">
+              <button key={t.id} className={`kcard ${t.kind}`} onClick={() => run(() => advanceTask(t))} title="Klik untuk pindah kolom">
                 <span className={`who ${t.kind}`}>{t.who}</span>
                 <p>{t.title}</p>
                 <small>Rencana HYROX Race · klik untuk pindah</small>
@@ -139,6 +156,7 @@ function PlanBoard() {
         </div>
       ))}
     </div>
+    </>
   );
 }
 
@@ -187,43 +205,45 @@ function CalendarMonth() {
 
 function Approvals() {
   const approvals = useHive((s) => s.approvals);
-  const decide = (a, status) => {
-    const s = useHive.getState();
-    s.decideApproval(a.id, status);
-    const verb = status === 'approved' ? 'menyetujui' : status === 'revise' ? 'meminta revisi' : 'menolak';
-    s.pushLog({ id: `ap-${a.id}-${Date.now()}`, kind: 'done', dept: a.dept, text: `Owner ${verb}: ${a.title}`, clock: s.stats.clock });
-  };
+  const account = useAuth((s) => s.account);
+  const [err, run] = useActionError();
+  const canDecide = !account || ['owner', 'lead'].includes(account.role);
   const label = { approved: 'Disetujui', revise: 'Diminta revisi', rejected: 'Ditolak' };
   return (
-    <div className="approvals">
-      {approvals.map((a) => (
-        <div key={a.id} className={`appr ${a.status}`}>
-          <div className="appr-top">
-            <span className="chip" style={{ '--c': DEPTS[a.dept].color }}>
-              {DEPTS[a.dept].short}
-            </span>
-            <span className="muted">dari {a.by}</span>
-          </div>
-          <h3>{a.title}</h3>
-          <p>{a.detail}</p>
-          {a.status === 'pending' ? (
-            <div className="appr-btns">
-              <button className="hbtn pri" onClick={() => decide(a, 'approved')}>
-                Setujui
-              </button>
-              <button className="hbtn" onClick={() => decide(a, 'revise')}>
-                Revisi
-              </button>
-              <button className="hbtn danger" onClick={() => decide(a, 'rejected')}>
-                Tolak
-              </button>
+    <>
+      {err && <div className="error hall-error">{err}</div>}
+      <div className="approvals">
+        {approvals.map((a) => (
+          <div key={a.id} className={`appr ${a.status}`}>
+            <div className="appr-top">
+              <span className="chip" style={{ '--c': DEPTS[a.dept]?.color }}>
+                {DEPTS[a.dept]?.short}
+              </span>
+              <span className="muted">dari {a.by}</span>
             </div>
-          ) : (
-            <div className="appr-done">{label[a.status]}</div>
-          )}
-        </div>
-      ))}
-    </div>
+            <h3>{a.title}</h3>
+            <p>{a.detail}</p>
+            {a.status !== 'pending' ? (
+              <div className="appr-done">{label[a.status]}</div>
+            ) : canDecide ? (
+              <div className="appr-btns">
+                <button className="hbtn pri" onClick={() => run(() => decideApproval(a, 'approved'))}>
+                  Setujui
+                </button>
+                <button className="hbtn" onClick={() => run(() => decideApproval(a, 'revise'))}>
+                  Revisi
+                </button>
+                <button className="hbtn danger" onClick={() => run(() => decideApproval(a, 'rejected'))}>
+                  Tolak
+                </button>
+              </div>
+            ) : (
+              <div className="appr-done muted">Menunggu keputusan owner atau kepala divisi</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -234,7 +254,10 @@ export function HallView() {
   const [view, setView] = useState(DEFAULT_VIEW);
   const profile = useHive((s) => s.profile);
   const me = profile || { ...DEFAULT_PROFILE, name: 'Anda' };
-  const dina = DEMO_STAFF[0];
+  const account = useAuth((s) => s.account);
+  const onlineStaff = useHive((s) => s.onlineStaff);
+  const mate = onlineStaff.find((o) => o.page === '/hall') || onlineStaff[0];
+  const dina = account ? (mate ? { ...mate.profile, name: mate.name } : null) : DEMO_STAFF[0];
   const data = useHallData(me);
   const { call, setCall, ask } = useDemoCall();
   const tabs = [
@@ -252,7 +275,7 @@ export function HallView() {
       </button>
       <div className="hall-title">
         <h1>Hive Hall</h1>
-        <p>Rapat HYROX Simulation Race · mode demo</p>
+        <p>Rapat HYROX Simulation Race · {account ? 'tersambung ke database' : 'mode demo'}</p>
       </div>
       <div className="hall-tabs" role="tablist">
         {tabs.map(([id, label]) => (
@@ -301,8 +324,8 @@ export function HallView() {
             {me.name || 'Anda'} · {!call.mic ? 'mute' : call.speaker === 'me' ? 'bicara' : 'diam'}
           </span>
           <span className="pchip">
-            <i style={{ background: dina.outfitColor }} />
-            {dina.name} · ✋ antre
+            <i style={{ background: dina?.outfitColor || '#C0C5CE' }} />
+            {dina ? `${dina.name} · ✋ antre` : 'Belum ada rekan lain online'}
           </span>
           {call.notes.map((n) => (
             <span key={n} className="pchip note">

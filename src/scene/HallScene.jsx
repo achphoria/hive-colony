@@ -364,14 +364,14 @@ export function HallScene({ data, me, dina, call, view, setView }) {
       </Screen>
 
       {/* peserta: manusia di kiri, AI melingkar ke kanan, Queen Bea di tengah */}
-      <HumanSeat who="dina" profile={dina} deg={-80} />
+      {dina && <HumanSeat who={dina.name} profile={dina} deg={-80} />}
       <HumanSeat who="me" profile={me} deg={-53} speaking={call.speaker === 'me'} muted={!call.mic} />
       <BeeFigure position={bee(-26).pos} facing={bee(-26).facing} muted />
       <BeeFigure position={bee(0).pos} facing={bee(0).facing} crown speaking={ceoSpeaking} thinking={ceoThinking} />
       <BeeFigure position={bee(26).pos} facing={bee(26).facing} />
       <BeeFigure position={bee(53).pos} facing={bee(53).facing} />
       <BeeFigure position={bee(80).pos} facing={bee(80).facing} />
-      <NameTag deg={-80} label={`${dina.name} · ✋`} kind="human" />
+      {dina && <NameTag deg={-80} label={`${dina.name} · ✋`} kind="human" />}
       <NameTag deg={-53} label={me.name || 'Anda'} kind="human me" />
       <NameTag deg={-26} label="Sprint · Ops" kind="ai" />
       <NameTag deg={0} label="Queen Bea" kind="ai ceo" />

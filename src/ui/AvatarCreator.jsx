@@ -5,6 +5,8 @@ import { useHive } from '../sim/store';
 import { upsertWalker, danceNow } from '../sim/outdoor';
 import { AvatarPreview } from './AvatarPreview';
 import { go } from './nav';
+import { useAuth } from '../sim/auth';
+import { updatePresence } from '../sim/presence';
 
 const STAFF_DEPTS = ['cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 
@@ -39,22 +41,40 @@ function Swatches({ field, value, onPick }) {
 
 export function AvatarCreator() {
   const saved = useHive((s) => s.profile);
+  const account = useAuth((s) => s.account);
+  const saveAvatar = useAuth((s) => s.saveAvatar);
   const [p, setP] = useState(saved || DEFAULT_PROFILE);
   const [preview, setPreview] = useState(saved?.pose || 'pargoy');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const set = (k) => (v) => setP((old) => ({ ...old, [k]: v }));
 
-  const save = () => {
+  const save = async () => {
     const name = p.name.trim();
     if (!name) {
       setError('Isi nama dulu supaya teman kantor tahu ini kamu.');
       return;
     }
-    const profile = { ...p, name, id: 'me' };
-    saveProfile(profile);
-    upsertWalker(profile);
-    useHive.getState().setProfile(profile);
-    danceNow('me', profile.pose === 'idle' ? 'pargoy' : profile.pose);
+    const pose = p.pose === 'idle' ? 'pargoy' : p.pose;
+    if (account) {
+      // akun sungguhan: disimpan ke Supabase, divisi tetap dari undangan
+      setBusy(true);
+      try {
+        await saveAvatar({ ...p, name, dept: account.primary_dept });
+      } catch (e) {
+        setError(e.message);
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    } else {
+      const profile = { ...p, name, id: 'me' };
+      saveProfile(profile);
+      upsertWalker(profile);
+      useHive.getState().setProfile(profile);
+    }
+    danceNow('me', pose);
+    setTimeout(() => updatePresence({ pose, danceAt: Date.now() }), 1500);
     go('/');
   };
 
@@ -95,14 +115,26 @@ export function AvatarCreator() {
             </div>
             <div className="field">
               <div className="field-label">Divisi</div>
-              <select value={p.dept} onChange={(e) => set('dept')(e.target.value)}>
-                {STAFF_DEPTS.map((d) => (
-                  <option key={d} value={d}>
-                    {DEPTS[d].name}
-                  </option>
-                ))}
-              </select>
-              <div className="field-hint">Mode demo: nanti divisi dikunci lewat link undangan dari admin.</div>
+              {account ? (
+                <>
+                  <div className="locked">
+                    🔒 {DEPTS[account.primary_dept]?.name}
+                    {account.depts?.length > 0 && ` + ${account.depts.map((d) => DEPTS[d]?.short).join(', ')}`}
+                  </div>
+                  <div className="field-hint">Divisi dikunci dari undangan admin.</div>
+                </>
+              ) : (
+                <>
+                  <select value={p.dept} onChange={(e) => set('dept')(e.target.value)}>
+                    {STAFF_DEPTS.map((d) => (
+                      <option key={d} value={d}>
+                        {DEPTS[d].name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="field-hint">Mode demo: masuk dengan akun supaya avatar tersimpan dan terlihat rekan kerja.</div>
+                </>
+              )}
             </div>
             <div className="field">
               <div className="field-label">Joget favorit</div>
@@ -154,8 +186,8 @@ export function AvatarCreator() {
               <div className="field-label">Ekspresi</div>
               <Chips field="expr" value={p.expr} onPick={set('expr')} />
             </div>
-            <button className="save" onClick={save}>
-              Simpan dan masuk ke koloni
+            <button className="save" onClick={save} disabled={busy}>
+              {busy ? 'Menyimpan…' : account ? 'Simpan avatar ke akun' : 'Simpan dan masuk ke koloni'}
             </button>
           </div>
         </div>

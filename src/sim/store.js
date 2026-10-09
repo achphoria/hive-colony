@@ -35,6 +35,8 @@ export const useHive = create((set) => ({
   outdoorVersion: 0,
   planTasks: PLAN_TASKS,
   approvals: APPROVALS,
+  onlineStaff: [], // staff lain yang sedang online (Realtime Presence)
+  dbActivity: [], // log aktivitas manusia dari Supabase
 
   focusOn: (target, dist, dir = null) => set((s) => ({ focus: { target, dist, dir, key: s.focus.key + 1 } })),
   setFloor: (floor) =>

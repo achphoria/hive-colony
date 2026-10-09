@@ -26,7 +26,18 @@ Saat ini misi masih **simulasi**: tidak ada panggilan ke API AI. Agent bergerak,
   - Tab **Papan rencana** (kanban), **Kalender**, dan **Persetujuan** (setujui, minta revisi, atau tolak).
   - **Rapat suara demo**: tekan "Panggil Queen Bea", dan Queen Bea menjawab berdasarkan data koloni memakai text-to-speech bawaan browser.
 
-Login sungguhan, undangan dari admin, call suara antar-staff, dan sinkronisasi live antar-perangkat butuh backend (misalnya Supabase dan WebRTC). Itu tahap berikutnya.
+## Akun staff (Supabase)
+
+Tanpa login, Hive Colony berjalan dalam mode demo. Dengan login, data tersimpan di Supabase:
+
+- **Masuk** (`#/login`) dengan email + password. **Daftar** (`#/join?code=…`) hanya bisa memakai kode undangan.
+- **Undang staff** (`#/undang`, khusus owner dan kepala divisi): buat link undangan yang terkunci ke divisi utama, divisi tambahan, peran, dan (opsional) email. Staff tidak bisa memilih divisi atau perannya sendiri.
+- **Avatar** tersimpan di akun. Staff yang sedang online muncul di taman semua orang, dan joget mereka terlihat realtime (Supabase Realtime Presence).
+- **Hive Hall**: persetujuan, papan rencana, dan log aktivitas manusia tersimpan di database dan berubah live di semua perangkat. Hanya owner dan kepala divisi yang bisa memutuskan persetujuan; viewer hanya bisa melihat.
+
+Tabel memakai awalan `hc_` (`hc_profiles`, `hc_invites`, `hc_approvals`, `hc_plan_tasks`, `hc_activity`) dengan Row Level Security. Website hanya memakai anon key publik; service_role key tidak pernah dipakai di sini.
+
+Call suara antar-staff (WebRTC) masih tahap berikutnya.
 
 ## Siklus siang-malam
 
@@ -74,6 +85,8 @@ Lalu buka http://localhost:5173/hive-colony/
 | `src/ui/HallView.jsx` | Hive Hall: rapat, papan rencana, kalender, persetujuan |
 | `src/ui/AvatarCreator.jsx` | Pembuat avatar staff dan joget |
 | `src/sim/outdoor.js` | Staff yang berjalan-jalan dan berjoget di taman |
+| `src/sim/auth.js`, `src/ui/AuthPages.jsx` | Login, daftar dengan undangan, undang staff |
+| `src/sim/presence.js`, `src/sim/hallSync.js` | Realtime presence dan sinkronisasi Hive Hall |
 
 Deploy otomatis ke GitHub Pages lewat `.github/workflows/deploy.yml` setiap ada push ke `main`.
 

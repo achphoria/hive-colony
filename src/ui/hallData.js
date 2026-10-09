@@ -5,6 +5,13 @@ import { DEMO_STAFF } from '../data/staff';
 import { useHive } from '../sim/store';
 import { world } from '../sim/engine';
 import { outdoor } from '../sim/outdoor';
+import { useAuth } from '../sim/auth';
+
+// jam WIB (desimal) dari timestamp database
+const wibHourOf = (iso) => {
+  const d = new Date(new Date(iso).getTime() + 7 * 3600e3);
+  return d.getUTCHours() + d.getUTCMinutes() / 60;
+};
 
 export const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 export const hhmm = (h) => {
@@ -75,8 +82,14 @@ export function useHallData(me) {
   const stats = useHive((s) => s.stats);
   const approvals = useHive((s) => s.approvals);
   const agentStates = useHive((s) => s.agentStates);
+  const onlineStaff = useHive((s) => s.onlineStaff);
+  const dbActivity = useHive((s) => s.dbActivity);
+  const account = useAuth((s) => s.account);
 
-  const feed = log.slice(0, 6).map((e) => ({ id: e.id, t: hhmm(e.clock), text: feedText(e), kind: e.kind }));
+  // aktivitas agent (simulasi) + aktivitas manusia (Supabase), terbaru di atas
+  const human = dbActivity.map((a) => ({ id: `db-${a.id}`, clock: wibHourOf(a.created_at), text: a.text, kind: 'human' }));
+  const merged = [...log.map((e) => ({ ...e, text: feedText(e) })), ...human].sort((a, b) => (b.clock ?? 0) - (a.clock ?? 0));
+  const feed = merged.slice(0, 6).map((e) => ({ id: e.id, t: hhmm(e.clock), text: e.text, kind: e.kind }));
 
   const pending = approvals.filter((a) => a.status === 'pending');
   const open = [
@@ -106,13 +119,23 @@ export function useHallData(me) {
     `Persetujuan menunggu ${pending.length}`,
   ];
 
-  const online = [
-    { name: `${me.name || 'Anda'} (Anda)`, color: me.outfitColor, where: 'rapat', here: true },
-    ...DEMO_STAFF.map((s, i) => {
-      const w = outdoor.byId[s.id];
-      return { name: s.name, color: s.outfitColor, here: i === 0, where: i === 0 ? 'rapat' : w?.state === 'dance' ? 'joget di taman' : s.spot };
-    }),
-  ];
+  const online = account
+    ? [
+        { name: `${me.name || 'Anda'} (Anda)`, color: me.outfitColor, where: 'rapat', here: true },
+        ...onlineStaff.map((o) => ({
+          name: o.name || 'Staff',
+          color: o.outfitColor,
+          here: o.page === '/hall',
+          where: o.page === '/hall' ? 'rapat' : o.dancing ? 'joget di taman' : 'di koloni',
+        })),
+      ]
+    : [
+        { name: `${me.name || 'Anda'} (Anda)`, color: me.outfitColor, where: 'rapat', here: true },
+        ...DEMO_STAFF.map((s, i) => {
+          const w = outdoor.byId[s.id];
+          return { name: s.name, color: s.outfitColor, here: i === 0, where: i === 0 ? 'rapat' : w?.state === 'dance' ? 'joget di taman' : s.spot };
+        }),
+      ];
 
   const skills = skillScores();
   const mover = [...skills].sort((a, b) => b.done - a.done)[0];

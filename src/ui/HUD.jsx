@@ -5,6 +5,8 @@ import { focusAgent } from '../sim/engine';
 import { outdoor, danceNow } from '../sim/outdoor';
 import { POSES } from '../data/staff';
 import { go } from './nav';
+import { useAuth } from '../sim/auth';
+import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -90,6 +92,49 @@ export function SoundToggle() {
   );
 }
 
+const ROLE_LABEL = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' };
+
+function AccountChip() {
+  const ready = useAuth((s) => s.ready);
+  const account = useAuth((s) => s.account);
+  const session = useAuth((s) => s.session);
+  const signOut = useAuth((s) => s.signOut);
+  const online = useHive((s) => s.onlineStaff.length);
+  if (!ready) return null;
+  if (!session) {
+    return (
+      <button className="acct-btn" onClick={() => go('/login')}>
+        Masuk
+      </button>
+    );
+  }
+  if (!account) {
+    return (
+      <button className="acct-btn" onClick={() => go('/join')}>
+        Pakai kode undangan
+      </button>
+    );
+  }
+  return (
+    <div className="acct">
+      <div className="acct-who">
+        <b>{account.name}</b>
+        <span>
+          {ROLE_LABEL[account.role]} · {online} rekan online
+        </span>
+      </div>
+      {['owner', 'lead'].includes(account.role) && (
+        <button className="acct-btn" onClick={() => go('/undang')}>
+          Undang
+        </button>
+      )}
+      <button className="acct-btn ghost" onClick={signOut}>
+        Keluar
+      </button>
+    </div>
+  );
+}
+
 function Brand() {
   const stats = useHive((s) => s.stats);
   const agentStates = useHive((s) => s.agentStates);
@@ -103,6 +148,7 @@ function Brand() {
       </div>
       <Clock />
       <SoundToggle />
+      <AccountChip />
       <div className="stats">
         <div>
           <b>{working}</b>
@@ -273,6 +319,7 @@ function DanceMenu({ onPick }) {
   const dance = (pose) => {
     setOpen(false);
     danceNow('me', pose);
+    updatePresence({ pose, danceAt: Date.now() });
     const w = outdoor.byId.me;
     if (w) useHive.getState().focusOn([w.pos.x, w.pos.y + 1, w.pos.z], 12, [Math.sin(w.facing), 0.9, Math.cos(w.facing)]);
     onPick?.();

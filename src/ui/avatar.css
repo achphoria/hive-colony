@@ -273,3 +273,123 @@
     width: 100%;
   }
 }
+
+/* ---------- masuk / daftar / undang ---------- */
+.auth-page {
+  display: grid;
+  place-items: center;
+  padding: 20px 16px;
+}
+.auth-card {
+  width: min(420px, 100%);
+  background: #fffdf7;
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 18px 20px 22px;
+  position: relative;
+  margin: 24px auto;
+}
+.auth-card .back {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+}
+.auth-logo {
+  display: flex;
+  justify-content: center;
+  margin: 36px 0 6px;
+}
+.auth-card h1 {
+  text-align: center;
+  font-size: 24px;
+}
+.auth-sub {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  margin: 6px 0 16px;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.auth-form input,
+.creator-form input[type='text'] {
+  font: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+.auth-foot {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 14px 0 0;
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  color: var(--royal);
+  font-weight: 700;
+  padding: 0;
+  margin: 10px auto 0;
+  display: inline-block;
+}
+.save:disabled {
+  opacity: 0.6;
+}
+.invite-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.invite-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.invite {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13.5px;
+}
+.invite.used {
+  opacity: 0.6;
+}
+.invite-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+@media (max-width: 760px) {
+  .invite-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.locked {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--line);
+  background: #fff8e7;
+  font-weight: 700;
+  font-size: 14px;
+}
