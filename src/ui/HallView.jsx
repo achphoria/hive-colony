@@ -1,17 +1,20 @@
 // Hive Hall: ruang rapat manusia + AI. Tab Rapat = ruang 3D full-wide dengan layar dinding live;
 // tab lain = papan rencana, kalender, dan persetujuan. Mode demo: call suara disimulasikan dan
 // Queen Bea menjawab dengan text-to-speech bawaan browser.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AGENT_BY_ID, DEPTS } from '../data/hive';
 import { DEMO_STAFF, DEFAULT_PROFILE } from '../data/staff';
 import { useHive } from '../sim/store';
 import { HallScene, DEFAULT_VIEW, DEFAULT_VIEW_MOBILE } from '../scene/HallScene';
-import { cut, MONTH, wibNow, dayStart, demoEvents, useHallData } from './hallData';
+import { cut, DAY, MONTH, wibNow, demoEvents, useHallData } from './hallData';
 import { SoundToggle, useIsMobile } from './HUD';
-import { DAY } from './hallData';
 import { go } from './nav';
 import { useAuth } from '../sim/auth';
 import { decideApproval, advanceTask } from '../sim/hallSync';
+import { useMeeting } from '../hall/meeting';
+import { MeetingView } from '../hall/MeetingView';
+import { ReportView } from '../hall/ReportView';
+import { ChiefView, PortalView } from '../hall/ChiefView';
 
 function useActionError() {
   const [msg, setMsg] = useState('');
@@ -24,84 +27,6 @@ function useActionError() {
     }
   };
   return [msg, run];
-}
-
-function speak(text) {
-  const synth = window.speechSynthesis;
-  if (!synth) return false;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  const voice = synth.getVoices().find((v) => v.lang?.toLowerCase().startsWith('id'));
-  if (voice) u.voice = voice;
-  u.lang = 'id-ID';
-  u.rate = 1.02;
-  u.pitch = 1.05;
-  synth.speak(u);
-  return true;
-}
-
-/* ---------- call suara (demo) ---------- */
-
-function buildAnswer(kind) {
-  const s = useHive.getState();
-  const pending = s.approvals.filter((a) => a.status === 'pending');
-  const lowest = [...s.missions].sort((a, b) => a.progress - b.progress)[0];
-  if (kind === 'kondisi') {
-    return {
-      q: 'Queen Bea, gimana kondisi koloni sekarang?',
-      a: `Saat ini ${s.missions.length} misi sedang berjalan, ${s.stats.done} misi sudah selesai, dan madu kita ${s.stats.honey}. ${
-        pending.length ? `Ada ${pending.length} persetujuan yang menunggu Anda.` : 'Tidak ada persetujuan yang menunggu.'
-      }`,
-      note: pending.length ? `Ingatkan Owner: ${pending.length} persetujuan` : null,
-    };
-  }
-  if (kind === 'mendesak') {
-    return {
-      q: 'Queen Bea, apa yang paling mendesak?',
-      a: lowest
-        ? `Yang paling perlu dikejar: "${lowest.title}" oleh ${AGENT_BY_ID[lowest.leadId].nick}, baru ${Math.round(lowest.progress * 100)} persen. Saya minta dia memberi update dalam satu jam.`
-        : 'Belum ada misi yang macet. Semua agent sedang lancar.',
-      note: lowest ? `Follow up: ${cut(lowest.title, 34)}` : null,
-    };
-  }
-  const ev = demoEvents().find((e) => e.big);
-  const days = Math.round((ev.ts - dayStart(wibNow())) / 864e5);
-  return {
-    q: 'Queen Bea, persiapan race sudah sampai mana?',
-    a: `${ev.title} tinggal ${days} hari lagi. Rute dan iklan sedang dikerjakan Sprint dan Spark, sementara Dina masih perlu meminjam 2 sled.`,
-    note: 'Cek status pinjam sled bersama Dina',
-  };
-}
-
-function useDemoCall() {
-  const [call, setCall] = useState({ speaker: null, caption: '', mic: true, voice: true, notes: [] });
-  const timers = useRef([]);
-  const order = useRef(0);
-  useEffect(
-    () => () => {
-      timers.current.forEach(clearTimeout);
-      window.speechSynthesis?.cancel();
-    },
-    [],
-  );
-  const ask = () => {
-    timers.current.forEach(clearTimeout);
-    const kinds = ['kondisi', 'mendesak', 'race'];
-    const r = buildAnswer(kinds[order.current++ % kinds.length]);
-    setCall((c) => ({ ...c, speaker: c.mic ? 'me' : null, caption: c.mic ? `Anda: ${r.q}` : 'Mic Anda mati. Nyalakan mic untuk bertanya.' }));
-    timers.current.push(
-      setTimeout(() => setCall((c) => (c.mic ? { ...c, speaker: 'thinking', caption: 'Queen Bea mendengar namanya dan sedang berpikir…' } : c)), 2600),
-      setTimeout(() => {
-        setCall((c) => {
-          if (!c.mic) return c;
-          if (c.voice) speak(r.a);
-          return { ...c, speaker: 'ceo', caption: `Queen Bea: ${r.a}`, notes: r.note ? [r.note, ...c.notes].slice(0, 3) : c.notes };
-        });
-      }, 4400),
-      setTimeout(() => setCall((c) => ({ ...c, speaker: null })), 11000),
-    );
-  };
-  return { call, setCall, ask };
 }
 
 /* ---------- tab lain ---------- */
@@ -323,10 +248,101 @@ function MobileScreens({ data }) {
   );
 }
 
+/* ---------- lobi: status meeting + tombol aksi ---------- */
+
+const LOBBY_CALL = { speaker: null, mic: true }; // ruang 3D di lobi: semua diam
+
+function useMeetingClock(startedAt) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
+  return startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 60000)) : 0;
+}
+
+function MeetingBanner({ onJoin }) {
+  const m = useMeeting();
+  const mins = useMeetingClock(m.startedAt);
+  if (!m.active) return null;
+  const count = m.people.length + (m.joined ? 1 : 0);
+  return (
+    <button className="live-banner" onClick={onJoin}>
+      <span className="live-dot" />
+      <span className="live-text">
+        <b>{m.title || 'Rapat koloni'}</b> · {count || 1} orang · {mins} menit · AI mentranskrip
+      </span>
+      <span className="live-join">Gabung</span>
+    </button>
+  );
+}
+
+function StartMeetingDialog({ onCancel, onStart }) {
+  const [title, setTitle] = useState('');
+  return (
+    <div className="dialog-scrim" onClick={onCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="start-title">
+        <h2 id="start-title">Mulai meeting</h2>
+        <p className="muted">Semua orang yang membuka Hive Hall akan melihat meeting ini dan bisa bergabung.</p>
+        <input
+          autoFocus
+          value={title}
+          maxLength={60}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onStart(title)}
+          placeholder="Rapat mingguan Operations"
+        />
+        <div className="dialog-btns">
+          <button className="hbtn" onClick={onCancel}>
+            Batal
+          </button>
+          <button className="hbtn pri" onClick={() => onStart(title)}>
+            🎙 Mulai
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionDock({ onAction }) {
+  const active = useMeeting((s) => s.active);
+  const items = [
+    {
+      id: 'meeting',
+      ic: '🎙',
+      bg: '#FCEBEB',
+      title: active ? 'Gabung meeting' : 'Mulai meeting',
+      sub: active ? 'Rapat sedang berlangsung. Masuk dan ikut transkrip live.' : 'Buka ruang meeting untuk semua. Transkrip live oleh AI.',
+    },
+    { id: 'report', ic: '📊', bg: '#FCE7B0', title: 'Presentasi report', sub: 'Queen Bea mempresentasikan laporan koloni.' },
+    { id: 'chief', ic: '👑', bg: '#DCE6F4', title: 'Ngobrol dengan Chief', sub: 'Chat dengan lampiran, atau ngobrol pakai suara.' },
+    { id: 'portal', ic: '🗂', bg: '#F3E3C0', title: 'Portal karyawan', sub: 'Cuti, slip gaji, dokumen.', soon: true },
+  ];
+  return (
+    <div className="dock">
+      {items.map((it) => (
+        <button key={it.id} className={`dock-tile${it.soon ? ' soon' : ''}${it.id === 'meeting' && active ? ' live' : ''}`} onClick={() => onAction(it.id)}>
+          <span className="dock-ic" style={{ background: it.bg }}>
+            {it.ic}
+          </span>
+          <b>{it.title}</b>
+          <span className="dock-sub">{it.sub}</span>
+          {it.soon && <span className="soon-badge">Segera hadir</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ---------- halaman ---------- */
 
+const VIEW_TITLE = { meeting: 'Meeting', report: 'Presentasi report', chief: 'Ngobrol dengan Chief', portal: 'Portal karyawan' };
+
 export function HallView() {
-  const [tab, setTab] = useState('rapat');
+  const [tab, setTab] = useState('lobi');
+  const [mode, setMode] = useState('lobby'); // lobby | meeting | report | chief | portal
+  const [asking, setAsking] = useState(false);
   const mobile = useIsMobile();
   const baseView = mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW;
   const [view, setView] = useState(baseView);
@@ -338,27 +354,56 @@ export function HallView() {
   const mate = onlineStaff.find((o) => o.page === '/hall') || onlineStaff[0];
   const dina = account ? (mate ? { ...mate.profile, name: mate.name } : null) : DEMO_STAFF[0];
   const data = useHallData(me);
-  const { call, setCall, ask } = useDemoCall();
+  const meetingActive = useMeeting((s) => s.active);
+  const meetingJoined = useMeeting((s) => s.joined);
+
+  // status "satu server meeting" diawasi sejak membuka Hive Hall
+  useEffect(() => {
+    useMeeting.getState().watch();
+  }, [account]);
+
   const tabs = [
-    ['rapat', 'Rapat'],
+    ['lobi', 'Lobi'],
     ['rencana', 'Papan rencana'],
     ['kalender', 'Kalender'],
     ['persetujuan', `Persetujuan${data.pending ? ` · ${data.pending}` : ''}`],
   ];
   const zoomed = !!view.zoomed;
 
+  const openAction = (id) => {
+    if (id === 'meeting') {
+      if (meetingActive) setMode('meeting');
+      else setAsking(true);
+      return;
+    }
+    setMode(id);
+  };
+
   const head = (
     <div className="hall-head">
-      <button className="back" onClick={() => go('/')} aria-label="Kembali ke koloni">
-        ← <span className="lbl">Koloni</span>
+      <button
+        className="back"
+        onClick={() => (mode !== 'lobby' && tab === 'lobi' ? setMode('lobby') : go('/'))}
+        aria-label={mode !== 'lobby' && tab === 'lobi' ? 'Kembali ke lobi' : 'Kembali ke koloni'}
+      >
+        ← <span className="lbl">{mode !== 'lobby' && tab === 'lobi' ? 'Lobi' : 'Koloni'}</span>
       </button>
       <div className="hall-title">
-        <h1>Hive Hall</h1>
-        <p>Rapat HYROX Simulation Race · {account ? 'tersambung ke database' : 'mode demo'}</p>
+        <h1>{mode !== 'lobby' && tab === 'lobi' ? VIEW_TITLE[mode] : 'Hive Hall'}</h1>
+        <p>{account ? 'Tersambung ke database' : 'Mode demo'}</p>
       </div>
       <div className="hall-tabs" role="tablist">
         {tabs.map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            className={tab === id ? 'on' : ''}
+            onClick={() => {
+              setTab(id);
+              if (id === 'lobi' && !meetingJoined) setMode('lobby');
+            }}
+          >
             {label}
           </button>
         ))}
@@ -367,7 +412,7 @@ export function HallView() {
     </div>
   );
 
-  if (tab !== 'rapat') {
+  if (tab !== 'lobi' || mode !== 'lobby') {
     return (
       <div className="page hall-page">
         <div className="hall-inner wide">
@@ -375,6 +420,10 @@ export function HallView() {
           {tab === 'rencana' && <PlanBoard />}
           {tab === 'kalender' && <CalendarMonth />}
           {tab === 'persetujuan' && <Approvals />}
+          {tab === 'lobi' && mode === 'meeting' && <MeetingView onLeave={() => setMode('lobby')} onReport={() => setMode('report')} />}
+          {tab === 'lobi' && mode === 'report' && <ReportView onClose={() => setMode(meetingJoined ? 'meeting' : 'lobby')} />}
+          {tab === 'lobi' && mode === 'chief' && <ChiefView />}
+          {tab === 'lobi' && mode === 'portal' && <PortalView />}
         </div>
       </div>
     );
@@ -382,8 +431,11 @@ export function HallView() {
 
   return (
     <div className="hall3d">
-      <HallScene data={data} me={me} dina={dina} call={call} view={view} setView={setView} mobile={mobile} />
-      <div className="hall-overlay top">{head}</div>
+      <HallScene data={data} me={me} dina={dina} call={LOBBY_CALL} view={view} setView={setView} mobile={mobile} />
+      <div className="hall-overlay top">
+        {head}
+        <MeetingBanner onJoin={() => setMode('meeting')} />
+      </div>
       {zoomed && (
         <button className="hbtn pri zoom-back" onClick={() => setView(baseView)}>
           ← Lihat seluruh ruangan
@@ -391,53 +443,18 @@ export function HallView() {
       )}
       <div className="hall-overlay bottom">
         {mobile && <MobileScreens data={data} />}
-        <div className="caption">
-          {call.caption || 'Tekan "Panggil Queen Bea" untuk bertanya. Klik layar di dinding untuk memperbesar.'}
-        </div>
-        <div className="hall-row">
-          <span className="pchip">
-            <i style={{ background: '#FF8C1A' }} />
-            Queen Bea · {call.speaker === 'ceo' ? 'bicara' : call.speaker === 'thinking' ? 'berpikir…' : 'mendengarkan'}
-          </span>
-          <span className="pchip">
-            <i style={{ background: me.outfitColor }} />
-            {me.name || 'Anda'} · {!call.mic ? 'mute' : call.speaker === 'me' ? 'bicara' : 'diam'}
-          </span>
-          <span className="pchip">
-            <i style={{ background: dina?.outfitColor || '#C0C5CE' }} />
-            {dina ? `${dina.name} · ✋ antre` : 'Belum ada rekan lain online'}
-          </span>
-          {call.notes.map((n) => (
-            <span key={n} className="pchip note">
-              ✦ Tugas baru: {n}
-            </span>
-          ))}
-        </div>
-        <div className="hall-row center">
-          <button
-            className={`hbtn${call.mic ? ' pri' : ''}`}
-            onClick={() => setCall((c) => ({ ...c, mic: !c.mic, speaker: null }))}
-            aria-label={call.mic ? 'Matikan mic' : 'Nyalakan mic'}
-          >
-            {call.mic ? '🎙' : '🔇'}
-            <span className="lbl">{call.mic ? ' Mic nyala' : ' Mic mati'}</span>
-          </button>
-          <button className="hbtn pri main" onClick={ask}>
-            👑 Panggil<span className="lbl"> Queen Bea</span>
-          </button>
-          <button
-            className={`hbtn${call.voice ? ' pri' : ''}`}
-            onClick={() => setCall((c) => ({ ...c, voice: !c.voice }))}
-            aria-label={call.voice ? 'Matikan suara AI' : 'Nyalakan suara AI'}
-          >
-            {call.voice ? '🔊' : '🔈'}
-            <span className="lbl">{call.voice ? ' Suara AI nyala' : ' Suara AI mati'}</span>
-          </button>
-          <button className="hbtn danger" onClick={() => go('/')} aria-label="Keluar dari Hive Hall">
-            ✕<span className="lbl"> Keluar</span>
-          </button>
-        </div>
+        <ActionDock onAction={openAction} />
       </div>
+      {asking && (
+        <StartMeetingDialog
+          onCancel={() => setAsking(false)}
+          onStart={async (title) => {
+            setAsking(false);
+            await useMeeting.getState().start(title);
+            setMode('meeting');
+          }}
+        />
+      )}
     </div>
   );
 }

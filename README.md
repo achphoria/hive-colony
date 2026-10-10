@@ -26,6 +26,17 @@ Saat ini misi masih **simulasi**: tidak ada panggilan ke API AI. Agent bergerak,
   - Tab **Papan rencana** (kanban), **Kalender**, dan **Persetujuan** (setujui, minta revisi, atau tolak).
   - **Rapat suara demo**: tekan "Panggil Queen Bea", dan Queen Bea menjawab berdasarkan data koloni memakai text-to-speech bawaan browser.
 
+## Hive Hall: lobi dan 4 fitur
+
+Hive Hall sekarang berupa **lobi**: ruang 3D, banner status meeting, dan 4 tombol.
+
+- **Mulai / Gabung meeting**: satu ruang meeting untuk seluruh koloni. Status meeting (judul, jumlah peserta, durasi) terlihat oleh semua orang yang membuka Hive Hall; untuk akun yang login, status ini realtime lewat Supabase Presence. Ruang meeting standar berisi kotak peserta (manusia + AI yang diundang), transkrip live, catatan keputusan & tugas oleh AI, dan tombol Tanya Queen Bea.
+- **Presentasi report**: 5 slide yang disusun dari data koloni, dinarasikan Queen Bea dengan suara browser; bisa dijeda, dilompati, dan dicetak/PDF.
+- **Ngobrol dengan Chief**: mode chat (lampiran file apa pun, seret-lepas) dan mode suara (tahan untuk bicara, memakai pengenal suara bawaan browser).
+- **Portal karyawan**: segera hadir.
+
+Fase berikutnya: suara antar-peserta (WebRTC), transkrip sungguhan (speech-to-text), dan jawaban AI sungguhan untuk Queen Bea. Saat ini transkrip meeting dan jawaban Queen Bea masih simulasi.
+
 ## Akun staff (Supabase)
 
 Tanpa login, Hive Colony berjalan dalam mode demo. Dengan login, data tersimpan di Supabase:
@@ -87,6 +98,7 @@ Lalu buka http://localhost:5173/hive-colony/
 | `src/sim/outdoor.js` | Staff yang berjalan-jalan dan berjoget di taman |
 | `src/sim/auth.js`, `src/ui/AuthPages.jsx` | Login, daftar dengan undangan, undang staff |
 | `src/sim/presence.js`, `src/sim/hallSync.js` | Realtime presence dan sinkronisasi Hive Hall |
+| `src/hall/` | Lobi Hive Hall: meeting, presentasi report, ngobrol dengan Chief, portal |
 
 Deploy otomatis ke GitHub Pages lewat `.github/workflows/deploy.yml` setiap ada push ke `main`.
 
