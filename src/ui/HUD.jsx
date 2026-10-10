@@ -10,6 +10,7 @@ import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
 import { useAi } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
+import { PlazaBar } from './PlazaBar';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -682,9 +683,11 @@ function MobileHUD() {
   const [drawer, setDrawer] = useState(null);
   const missions = useHive((s) => s.missions);
   const close = () => setDrawer(null);
+  const plaza = useAuth((s) => !!s.account);
   return (
-    <div className="hud is-mobile">
+    <div className={`hud is-mobile${plaza ? ' has-plaza' : ''}`}>
       <MobileBrand onAvatar={() => setDrawer('akun')} />
+      <PlazaBar />
       <button className="edge-tab edge-menu" onClick={() => setDrawer('menu')} aria-label="Buka menu lantai dan agent">
         <LayersIcon />
         <span>Menu</span>
@@ -732,10 +735,12 @@ function MobileHUD() {
 
 export function HUD() {
   const mobile = useIsMobile();
+  const plaza = useAuth((s) => !!s.account);
   if (mobile) return <MobileHUD />;
   return (
-    <div className="hud">
+    <div className={`hud${plaza ? ' has-plaza' : ''}`}>
       <Brand />
+      <PlazaBar />
       <aside className="panel left">
         <FloorSwitch />
         <Directory />

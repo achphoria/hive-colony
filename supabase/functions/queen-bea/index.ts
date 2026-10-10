@@ -29,7 +29,20 @@ Cara bicara:
 
 Kejujuran data:
 - Fakta tentang koloni (staff, persetujuan, tugas, aktivitas) hanya boleh diambil dari blok DATA KOLONI di bawah. Kalau datanya kosong atau tidak ada, katakan terus terang, jangan mengarang angka, nama, atau kejadian.
-- Kamu belum bisa membuka isi file lampiran, mengirim misi ke agent lain, atau mengubah data. Kalau diminta, jelaskan itu akan datang di fase berikutnya dan bantu sebisanya dengan saran.`;
+- Kamu belum bisa membuka isi file lampiran, mengirim misi ke agent lain, atau mengubah data. Kalau diminta, jelaskan itu akan datang di fase berikutnya dan bantu sebisanya dengan saran.
+
+Riset:
+- Kamu punya alat pencarian web. Pakai hanya kalau pertanyaannya butuh informasi luar atau terbaru (harga pasar, kompetitor, tren, aturan, event, data publik). Untuk pertanyaan internal atau saran umum, jawab langsung tanpa mencari.
+- Kalau memakai hasil pencarian, sebutkan intinya dengan singkat dan nama sumbernya (tanpa menempel URL panjang di kalimat). Jangan mengarang angka yang tidak ada di hasil.`;
+
+// pencarian web (alat server Claude): maks. 3 pencarian per pertanyaan, lokasi Indonesia
+const WEB_SEARCH = {
+  type: 'web_search_20250305',
+  name: 'web_search',
+  max_uses: 3,
+  user_location: { type: 'approximate', country: 'ID', timezone: 'Asia/Jakarta' },
+};
+const MAX_CONTINUE = 3; // lanjutan saat stop_reason pause_turn
 
 const ROLE = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' } as Record<string, string>;
 const wib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
@@ -100,32 +113,66 @@ Deno.serve(async (req) => {
   if (body?.mode === 'meeting') {
     const tx = Array.isArray(body?.transcript) ? body.transcript.slice(-MAX_TX_LINES) : [];
     const lines = tx.map((l: { who?: string; text?: string }) => `${String(l?.who ?? '?').slice(0, 40)}: ${String(l?.text ?? '').slice(0, 400)}`);
-    context += `\n\nSITUASI: kamu sedang ikut rapat suara di Hive Hall. Jawabanmu dibacakan ke semua peserta, jadi buat ringkas (maks. 4 kalimat).
+    context += `\n\nSITUASI: kamu sedang ikut rapat suara di Hive Hall dalam mode standby: kamu mendengarkan seluruh rapat dan baru bicara saat dipanggil. Peserta memanggilmu dengan menyebut namamu, lalu meminta saran, pendapat, ringkasan, atau riset. Jawabanmu dibacakan ke semua peserta, jadi buat ringkas (maks. 5 kalimat) dan beri saran yang konkret dan bisa langsung dijalankan, merujuk hal yang dibahas di transkrip.
 Transkrip rapat terakhir:
 ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
   }
 
   const client = new Anthropic({ apiKey });
-  try {
-    const res = await client.messages.create({
+  const system = [
+    { type: 'text' as const, text: PERSONA },
+    { type: 'text' as const, text: context },
+  ];
+  const ask = (msgs: unknown[], tools: unknown[]) =>
+    client.messages.create({
       model: MODEL,
-      max_tokens: 800,
+      max_tokens: 1200,
       // obrolan cepat: tanpa thinking, effort rendah
       thinking: { type: 'disabled' },
       output_config: { effort: 'low' },
-      system: [
-        { type: 'text', text: PERSONA },
-        { type: 'text', text: context },
-      ],
-      messages,
+      system,
+      // deno-lint-ignore no-explicit-any
+      messages: msgs as any,
+      // deno-lint-ignore no-explicit-any
+      ...(tools.length ? { tools: tools as any } : {}),
     });
+  try {
+    let res;
+    try {
+      res = await ask(messages, [WEB_SEARCH]);
+    } catch (e) {
+      // kalau alat pencarian ditolak untuk model/akun ini, tetap jawab tanpa riset
+      if (e instanceof Anthropic.BadRequestError) {
+        console.warn('web search tidak tersedia:', e.message);
+        res = await ask(messages, []);
+      } else throw e;
+    }
+    // pencarian panjang bisa berhenti di tengah (pause_turn): kirim ulang apa adanya, server melanjutkan
+    for (let i = 0; res.stop_reason === 'pause_turn' && i < MAX_CONTINUE; i++) {
+      res = await ask([...messages, { role: 'assistant', content: res.content }], [WEB_SEARCH]);
+    }
     if (res.stop_reason === 'refusal') return json({ reply: 'Maaf, untuk pertanyaan itu saya tidak bisa membantu. Ada hal lain soal koloni?' });
-    const reply = res.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { text: string }).text)
-      .join('\n')
-      .trim();
-    return json({ reply: reply || 'Hmm, saya belum punya jawaban. Coba tanyakan dengan cara lain?' });
+    const texts = res.content.filter((b) => b.type === 'text') as { text: string; citations?: { url?: string; title?: string }[] | null }[];
+    const reply = texts.map((b) => b.text).join('').trim();
+    // sumber riset dari kutipan pencarian web (unik per URL)
+    const seen = new Set<string>();
+    const sources: { title: string; url: string }[] = [];
+    for (const b of texts) {
+      for (const c of b.citations ?? []) {
+        if (c?.url && !seen.has(c.url) && sources.length < 5) {
+          seen.add(c.url);
+          let host = c.url;
+          try {
+            host = new URL(c.url).hostname;
+          } catch {
+            /* URL tidak valid */
+          }
+          sources.push({ title: (c.title || host).slice(0, 120), url: c.url });
+        }
+      }
+    }
+    const researched = res.content.some((b) => b.type === 'server_tool_use');
+    return json({ reply: reply || 'Hmm, saya belum punya jawaban. Coba tanyakan dengan cara lain?', sources, researched });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: 'ai_key_invalid' }, 502);
     if (e instanceof Anthropic.RateLimitError) return json({ error: 'ai_busy' }, 429);

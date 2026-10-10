@@ -29,6 +29,7 @@ export async function checkAi() {
 }
 
 // messages: [{ role: 'user' | 'assistant', content }]; transcript (meeting): [{ who, text }]
+// hasil: { reply, sources: [{ title, url }], researched }
 export async function askQueenBea({ messages, mode = 'chat', transcript }) {
   useAi.setState((s) => ({ busy: s.busy + 1 }));
   const { data, error } = await supabase.functions
@@ -46,5 +47,5 @@ export async function askQueenBea({ messages, mode = 'chat', transcript }) {
     throw new Error(ERR[body.error] || `Queen Bea gagal menjawab${extra}. Coba lagi.`);
   }
   useAi.setState({ status: 'on' });
-  return data.reply;
+  return { reply: data.reply, sources: Array.isArray(data.sources) ? data.sources : [], researched: !!data.researched };
 }

@@ -1079,3 +1079,163 @@ body {
   min-height: 0;
   overflow-y: auto;
 }
+
+/* ---------- obrolan koloni (public mic) ---------- */
+.plaza {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  max-width: calc(100% - 32px);
+  z-index: 3;
+}
+.plaza-join {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  box-shadow: 0 6px 20px rgba(138, 90, 0, 0.18);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plaza-join:hover {
+  background: #fff3c4;
+}
+.plaza-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #6fae3a;
+  box-shadow: 0 0 0 4px rgba(111, 174, 58, 0.25);
+  animation: pdot-pulse 1.4s ease-in-out infinite;
+}
+.plaza.on {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 22px;
+  border: 1.5px solid #6fae3a;
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(63, 107, 28, 0.2);
+}
+.plaza-live {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6fae3a;
+  animation: pdot-pulse 1.4s ease-in-out infinite;
+}
+.plaza-people {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 260px;
+}
+.plaza-people b {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 14px;
+}
+.plaza-people span {
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plaza-people i {
+  font-style: normal;
+}
+.plaza-people i + i::before {
+  content: ', ';
+  color: var(--ink-soft);
+}
+.plaza-people i.talk {
+  color: #3f6b1c;
+  font-weight: 700;
+}
+.plaza-btn {
+  min-width: 40px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: rgba(255, 201, 60, 0.15);
+  font-weight: 700;
+  font-size: 14px;
+}
+.plaza-btn.pri {
+  background: var(--gold);
+  border-color: var(--royal);
+}
+.plaza-btn.talk {
+  box-shadow: 0 0 0 4px rgba(111, 174, 58, 0.35);
+}
+.plaza-btn.danger {
+  background: #fcebeb;
+  color: #a32d2d;
+  border-color: #f2c4c4;
+}
+.plaza-msg {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+/* kartu agent naik sedikit supaya tidak menutupi bar obrolan */
+.hud.has-plaza .card {
+  bottom: 78px;
+}
+.is-mobile .plaza {
+  bottom: max(14px, env(safe-area-inset-bottom));
+}
+.hud.is-mobile.has-plaza .card {
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 62px);
+}
+@media (max-width: 900px) {
+  .plaza-people {
+    max-width: 150px;
+  }
+}
+
+/* tanda bicara di atas avatar staff (obrolan koloni) */
+.talk-badge {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #6fae3a;
+  box-shadow: 0 3px 10px rgba(63, 107, 28, 0.35);
+}
+.talk-badge i {
+  width: 3px;
+  border-radius: 2px;
+  background: #fff;
+  animation: talk-bar 0.7s ease-in-out infinite;
+}
+.talk-badge i:nth-child(1) { height: 7px; }
+.talk-badge i:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+.talk-badge i:nth-child(3) { height: 9px; animation-delay: 0.3s; }
+@keyframes talk-bar {
+  50% { transform: scaleY(0.45); }
+}

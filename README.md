@@ -63,6 +63,22 @@ Untuk staff yang login, Queen Bea dijawab **Claude Haiku 5.5** lewat Edge Functi
 - Rapat selesai ketika owner menekan **Akhiri rapat**, peserta terakhir keluar, atau rapat ditinggal kosong (ditutup otomatis). Edge Function `meeting-recap` lalu meminta Claude membuat notulen (ringkasan, topik, keputusan, tindak lanjut dengan PIC & tenggat) dan laporan, dikerjakan di latar belakang server.
 - Tab **Arsip rapat** di Hive Hall: daftar semua rapat dengan pencarian, notulen, laporan, transkrip lengkap, salin teks, dan cetak/PDF. Owner bisa membuat ulang notulen yang gagal.
 
+### Queen Bea standby di rapat + riset web
+
+- Queen Bea **selalu mendengarkan** rapat. Panggil dengan menyebut namanya ("Queen Bea, menurut kamu promo ini gimana?"); pengenal suara juga menerima ejaan "kuin/quin/kwin". Hanya memanggil nama lalu jeda? Kalimat berikutnya dianggap pertanyaan.
+- Jawaban memakai transkrip rapat sebagai konteks dan bisa **riset web** (alat `web_search` Claude, maks. 3 pencarian per pertanyaan, lokasi Indonesia). Sumber riset tampil di bawah jawaban dan ikut tersimpan di arsip.
+- Jawaban dibacakan di perangkat **semua peserta**; selama Queen Bea bicara, mic peserta dijeda sebentar supaya suaranya tidak tertangkap ulang.
+
+### Obrolan koloni (public mic)
+
+- Staff yang login bisa menekan **Ngobrol di koloni** di halaman koloni untuk masuk ruang suara bebas (`hive-plaza` di LiveKit). Gelombang suara muncul di atas avatar yang sedang bicara.
+- Kalau ada yang sedang ngobrol, bar menampilkan "Dina sedang ngobrol · Gabung".
+- Hemat kuota: keluar otomatis kalau sendirian 5 menit atau saat meninggalkan halaman koloni.
+
+### Karakter Queen Bea
+
+Model khusus ratu (`src/scene/QueenBea.jsx`): lebih tinggi, wajah humanoid dengan mata besar dan bulu mata lentik, rambut emas bersanggul, mahkota emas bermutiara dan permata madu, gaun bergaris lebah, jubah beludru berbulu putih, kalung, tongkat kerajaan, dan empat sayap. Saat pengembangan, `#/queen` membuka pratinjau dari dekat (tidak ikut build publik).
+
 ## Mode real vs mode demo
 
 - **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.

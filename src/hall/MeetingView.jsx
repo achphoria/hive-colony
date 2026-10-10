@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMeeting, AI_GUESTS } from './meeting';
 import { canTranscribe } from './voice';
+import { Sources } from './ChiefView';
 import { useAuth } from '../sim/auth';
 import { useHive } from '../sim/store';
 
@@ -83,7 +84,7 @@ export function MeetingView({ onLeave, onReport }) {
   const m = useMeeting();
   const account = useAuth((s) => s.account);
   const profile = useHive((s) => s.profile);
-  const [voice, setVoice] = useState(true);
+  const voice = m.aiVoice;
   const [picker, setPicker] = useState(false);
   const elapsed = useElapsed(m.startedAt);
   const listRef = useRef(null);
@@ -150,7 +151,7 @@ export function MeetingView({ onLeave, onReport }) {
               <Tile
                 key={id}
                 name={a.name}
-                sub={id === 'ceo' && m.live ? (m.chiefBusy ? 'Berpikir…' : 'Claude AI') : a.role}
+                sub={id === 'ceo' && m.live ? (m.chiefBusy ? 'Berpikir & riset…' : '👂 Standby mendengarkan') : a.role}
                 color={a.color}
                 ai
                 crown={a.crown}
@@ -208,6 +209,7 @@ export function MeetingView({ onLeave, onReport }) {
               ) : (
                 <div key={l.id} className={`tx${l.who === 'ceo' ? ' ceo' : ''}`}>
                   <span className="tx-t">{l.t}</span> <b>{l.name || nameOf(l.who)}:</b> {l.text}
+                  {l.sources?.length > 0 && <Sources list={l.sources} />}
                 </div>
               ),
             )}
@@ -244,7 +246,7 @@ export function MeetingView({ onLeave, onReport }) {
             value={question}
             maxLength={300}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder={m.chiefBusy ? 'Queen Bea sedang berpikir…' : 'Tanya Queen Bea… (kosongkan untuk minta ringkasan rapat)'}
+            placeholder={m.chiefBusy ? 'Queen Bea sedang berpikir & riset…' : 'Bicara "Queen Bea, …" atau ketik di sini (kosong = minta ringkasan)'}
             disabled={m.chiefBusy}
           />
         </form>
@@ -261,7 +263,7 @@ export function MeetingView({ onLeave, onReport }) {
           👑 {m.chiefBusy ? 'Berpikir…' : 'Tanya'}
           <span className="lbl">{m.chiefBusy ? '' : ' Queen Bea'}</span>
         </button>
-        <button className={`hbtn${voice ? ' pri' : ''}`} onClick={() => setVoice(!voice)} aria-label="Suara AI">
+        <button className={`hbtn${voice ? ' pri' : ''}`} onClick={() => m.setAiVoice(!voice)} aria-label="Suara AI">
           {voice ? '🔊' : '🔈'}
           <span className="lbl"> Suara AI</span>
         </button>

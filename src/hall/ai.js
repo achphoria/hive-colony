@@ -18,7 +18,10 @@ export function speak(text, onEnd) {
   u.lang = 'id-ID';
   u.rate = 1.03;
   u.pitch = 1.05;
-  if (onEnd) u.onend = onEnd;
+  if (onEnd) {
+    u.onend = onEnd;
+    u.onerror = onEnd; // dibatalkan / gagal juga dianggap selesai
+  }
   synth.speak(u);
   return true;
 }

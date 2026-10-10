@@ -6,6 +6,7 @@ import { DEPTS, SKINS, HAIRS, tierOf, statusText } from '../data/hive';
 import { useHive } from '../sim/store';
 import { world, focusAgent } from '../sim/engine';
 import { M, std, Box, Cyl, Sph, Cone } from './materials';
+import { QueenModel } from './QueenBea';
 
 const BUBBLE = { mission: '#FF8C1A', break: '#9BD36A', charge: '#9EC9FF', meeting: '#FFF8E7' };
 
@@ -148,6 +149,8 @@ export function HiveWorker({ def }) {
   const acc = DEPTS[def.dept].acc;
   const hoodie = def.guest ? M.silver : M.hoodie;
   const hood = def.guest ? M.cream : M.gold;
+  const queen = def.id === 'ceo'; // ratu koloni punya model sendiri yang lebih tinggi
+  const topY = queen ? 2.6 : 2.15;
 
   useFrame((st, dt) => {
     const a = world.byId[def.id];
@@ -238,13 +241,13 @@ export function HiveWorker({ def }) {
     if (col) {
       bubbleMat.color.set(col);
       bubbleMat.emissive.set(col);
-      bubble.current.position.y = 2.15 + Math.sin(t * 3) * 0.06;
+      bubble.current.position.y = topY + Math.sin(t * 3) * 0.06;
     }
     zzz.current.visible = s === 'sleep';
     if (s === 'sleep') {
       [z1.current, z2.current].forEach((z, i) => {
         const k = (t * 0.5 + i * 0.5) % 1;
-        z.position.set(0.25 + k * 0.3, 1.75 + k * 0.7, 0);
+        z.position.set(0.25 + k * 0.3, (queen ? 2.1 : 1.75) + k * 0.7, 0);
         z.scale.setScalar((0.6 + k * 0.6) * (1 - Math.max(0, k - 0.8) * 5));
       });
     }
@@ -276,6 +279,10 @@ export function HiveWorker({ def }) {
         <torusGeometry args={[0.6, 0.045, 6, 6]} />
       </mesh>
       <group ref={inner}>
+        {queen ? (
+          <QueenModel refs={{ head, wl, wr, al, ar, eyes }} />
+        ) : (
+          <>
         {/* kaki */}
         {[-0.12, 0.12].map((x) => (
           <group key={x}>
@@ -343,6 +350,8 @@ export function HiveWorker({ def }) {
           ))}
           <Accessory type={acc} />
         </group>
+          </>
+        )}
       </group>
       <Billboard ref={zzz} visible={false}>
         <ZMark zRef={z1} />
@@ -354,7 +363,7 @@ export function HiveWorker({ def }) {
         </mesh>
       </Billboard>
       {(hover || selected) && (
-        <Html position={[0, 2.55, 0]} center style={{ pointerEvents: 'none' }} zIndexRange={[20, 0]}>
+        <Html position={[0, queen ? 2.95 : 2.55, 0]} center style={{ pointerEvents: 'none' }} zIndexRange={[20, 0]}>
           <AgentTag def={def} />
         </Html>
       )}

@@ -292,10 +292,10 @@ function HumanSeat({ who, profile, deg, speaking, muted }) {
   );
 }
 
-function NameTag({ deg, label, kind }) {
+function NameTag({ deg, label, kind, y = 2.45 }) {
   const s = seat(deg);
   return (
-    <Html position={[s.pos[0], 2.45, s.pos[2]]} center pointerEvents="none" zIndexRange={[8, 6]}>
+    <Html position={[s.pos[0], y, s.pos[2]]} center pointerEvents="none" zIndexRange={[8, 6]}>
       <div className={`seat-tag ${kind}`}>{label}</div>
     </Html>
   );
@@ -422,7 +422,7 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
             );
           })}
           <BeeFigure position={bee(0).pos} facing={bee(0).facing} crown speaking={ceoSpeaking} thinking={ceoThinking} />
-          <NameTag deg={0} label="Queen Bea" kind="ai ceo" />
+          <NameTag deg={0} label="Queen Bea" kind="ai ceo" y={2.95} />
         </>
       )}
 
@@ -439,7 +439,7 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
       {dina && <NameTag deg={-80} label={`${dina.name} · ✋`} kind="human" />}
       <NameTag deg={-53} label={me.name || 'Anda'} kind="human me" />
       <NameTag deg={-26} label="Sprint · Ops" kind="ai" />
-      <NameTag deg={0} label="Queen Bea" kind="ai ceo" />
+      <NameTag deg={0} label="Queen Bea" kind="ai ceo" y={2.95} />
       <NameTag deg={26} label="Spark · Mkt" kind="ai" />
       <NameTag deg={53} label="Graph · Fin" kind="ai" />
       <NameTag deg={80} label="Bumble · CX" kind="ai" />

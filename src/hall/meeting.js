@@ -203,6 +203,8 @@ export const useMeeting = create((set, get) => ({
   speaking: null, // pembicara simulasi / AI
   mic: true,
   hand: false,
+  aiVoice: true, // jawaban Queen Bea dibacakan di perangkat ini
+  setAiVoice: (on) => set({ aiVoice: on }),
   // suara sungguhan (mode login)
   ...VOICE_RESET, // voice: off | connecting | on | error; talking: id yang sedang bicara (dari LiveKit)
 
@@ -332,11 +334,11 @@ export const useMeeting = create((set, get) => ({
   unlockAudio: () => startAudio()?.then(() => set({ audioBlocked: false })),
 
   /* ---------- transkrip ---------- */
-  addLine: (who, text, name) =>
-    set((s) => ({ transcript: [...s.transcript, { id: `${Date.now()}-${Math.random()}`, who, name, text, t: nowLabel() }].slice(-80) })),
+  addLine: (who, text, name, extra = {}) =>
+    set((s) => ({ transcript: [...s.transcript, { id: `${Date.now()}-${Math.random()}`, who, name, text, t: nowLabel(), ...extra }].slice(-80) })),
 
-  say: (who, text, ms = 3500) => {
-    get().addLine(who, text);
+  say: (who, text, ms = 3500, extra) => {
+    get().addLine(who, text, undefined, extra);
     set({ speaking: who });
     clearTimeout(speakTimer);
     speakTimer = setTimeout(() => set({ speaking: null }), ms);
@@ -402,7 +404,60 @@ function subscribeChannel() {
 
 /* ---------- Queen Bea (Claude) di meeting ---------- */
 
-async function askChiefLive(question, voice) {
+// Saat Queen Bea bicara dari speaker, mic saya dijeda supaya suaranya tidak tertangkap ulang
+// (terdengar dobel oleh peserta lain dan ikut tertulis sebagai ucapan saya).
+let speakSeq = 0;
+function speakAi(text) {
+  const seq = ++speakSeq;
+  const st = useMeeting.getState();
+  const resume = st.voice === 'on' && st.mic;
+  if (resume) {
+    stopTranscribe();
+    Promise.resolve(setMic(false)).catch(() => {});
+  }
+  const restore = () => {
+    const s = useMeeting.getState();
+    if (seq === speakSeq && resume && s.joined && s.mic && s.voice === 'on') applyMic(true);
+  };
+  if (!speak(text, restore)) restore();
+}
+
+// Queen Bea standby: setiap kalimat saya yang menyebut namanya dianggap panggilan.
+// Pengenal suara sering menulis "Queen" sebagai "kuin"/"quin"/"kwin", jadi semuanya diterima.
+const WAKE = /\b(queen|kuin|quin|quinn|kwin)\b/i;
+let wakeAt = 0;
+let qbBusyTimer = null;
+function listenForQueen(text) {
+  const st = useMeeting.getState();
+  if (!st.live || !st.joined) return;
+  let m = text.match(WAKE);
+  // "Queen Bea ..." di mana saja, atau "Queen, ..." di awal kalimat (bukan "queen size bed")
+  if (m) {
+    const named = /^[\s,.:!?-]*(bea|bee|bi|b)\b/i.test(text.slice(m.index + m[0].length));
+    const atStart = text.slice(0, m.index).trim().split(/\s+/).filter(Boolean).length <= 1;
+    if (!named && !atStart) m = null;
+  }
+  if (m) {
+    const rest = text
+      .slice(m.index + m[0].length)
+      .replace(/^[\s,.:!?-]*(bea|bee|bi|b)?\b[\s,.:!?-]*/i, '')
+      .trim();
+    // hanya memanggil nama ("Queen Bea?") -> tunggu kalimat berikutnya sebagai pertanyaan
+    if (rest.split(/\s+/).filter(Boolean).length < 3) {
+      wakeAt = Date.now();
+      return;
+    }
+    wakeAt = 0;
+    askChiefLive(text, st.aiVoice, true);
+    return;
+  }
+  if (wakeAt && Date.now() - wakeAt < 12000) {
+    wakeAt = 0;
+    askChiefLive(text, st.aiVoice, true);
+  }
+}
+
+async function askChiefLive(question, voice, spoken = false) {
   const st = useMeeting.getState();
   if (st.chiefBusy) return;
   const q = question.trim() || 'Tolong ringkas rapat sejauh ini dan apa langkah berikutnya.';
@@ -410,21 +465,27 @@ async function askChiefLive(question, voice) {
   const nameOf = (l) =>
     l.name || (l.who === 'me' ? myName : l.who === 'ceo' ? 'Queen Bea' : st.people.find((p) => p.id === l.who)?.name || 'Peserta');
   const transcript = st.transcript.filter((l) => l.who !== 'system').map((l) => ({ who: nameOf(l), text: l.text }));
-  st.addLine('me', `👑 ${q}`);
-  if (st.voice === 'on') publish({ t: 'tx', text: `👑 ${q}` });
-  saveLine('speech', `(bertanya ke Queen Bea) ${q}`);
+  if (!spoken) {
+    // pertanyaan diketik: tampilkan & simpan; pertanyaan lisan sudah masuk transkrip
+    st.addLine('me', `👑 ${q}`);
+    if (st.voice === 'on') publish({ t: 'tx', text: `👑 ${q}` });
+    saveLine('speech', `(bertanya ke Queen Bea) ${q}`);
+  }
+  if (st.voice === 'on') publish({ t: 'qb', busy: true });
   useMeeting.setState({ chiefBusy: true });
   try {
-    const reply = await askQueenBea({ mode: 'meeting', messages: [{ role: 'user', content: q }], transcript });
+    const { reply, sources } = await askQueenBea({ mode: 'meeting', messages: [{ role: 'user', content: q }], transcript });
     if (!useMeeting.getState().joined) return;
-    useMeeting.getState().say('ceo', reply, Math.min(16000, 2500 + reply.length * 60));
-    if (useMeeting.getState().voice === 'on') publish({ t: 'ai', who: 'ceo', text: reply });
-    saveLine('ai', reply, 'Queen Bea');
-    if (voice) speak(reply);
+    useMeeting.getState().say('ceo', reply, Math.min(16000, 2500 + reply.length * 60), { sources });
+    if (useMeeting.getState().voice === 'on') publish({ t: 'ai', who: 'ceo', text: reply, sources });
+    const cite = sources.length ? `\nSumber: ${sources.map((s) => `${s.title} (${s.url})`).join('; ')}` : '';
+    saveLine('ai', `${reply}${cite}`, 'Queen Bea');
+    if (voice) speakAi(reply);
   } catch (e) {
     useMeeting.getState().addLine('system', e.message);
   } finally {
     useMeeting.setState({ chiefBusy: false });
+    if (useMeeting.getState().voice === 'on') publish({ t: 'qb', busy: false });
   }
 }
 
@@ -472,6 +533,7 @@ async function applyMic(on) {
       useMeeting.getState().addLine('me', text);
       publish({ t: 'tx', text });
       saveLine('speech', text);
+      listenForQueen(text);
     },
     () => useMeeting.setState({ txOn: false }),
     (text) => {
@@ -507,8 +569,19 @@ function onData(msg, id, name) {
     st.addLine(id, String(msg.text).slice(0, 500), name);
   } else if (msg.t === 'ai' && msg.text) {
     const who = AI_GUESTS.some((a) => a.id === msg.who) ? msg.who : 'ceo';
-    st.say(who, String(msg.text).slice(0, 800), 7000);
+    const text = String(msg.text).slice(0, 1500);
+    const sources = Array.isArray(msg.sources)
+      ? msg.sources.filter((x) => typeof x?.url === 'string' && /^https?:\/\//.test(x.url)).slice(0, 5).map((x) => ({ title: String(x.title || x.url).slice(0, 120), url: x.url }))
+      : [];
+    st.say(who, text, Math.min(16000, 2500 + text.length * 60), { sources });
     if (msg.note) pushNote({ type: 'task', text: String(msg.note).slice(0, 200) });
+    // semua peserta mendengar jawaban Queen Bea dari perangkatnya sendiri
+    if (st.aiVoice) speakAi(text);
+  } else if (msg.t === 'qb') {
+    // peserta lain sedang bertanya ke Queen Bea; pengaman kalau pesan "selesai" tidak sampai
+    useMeeting.setState({ chiefBusy: !!msg.busy });
+    clearTimeout(qbBusyTimer);
+    if (msg.busy) qbBusyTimer = setTimeout(() => useMeeting.setState({ chiefBusy: false }), 60000);
   } else if (msg.t === 'end') {
     st.leave({ silent: true }).then(() =>
       useMeeting.setState({ notice: 'Owner mengakhiri rapat. Queen Bea sedang menyusun notulen; lihat di tab Arsip rapat.' }),

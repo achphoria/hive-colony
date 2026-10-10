@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from './scene/Scene';
 import { HUD, useAutoSound } from './ui/HUD';
@@ -60,6 +60,9 @@ function useColonyMode() {
   }, [account, uid]);
 }
 
+// pratinjau karakter, hanya saat pengembangan (dibuang dari build publik)
+const QueenPreview = import.meta.env.DEV ? lazy(() => import('./scene/QueenPreview')) : null;
+
 export function App() {
   const route = useRoute();
   useAutoSound();
@@ -70,6 +73,12 @@ export function App() {
     useAuth.getState().init();
   }, []);
 
+  if (QueenPreview && route === '/queen')
+    return (
+      <Suspense fallback={null}>
+        <QueenPreview />
+      </Suspense>
+    );
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;

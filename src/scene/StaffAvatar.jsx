@@ -1,5 +1,6 @@
 // Avatar staff manusia 3D: tanpa tudung/sayap lebah (pembeda dari agent AI),
 // bisa dikustomisasi dan punya 6 joget + animasi jalan.
+import { usePlaza } from '../sim/plaza';
 import { useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
@@ -238,6 +239,21 @@ function StatusTag({ walker, isMe }) {
   );
 }
 
+// gelombang suara di atas kepala saat staff bicara di obrolan koloni
+function TalkBadge({ id }) {
+  const talking = usePlaza((s) => s.talking.includes(id));
+  if (!talking) return null;
+  return (
+    <Html position={[0, 1.78, 0]} center style={{ pointerEvents: 'none' }} zIndexRange={[19, 0]}>
+      <div className="talk-badge" aria-label="sedang bicara">
+        <i />
+        <i />
+        <i />
+      </div>
+    </Html>
+  );
+}
+
 export function StaffAvatar({ walker }) {
   const p = walker.profile;
   const isMe = walker.id === 'me';
@@ -360,6 +376,7 @@ export function StaffAvatar({ walker }) {
           <HeadAccessory acc={p.acc} />
         </group>
       </group>
+      <TalkBadge id={walker.id} />
       {(hover || (isMe && walker.state === 'dance')) && (
         <Html position={[0, 2.05, 0]} center style={{ pointerEvents: 'none' }} zIndexRange={[20, 0]}>
           <StatusTag walker={walker} isMe={isMe} />

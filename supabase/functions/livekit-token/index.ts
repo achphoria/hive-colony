@@ -4,7 +4,8 @@
 //   LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
-const ROOM = 'hive-hall';
+// ruang suara: rapat Hive Hall dan obrolan bebas di koloni
+const ROOMS: Record<string, string> = { hall: 'hive-hall', plaza: 'hive-plaza' };
 const TTL_SEC = 2 * 60 * 60; // tiket berlaku 2 jam
 
 const CORS = {
@@ -55,6 +56,8 @@ Deno.serve(async (req) => {
   const { data: prof } = await sb.from('hc_profiles').select('name, role, primary_dept, avatar').eq('id', uid).maybeSingle();
   if (!prof) return json({ error: 'not_hive_staff' }, 403);
   const body = await req.json().catch(() => ({}));
+  const roomKey = String(body?.room ?? 'hall');
+  const ROOM = Object.hasOwn(ROOMS, roomKey) ? ROOMS[roomKey] : ROOMS.hall;
 
   // { action: 'status' } -> siapa saja yang sedang ada di ruang suara (sumber kebenaran kedua
   // untuk banner meeting di lobi, kalau kanal realtime perangkat sempat terputus)

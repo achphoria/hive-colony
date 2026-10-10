@@ -1,4 +1,4 @@
-// Suara meeting Hive Hall lewat LiveKit Cloud (khusus staff yang login).
+// Suara lewat LiveKit Cloud (khusus staff yang login): ruang rapat Hive Hall dan obrolan koloni.
 // Tiket masuk dibuat Edge Function "livekit-token"; rahasia LiveKit tetap tersimpan di Supabase.
 // Transkrip: tiap peserta menyalakan pengenal suara browser untuk suaranya sendiri,
 // lalu barisnya dibagikan ke peserta lain lewat kanal data LiveKit.
@@ -11,22 +11,11 @@ const ERR = {
   livekit_not_configured: 'Server suara belum dikonfigurasi.',
 };
 
-let room = null;
-let audioBox = null;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-function box() {
-  if (!audioBox) {
-    audioBox = document.createElement('div');
-    audioBox.hidden = true;
-    document.body.appendChild(audioBox);
-  }
-  return audioBox;
-}
-
-async function fetchTicket() {
-  const { data, error } = await supabase.functions.invoke('livekit-token', { body: {} });
+async function fetchTicket(roomKey) {
+  const { data, error } = await supabase.functions.invoke('livekit-token', { body: { room: roomKey } });
   if (error) {
     let code = '';
     try {
@@ -40,82 +29,109 @@ async function fetchTicket() {
 }
 
 // Siapa saja yang sedang ada di ruang suara, langsung dari server LiveKit.
-// Dipakai lobi sebagai cek kedua selain kanal realtime (yang bisa terputus di HP).
-export async function roomStatus() {
-  const { data, error } = await supabase.functions.invoke('livekit-token', { body: { action: 'status' } });
+// roomKey: 'hall' (rapat Hive Hall) atau 'plaza' (obrolan bebas di koloni).
+export async function roomStatus(roomKey = 'hall') {
+  const { data, error } = await supabase.functions.invoke('livekit-token', { body: { action: 'status', room: roomKey } });
   if (error || !Array.isArray(data?.people)) return null;
   return data.people;
 }
 
-// cb: { state(voice, err), speakers(ids), peers(list), audioBlocked(bool), data(msg, id, name) }
-export async function connectVoice(cb) {
-  disconnectVoice();
-  cb.state('connecting');
-  let r = null;
-  try {
-    const [{ token, url }, lk] = await Promise.all([fetchTicket(), import('livekit-client')]);
-    r = new lk.Room({ adaptiveStream: true, dynacast: true });
-    room = r;
-    const E = lk.RoomEvent;
-    const peers = () => {
-      if (room !== r) return;
-      cb.peers([...r.remoteParticipants.values()].map((p) => ({ id: p.identity, name: p.name, muted: !p.isMicrophoneEnabled })));
-    };
-    r.on(E.TrackSubscribed, (track) => {
-      if (track.kind === 'audio') box().appendChild(track.attach());
-    })
-      .on(E.TrackUnsubscribed, (track) => track.detach().forEach((el) => el.remove()))
-      .on(E.ActiveSpeakersChanged, (list) => cb.speakers(list.map((p) => (p.identity === r.localParticipant.identity ? 'me' : p.identity))))
-      .on(E.ParticipantConnected, peers)
-      .on(E.ParticipantDisconnected, peers)
-      .on(E.TrackPublished, peers)
-      .on(E.TrackMuted, peers)
-      .on(E.TrackUnmuted, peers)
-      .on(E.DataReceived, (payload, p) => {
-        if (!p) return;
-        try {
-          cb.data(JSON.parse(dec.decode(payload)), p.identity, p.name);
-        } catch {
-          /* pesan rusak diabaikan */
-        }
+// Satu ruang suara LiveKit. Tiap ruang punya koneksi dan elemen audionya sendiri.
+export function createVoiceRoom(roomKey) {
+  let room = null;
+  let audioBox = null;
+  const box = () => {
+    if (!audioBox) {
+      audioBox = document.createElement('div');
+      audioBox.hidden = true;
+      document.body.appendChild(audioBox);
+    }
+    return audioBox;
+  };
+
+  function disconnect() {
+    const r = room;
+    room = null;
+    r?.disconnect();
+    if (audioBox) audioBox.innerHTML = '';
+  }
+
+  // cb: { state(voice, err), speakers(ids), peers(list), audioBlocked(bool), data(msg, id, name) }
+  async function connect(cb) {
+    disconnect();
+    cb.state('connecting');
+    let r = null;
+    try {
+      const [{ token, url }, lk] = await Promise.all([fetchTicket(roomKey), import('livekit-client')]);
+      r = new lk.Room({ adaptiveStream: true, dynacast: true });
+      room = r;
+      const E = lk.RoomEvent;
+      const peers = () => {
+        if (room !== r) return;
+        cb.peers([...r.remoteParticipants.values()].map((p) => ({ id: p.identity, name: p.name, muted: !p.isMicrophoneEnabled })));
+      };
+      r.on(E.TrackSubscribed, (track) => {
+        if (track.kind === 'audio') box().appendChild(track.attach());
       })
-      .on(E.AudioPlaybackStatusChanged, () => cb.audioBlocked(!r.canPlaybackAudio))
-      .on(E.Disconnected, () => {
-        if (room !== r) return; // keluar sendiri
+        .on(E.TrackUnsubscribed, (track) => track.detach().forEach((el) => el.remove()))
+        .on(E.ActiveSpeakersChanged, (list) => cb.speakers(list.map((p) => (p.identity === r.localParticipant.identity ? 'me' : p.identity))))
+        .on(E.ParticipantConnected, peers)
+        .on(E.ParticipantDisconnected, peers)
+        .on(E.TrackPublished, peers)
+        .on(E.TrackMuted, peers)
+        .on(E.TrackUnmuted, peers)
+        .on(E.DataReceived, (payload, p) => {
+          if (!p) return;
+          try {
+            cb.data?.(JSON.parse(dec.decode(payload)), p.identity, p.name);
+          } catch {
+            /* pesan rusak diabaikan */
+          }
+        })
+        .on(E.AudioPlaybackStatusChanged, () => cb.audioBlocked(!r.canPlaybackAudio))
+        .on(E.Disconnected, () => {
+          if (room !== r) return; // keluar sendiri
+          room = null;
+          cb.state('error', 'Suara terputus.');
+        });
+      await r.connect(url, token);
+      if (room !== r) {
+        r.disconnect(); // sudah keluar sebelum tersambung
+        return false;
+      }
+      peers();
+      cb.audioBlocked(!r.canPlaybackAudio);
+      cb.state('on');
+      return true;
+    } catch (e) {
+      if (r && room === r) {
         room = null;
-        cb.state('error', 'Suara terputus.');
-      });
-    await r.connect(url, token);
-    if (room !== r) {
-      r.disconnect(); // sudah keluar sebelum tersambung
+        r.disconnect();
+      }
+      cb.state('error', e.message || 'Gagal menyambung ke server suara.');
       return false;
     }
-    peers();
-    cb.audioBlocked(!r.canPlaybackAudio);
-    cb.state('on');
-    return true;
-  } catch (e) {
-    if (r && room === r) {
-      room = null;
-      r.disconnect();
-    }
-    cb.state('error', e.message || 'Gagal menyambung ke server suara.');
-    return false;
   }
+
+  return {
+    connect,
+    disconnect,
+    isOn: () => !!room,
+    setMic: (on) => room?.localParticipant.setMicrophoneEnabled(on),
+    startAudio: () => room?.startAudio(),
+    publish(msg, reliable = true) {
+      room?.localParticipant.publishData(enc.encode(JSON.stringify(msg)), { reliable }).catch(() => {});
+    },
+  };
 }
 
-export function disconnectVoice() {
-  const r = room;
-  room = null;
-  r?.disconnect();
-  if (audioBox) audioBox.innerHTML = '';
-}
-
-export const setMic = (on) => room?.localParticipant.setMicrophoneEnabled(on);
-export const startAudio = () => room?.startAudio();
-export function publish(msg, reliable = true) {
-  room?.localParticipant.publishData(enc.encode(JSON.stringify(msg)), { reliable }).catch(() => {});
-}
+// ruang rapat Hive Hall (dipakai meeting.js)
+const hall = createVoiceRoom('hall');
+export const connectVoice = (cb) => hall.connect(cb);
+export const disconnectVoice = () => hall.disconnect();
+export const setMic = (on) => hall.setMic(on);
+export const startAudio = () => hall.startAudio();
+export const publish = (msg, reliable) => hall.publish(msg, reliable);
 
 /* ---------- transkrip dari pengenal suara browser ---------- */
 

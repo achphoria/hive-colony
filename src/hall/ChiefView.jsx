@@ -36,6 +36,21 @@ const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, 
 const extOf = (name) => (name.split('.').pop() || 'file').slice(0, 4).toUpperCase();
 const SpeechRec = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 
+// daftar sumber riset web di bawah jawaban Queen Bea
+export function Sources({ list }) {
+  if (!list?.length) return null;
+  return (
+    <div className="qb-sources">
+      <span>🔎 Sumber riset</span>
+      {list.map((s) => (
+        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer">
+          {s.title}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function FileChip({ f, onRemove }) {
   const isImg = f.type?.startsWith('image/') && f.url;
   return (
@@ -104,6 +119,7 @@ function ChatMode({ msgs, send, busy }) {
               <div className="qb">👑</div>
               <div className="bub">
                 <p>{m.text}</p>
+                <Sources list={m.sources} />
               </div>
             </div>
           ),
@@ -304,7 +320,8 @@ export function ChiefView() {
         content: [m.text, ...m.files.map((f) => `[Lampiran: ${f.name}, ${fmtSize(f.size)}; isinya belum bisa dibaca]`)].filter(Boolean).join('\n'),
       }));
     try {
-      reply(await askQueenBea({ messages: history }));
+      const r = await askQueenBea({ messages: history });
+      reply(r.reply, { sources: r.sources });
     } catch (e) {
       reply(e.message, { error: true });
     } finally {

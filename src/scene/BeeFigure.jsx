@@ -2,6 +2,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
+import { QueenModel } from './QueenBea';
 import { M, std, Box, Cyl, Sph, Cone } from './materials';
 
 export function SpeakRing({ active, color = '#FF8C1A' }) {
@@ -89,6 +90,10 @@ export function BeeFigure({ position, facing = 0, crown = false, muted = false, 
     <group position={position} rotation={[0, facing, 0]}>
       <SpeakRing active={speaking} />
       <group ref={inner}>
+        {crown ? (
+          <QueenModel refs={{ head, wl, wr, al, ar }} thinking={thinking} />
+        ) : (
+          <>
         {[-0.12, 0.12].map((x) => (
           <group key={x}>
             <Cyl p={[x, 0.1, 0]} a={[0.07, 0.07, 0.2, 6]} m={M.brown} />
@@ -151,6 +156,8 @@ export function BeeFigure({ position, facing = 0, crown = false, muted = false, 
             </group>
           )}
         </group>
+          </>
+        )}
       </group>
       {muted && (
         <Billboard position={[0.45, 1.75, 0]}>
@@ -160,8 +167,10 @@ export function BeeFigure({ position, facing = 0, crown = false, muted = false, 
           <Box p={[0, 0, 0.01]} r={[0, 0, Math.PI / 4]} s={[0.2, 0.035, 0.01]} m={M.white} shadow={false} />
         </Billboard>
       )}
-      <ThinkDots active={thinking} />
-      <SoundBars active={speaking} />
+      <group position={[0, crown ? 0.45 : 0, 0]}>
+        <ThinkDots active={thinking} />
+        <SoundBars active={speaking} />
+      </group>
     </group>
   );
 }
