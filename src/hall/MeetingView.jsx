@@ -98,6 +98,12 @@ export function MeetingView({ onLeave, onReport }) {
     if (!m.joined) m.join();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // rapat diakhiri owner / ditutup dari tempat lain: kembali ke lobi
+  const wasJoined = useRef(false);
+  useEffect(() => {
+    if (m.joined) wasJoined.current = true;
+    else if (wasJoined.current) onLeave();
+  }, [m.joined, onLeave]);
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [m.transcript.length, m.partials]);
@@ -265,6 +271,16 @@ export function MeetingView({ onLeave, onReport }) {
         <button className="hbtn danger" onClick={leave}>
           Keluar<span className="lbl"> meeting</span>
         </button>
+        {m.live && account?.role === 'owner' && (
+          <button
+            className="hbtn danger solid"
+            onClick={() => {
+              if (window.confirm('Akhiri rapat untuk semua peserta? Queen Bea akan membuat notulen dan laporan.')) m.endForAll();
+            }}
+          >
+            ⏹<span className="lbl"> Akhiri rapat</span>
+          </button>
+        )}
       </div>
       <p className="demo-note">
         {m.live

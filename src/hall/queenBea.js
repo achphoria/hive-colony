@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 
 // status: unknown | on | off (off = belum login atau kunci API belum dipasang)
-export const useAi = create(() => ({ status: 'unknown', model: '' }));
+// busy: jumlah pertanyaan yang sedang dijawab (untuk status "Kerja" di daftar agent)
+export const useAi = create(() => ({ status: 'unknown', model: '', busy: 0 }));
 
 const ERR = {
   not_logged_in: 'Sesi login habis. Silakan login ulang.',
@@ -29,7 +30,10 @@ export async function checkAi() {
 
 // messages: [{ role: 'user' | 'assistant', content }]; transcript (meeting): [{ who, text }]
 export async function askQueenBea({ messages, mode = 'chat', transcript }) {
-  const { data, error } = await supabase.functions.invoke('queen-bea', { body: { messages, mode, transcript } });
+  useAi.setState((s) => ({ busy: s.busy + 1 }));
+  const { data, error } = await supabase.functions
+    .invoke('queen-bea', { body: { messages, mode, transcript } })
+    .finally(() => useAi.setState((s) => ({ busy: Math.max(0, s.busy - 1) })));
   if (error) {
     let body = {};
     try {

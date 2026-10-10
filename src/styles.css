@@ -192,7 +192,7 @@ h2 {
 }
 .dir-agent {
   display: grid;
-  grid-template-columns: 12px auto 1fr;
+  grid-template-columns: 12px auto minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
   width: 100%;
@@ -1016,4 +1016,66 @@ body {
 }
 .is-mobile .edge-tab {
   top: 58%;
+}
+
+/* status kehadiran agent: kerja / online / offline */
+.pdot-work {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(255, 140, 26, 0.25);
+  animation: pdot-pulse 1.4s ease-in-out infinite;
+}
+.pdot-online {
+  background: #6fae3a;
+}
+.pdot-offline {
+  background: #c0c5ce;
+}
+@keyframes pdot-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(255, 140, 26, 0.08);
+  }
+}
+.pres {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pres-work {
+  background: #fde6c8;
+  color: #9a4f00;
+}
+.pres-online {
+  background: #e3f1d4;
+  color: #3f6b1c;
+}
+.pres-offline {
+  background: #eceae4;
+  color: #77736a;
+}
+.pres-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0 2px;
+}
+.dir-agent .pres {
+  font-size: 10px;
+}
+
+/* papan misi di dalam laci HP: isi penuh tinggi laci, tidak terpotong */
+.board.board-inline {
+  position: static;
+  max-height: none;
+  width: auto;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+}
+.board.board-inline .list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }

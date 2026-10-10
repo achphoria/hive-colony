@@ -2,6 +2,9 @@
 // Login: status & peserta disinkronkan lewat Supabase Realtime Presence (channel "hc-meeting"),
 // jadi siapa pun yang membuka Hive Hall tahu ada meeting atau tidak. Suara antar-peserta lewat
 // LiveKit (lihat voice.js); transkrip dari pengenal suara browser masing-masing, dibagikan ke semua.
+// Rapat tercatat di database (hc_meetings + hc_meeting_lines): hanya owner yang bisa membuka rapat,
+// tiap peserta menyimpan transkrip suaranya sendiri, dan saat rapat selesai Queen Bea wajib membuat
+// notulen + laporan (Edge Function meeting-recap). Hasilnya tersimpan di Arsip rapat.
 // Tanpa login: meeting contoh lokal (mode demo) dengan transkrip simulasi.
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
@@ -43,6 +46,9 @@ let myMeta = null; // status "saya di meeting"; didaftarkan ulang setiap kanal t
 let presAll = []; // [{ key, name, color, role, title, startedAt, joinedAt }] termasuk saya
 let roomAll = []; // [{ id, name, joinedAt }] termasuk saya
 let pollTimer = null;
+let dbLive = null; // baris hc_meetings yang sedang berjalan { id, title, started_at, created_by }
+let dbChannel = null;
+let staleCount = 0;
 let hiddenAt = 0;
 let lastPartialAt = 0;
 let partialTimer = null;
@@ -57,7 +63,7 @@ const nowLabel = () => {
 };
 const pushNote = (note) => useMeeting.setState((s) => ({ notes: [...s.notes, note].slice(-8) }));
 
-const VOICE_RESET = { chiefBusy: false, voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false, partials: {} };
+const VOICE_RESET = { meetingId: null, chiefBusy: false, voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false, partials: {} };
 const myId = () => useAuth.getState().session?.user?.id;
 const inHall = () => window.location.hash.startsWith('#/hall');
 
@@ -70,13 +76,13 @@ function derive() {
     ...presAll.filter((p) => p.key !== me).map((p) => ({ id: p.key, name: p.name, color: p.color, role: p.role })),
     ...roomAll.filter((p) => p.id !== me && !known.has(p.id)).map((p) => ({ id: p.id, name: p.name, color: null, role: null })),
   ];
-  const active = presAll.length > 0 || roomAll.length > 0 || useMeeting.getState().joined;
+  const active = !!dbLive || presAll.length > 0 || roomAll.length > 0 || useMeeting.getState().joined;
   const firstRoom = roomAll.length ? Math.min(...roomAll.map((p) => p.joinedAt || Date.now())) : null;
   useMeeting.setState((s) => ({
     active,
     people,
-    title: host?.title || (s.joined && s.title) || (active ? 'Rapat koloni' : ''),
-    startedAt: host?.startedAt || (s.joined && s.startedAt) || firstRoom,
+    title: dbLive?.title || host?.title || (s.joined && s.title) || (active ? 'Rapat koloni' : ''),
+    startedAt: (dbLive && new Date(dbLive.started_at).getTime()) || host?.startedAt || (s.joined && s.startedAt) || firstRoom,
   }));
 }
 
@@ -87,6 +93,80 @@ async function pollRoom() {
   if (!list || !channel) return;
   roomAll = list;
   derive();
+  // rapat yang ditinggal semua orang (tab ditutup tanpa keluar) tetap harus ditutup & dinotulenkan
+  const old = dbLive && Date.now() - new Date(dbLive.started_at).getTime() > 2 * 60 * 1000;
+  if (old && roomAll.length === 0 && presAll.length === 0) {
+    staleCount++;
+    if (staleCount >= 2) {
+      staleCount = 0;
+      requestRecap(dbLive.id);
+    }
+  } else staleCount = 0;
+}
+
+/* ---------- rapat di database ---------- */
+
+async function loadLive() {
+  const { data } = await supabase
+    .from('hc_meetings')
+    .select('id, title, started_at, created_by, status')
+    .eq('status', 'live')
+    .order('started_at', { ascending: false })
+    .limit(1);
+  dbLive = data?.[0] || null;
+  const st = useMeeting.getState();
+  // rapat yang sedang saya ikuti sudah ditutup (owner mengakhiri / ditutup otomatis)
+  if (st.joined && st.meetingId && dbLive?.id !== st.meetingId) {
+    await st.leave({ silent: true });
+    useMeeting.setState({ notice: 'Rapat sudah diakhiri. Queen Bea sedang menyusun notulen; lihat di tab Arsip rapat.' });
+  }
+  derive();
+}
+
+function watchDb() {
+  if (dbChannel) return;
+  dbChannel = supabase
+    .channel('hc-meetings-db')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'hc_meetings' }, () => loadLive())
+    .subscribe();
+  loadLive();
+}
+
+async function saveLine(kind, text, speakerName) {
+  const st = useMeeting.getState();
+  if (!st.meetingId) return;
+  const name = speakerName || useAuth.getState().account?.name || 'Staff';
+  const { error } = await supabase.from('hc_meeting_lines').insert({ meeting_id: st.meetingId, speaker_name: name.slice(0, 60), kind, text: text.slice(0, 2000) });
+  if (error) console.warn('transkrip gagal disimpan', error.message);
+}
+
+const wibLabel = (iso) => {
+  const d = new Date(new Date(iso).getTime() + 7 * 3600e3);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+};
+
+// transkrip yang sudah ada (untuk peserta yang datang terlambat)
+async function loadLines(meetingId) {
+  const { data } = await supabase
+    .from('hc_meeting_lines')
+    .select('id, speaker_id, speaker_name, kind, text, created_at')
+    .eq('meeting_id', meetingId)
+    .order('created_at')
+    .limit(300);
+  const me = myId();
+  return (data || []).map((r) => ({
+    id: `db-${r.id}`,
+    who: r.kind === 'join' || r.kind === 'leave' ? 'system' : r.kind === 'ai' ? 'ceo' : r.speaker_id === me ? 'me' : r.speaker_id,
+    name: r.kind === 'speech' && r.speaker_id !== me ? r.speaker_name : undefined,
+    text: r.text,
+    t: wibLabel(r.created_at),
+  }));
+}
+
+export async function requestRecap(meetingId, retry = false) {
+  const { data, error } = await supabase.functions.invoke('meeting-recap', { body: { meeting_id: meetingId, retry } });
+  if (error) return null;
+  return data?.status || null;
 }
 
 // HP mematikan koneksi saat layar mati / pindah app. Begitu kembali, sambung ulang kanal
@@ -139,6 +219,7 @@ export const useMeeting = create((set, get) => ({
     roomAll = [];
     set({ live: true, active: false, people: [], title: '', startedAt: null });
     subscribeChannel();
+    watchDb();
     document.addEventListener('visibilitychange', onWake);
     window.addEventListener('online', onOnline);
     clearInterval(pollTimer);
@@ -147,11 +228,39 @@ export const useMeeting = create((set, get) => ({
   },
 
   /* ---------- masuk / keluar ---------- */
+  notice: '',
+  clearNotice: () => set({ notice: '' }),
+
   start: async (title) => {
-    const t = title.trim() || 'Rapat koloni';
+    const t = (title.trim() || 'Rapat koloni').slice(0, 80);
+    if (isLive()) {
+      // hanya owner yang boleh membuka rapat (dijaga juga oleh RLS database)
+      if (useAuth.getState().account?.role !== 'owner') {
+        set({ notice: 'Hanya owner yang bisa memulai meeting.' });
+        return false;
+      }
+      const { data, error } = await supabase.from('hc_meetings').insert({ title: t }).select('id, title, started_at, created_by, status').single();
+      if (error && error.code !== '23505') {
+        set({ notice: `Gagal membuka rapat: ${error.message}` });
+        return false;
+      }
+      if (data) dbLive = data;
+      else await loadLive(); // sudah ada rapat berjalan: gabung ke rapat itu
+      set({ transcript: [], notes: [], notice: '' });
+      derive();
+      await get().join(true);
+      if (data) {
+        // Queen Bea wajib hadir di setiap rapat dan membuka dengan salam
+        const hello = 'Halo semua, saya Queen Bea. Saya ikut mencatat rapat ini dan akan membuat notulen serta laporan begitu rapat selesai.';
+        get().say('ceo', hello, 6000);
+        saveLine('ai', hello, 'Queen Bea');
+      }
+      return true;
+    }
     set({ title: t, startedAt: Date.now(), active: true, transcript: [], notes: [] });
-    if (!isLive()) set({ people: [] });
+    set({ people: [] });
     await get().join(true);
+    return true;
   },
 
   join: async (asHost = false) => {
@@ -160,6 +269,12 @@ export const useMeeting = create((set, get) => ({
     const acc = useAuth.getState().account;
     const live = isLive() && channel;
     if (live) {
+      if (!dbLive) await loadLive();
+      if (dbLive) {
+        set({ meetingId: dbLive.id, title: dbLive.title, startedAt: new Date(dbLive.started_at).getTime(), notice: '' });
+        const earlier = await loadLines(dbLive.id);
+        set({ transcript: earlier.slice(-80) });
+      }
       const prof = toAvatarProfile(acc);
       myMeta = {
         name: acc.name,
@@ -173,23 +288,44 @@ export const useMeeting = create((set, get) => ({
     }
     set({ joined: true, hand: false, ...(live ? { aiGuests: ['ceo'], speaking: null } : {}) });
     get().addLine('system', `${acc?.name || 'Anda'} bergabung ke meeting`);
+    if (live) saveLine('join', `${acc.name} bergabung`);
     if (live) joinVoice();
     else startScript();
   },
 
-  leave: async () => {
+  leave: async ({ silent = false } = {}) => {
+    const meetingId = get().meetingId;
+    const me = myId();
+    // peserta terakhir yang keluar menutup rapat -> Queen Bea membuat notulen
+    const othersLeft = roomAll.some((p) => p.id !== me) || presAll.some((p) => p.key !== me);
+    if (meetingId && !silent) await saveLine('leave', `${useAuth.getState().account?.name || 'Staff'} keluar`);
     stopScript();
     stopTranscribe();
     disconnectVoice();
     myMeta = null;
-    roomAll = roomAll.filter((p) => p.id !== myId());
+    roomAll = roomAll.filter((p) => p.id !== me);
     set({ joined: false, speaking: null, ...VOICE_RESET });
     if (isLive() && channel) {
       if (channelReady) await channel.untrack();
       derive();
-      pollRoom();
     }
+    if (meetingId && !silent && !othersLeft) {
+      const status = await requestRecap(meetingId);
+      if (status) set({ notice: 'Rapat selesai. Queen Bea sedang menyusun notulen dan laporan; lihat di tab Arsip rapat.' });
+    }
+    if (isLive() && channel) pollRoom();
     if (!isLive() && get().people.length === 0) set({ active: false });
+  },
+
+  // owner: akhiri rapat untuk semua peserta
+  endForAll: async () => {
+    const meetingId = get().meetingId;
+    if (!meetingId || useAuth.getState().account?.role !== 'owner') return;
+    publish({ t: 'end' });
+    await saveLine('leave', `${useAuth.getState().account.name} mengakhiri rapat`);
+    await get().leave({ silent: true });
+    const status = await requestRecap(meetingId);
+    set({ notice: status ? 'Rapat diakhiri. Queen Bea sedang menyusun notulen dan laporan; lihat di tab Arsip rapat.' : 'Rapat diakhiri, tapi notulen gagal dipicu. Coba dari tab Arsip rapat.' });
   },
 
   retryVoice: () => joinVoice(),
@@ -276,12 +412,14 @@ async function askChiefLive(question, voice) {
   const transcript = st.transcript.filter((l) => l.who !== 'system').map((l) => ({ who: nameOf(l), text: l.text }));
   st.addLine('me', `👑 ${q}`);
   if (st.voice === 'on') publish({ t: 'tx', text: `👑 ${q}` });
+  saveLine('speech', `(bertanya ke Queen Bea) ${q}`);
   useMeeting.setState({ chiefBusy: true });
   try {
     const reply = await askQueenBea({ mode: 'meeting', messages: [{ role: 'user', content: q }], transcript });
     if (!useMeeting.getState().joined) return;
     useMeeting.getState().say('ceo', reply, Math.min(16000, 2500 + reply.length * 60));
     if (useMeeting.getState().voice === 'on') publish({ t: 'ai', who: 'ceo', text: reply });
+    saveLine('ai', reply, 'Queen Bea');
     if (voice) speak(reply);
   } catch (e) {
     useMeeting.getState().addLine('system', e.message);
@@ -333,6 +471,7 @@ async function applyMic(on) {
       setPartial('me', '');
       useMeeting.getState().addLine('me', text);
       publish({ t: 'tx', text });
+      saveLine('speech', text);
     },
     () => useMeeting.setState({ txOn: false }),
     (text) => {
@@ -370,6 +509,10 @@ function onData(msg, id, name) {
     const who = AI_GUESTS.some((a) => a.id === msg.who) ? msg.who : 'ceo';
     st.say(who, String(msg.text).slice(0, 800), 7000);
     if (msg.note) pushNote({ type: 'task', text: String(msg.note).slice(0, 200) });
+  } else if (msg.t === 'end') {
+    st.leave({ silent: true }).then(() =>
+      useMeeting.setState({ notice: 'Owner mengakhiri rapat. Queen Bea sedang menyusun notulen; lihat di tab Arsip rapat.' }),
+    );
   } else if (msg.t === 'hand') {
     useMeeting.setState((s) => ({ hands: msg.on ? [...new Set([...s.hands, id])] : s.hands.filter((h) => h !== id) }));
   }
@@ -407,6 +550,9 @@ export function unwatch() {
   myMeta = null;
   presAll = [];
   roomAll = [];
+  dbLive = null;
+  if (dbChannel) supabase.removeChannel(dbChannel);
+  dbChannel = null;
   clearInterval(pollTimer);
   pollTimer = null;
   document.removeEventListener('visibilitychange', onWake);

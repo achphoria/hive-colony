@@ -9,6 +9,7 @@ import { useAuth } from '../sim/auth';
 import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
 import { useAi } from '../hall/queenBea';
+import { useMeeting } from '../hall/meeting';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -37,6 +38,19 @@ function initials(name) {
 function Dot({ st }) {
   const s = st?.missionId ? 'mission' : st?.state || 'desk';
   return <span className={`dot dot-${s}`} />;
+}
+
+// Status kehadiran agent di daftar: work (sedang mengerjakan), online, offline.
+// Mode real: hanya agent yang tersambung AI yang bisa online; mode demo mengikuti simulasi.
+const PRESENCE_LABEL = { work: 'Kerja', online: 'Online', offline: 'Offline' };
+function presenceOf(id, st, real, ai, inMeeting) {
+  if (real) {
+    if (id !== 'ceo' || ai.status !== 'on') return 'offline';
+    return ai.busy > 0 || inMeeting ? 'work' : 'online';
+  }
+  if (st?.missionId) return 'work';
+  if (st?.state === 'sleep') return 'offline';
+  return 'online';
 }
 
 function Clock() {
@@ -356,11 +370,24 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
   const [open, setOpen] = useState(defaultOpen);
   const agentStates = useHive((s) => s.agentStates);
   const selected = useHive((s) => s.selectedAgent);
+  const real = useAuth((s) => !!s.account);
+  const ai = useAi();
+  const inMeeting = useMeeting((s) => s.live && s.active);
+  const counts = { work: 0, online: 0, offline: 0 };
+  const pres = Object.fromEntries(AGENTS.map((a) => [a.id, presenceOf(a.id, agentStates[a.id], real, ai, inMeeting)]));
+  Object.values(pres).forEach((p) => counts[p]++);
   return (
     <div className="directory">
       <button className="dir-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         Daftar agent <span>{open ? '−' : '+'}</span>
       </button>
+      {open && (
+        <div className="pres-sum">
+          <span className="pres pres-work">Kerja {counts.work}</span>
+          <span className="pres pres-online">Online {counts.online}</span>
+          <span className="pres pres-offline">Offline {counts.offline}</span>
+        </div>
+      )}
       {open && (
         <div className="dir-list">
           {DEPT_ORDER.map((d) => (
@@ -379,9 +406,10 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
                   }}
                   title={a.role}
                 >
-                  <Dot st={agentStates[a.id]} />
+                  <span className={`dot pdot-${pres[a.id]}`} />
                   <b>{a.nick}</b>
                   <span>{a.role}</span>
+                  <em className={`pres pres-${pres[a.id]}`}>{PRESENCE_LABEL[pres[a.id]]}</em>
                 </button>
               ))}
             </div>

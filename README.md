@@ -55,6 +55,14 @@ Untuk staff yang login, Queen Bea dijawab **Claude Haiku 5.5** lewat Edge Functi
 - Kunci API disimpan sebagai `ANTHROPIC_API_KEY` di Supabase Edge Function Secrets, tidak pernah ada di website.
 - Belum bisa: membaca isi file lampiran, mengirim misi ke agent lain, atau mengubah data.
 
+### Rapat, notulen, dan Arsip rapat
+
+- **Hanya owner** yang bisa membuka ruang rapat (dijaga RLS database); staff lain bergabung saat rapat sudah dibuka. Hanya satu rapat berjalan pada satu waktu.
+- **Queen Bea wajib hadir** di setiap rapat: membuka dengan salam, bisa ditanya kapan saja, dan **wajib membuat notulen** saat rapat selesai.
+- Transkrip tiap peserta disimpan ke `hc_meeting_lines` (peserta yang datang terlambat melihat transkrip sebelumnya).
+- Rapat selesai ketika owner menekan **Akhiri rapat**, peserta terakhir keluar, atau rapat ditinggal kosong (ditutup otomatis). Edge Function `meeting-recap` lalu meminta Claude membuat notulen (ringkasan, topik, keputusan, tindak lanjut dengan PIC & tenggat) dan laporan, dikerjakan di latar belakang server.
+- Tab **Arsip rapat** di Hive Hall: daftar semua rapat dengan pencarian, notulen, laporan, transkrip lengkap, salin teks, dan cetak/PDF. Owner bisa membuat ulang notulen yang gagal.
+
 ## Mode real vs mode demo
 
 - **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.

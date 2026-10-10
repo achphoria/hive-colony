@@ -15,6 +15,7 @@ import { useMeeting } from '../hall/meeting';
 import { MeetingView } from '../hall/MeetingView';
 import { ReportView } from '../hall/ReportView';
 import { ChiefView, PortalView } from '../hall/ChiefView';
+import { ArchiveView } from '../hall/ArchiveView';
 
 function useActionError() {
   const [msg, setMsg] = useState('');
@@ -263,9 +264,23 @@ function useMeetingClock(startedAt) {
   return startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 60000)) : 0;
 }
 
-function MeetingBanner({ onJoin }) {
+function MeetingBanner({ onJoin, onArchive }) {
   const m = useMeeting();
   const mins = useMeetingClock(m.startedAt);
+  if (!m.active && m.notice)
+    return (
+      <div className="live-banner notice">
+        <span className="live-text">{m.notice}</span>
+        {/arsip/i.test(m.notice) && (
+          <button className="live-join" onClick={onArchive}>
+            Arsip
+          </button>
+        )}
+        <button className="notice-x" onClick={m.clearNotice} aria-label="Tutup pemberitahuan">
+          ×
+        </button>
+      </div>
+    );
   if (!m.active) return null;
   const count = m.people.length + (m.joined ? 1 : 0);
   return (
@@ -309,13 +324,21 @@ function StartMeetingDialog({ onCancel, onStart }) {
 
 function ActionDock({ onAction }) {
   const active = useMeeting((s) => s.active);
+  const account = useAuth((s) => s.account);
+  // hanya owner yang bisa membuka ruang rapat; staff lain menunggu lalu bergabung
+  const locked = !active && account && account.role !== 'owner';
   const items = [
     {
       id: 'meeting',
       ic: '🎙',
       bg: '#FCEBEB',
-      title: active ? 'Gabung meeting' : 'Mulai meeting',
-      sub: active ? 'Rapat sedang berlangsung. Masuk dan ikut transkrip live.' : 'Buka ruang meeting untuk semua. Transkrip live oleh AI.',
+      title: active ? 'Gabung meeting' : locked ? 'Belum ada meeting' : 'Mulai meeting',
+      sub: active
+        ? 'Rapat sedang berlangsung. Masuk dan ikut transkrip live.'
+        : locked
+          ? 'Hanya owner yang bisa memulai meeting. Tombol ini aktif saat rapat dibuka.'
+          : 'Buka ruang rapat. Queen Bea ikut mencatat dan membuat notulen di akhir.',
+      soon: locked,
     },
     { id: 'report', ic: '📊', bg: '#FCE7B0', title: 'Presentasi report', sub: 'Queen Bea mempresentasikan laporan koloni.' },
     { id: 'chief', ic: '👑', bg: '#DCE6F4', title: 'Ngobrol dengan Chief', sub: 'Chat dengan lampiran, atau ngobrol pakai suara.' },
@@ -330,7 +353,7 @@ function ActionDock({ onAction }) {
           </span>
           <b>{it.title}</b>
           <span className="dock-sub">{it.sub}</span>
-          {it.soon && <span className="soon-badge">Segera hadir</span>}
+          {it.soon && <span className="soon-badge">{it.id === 'meeting' ? 'Khusus owner' : 'Segera hadir'}</span>}
         </button>
       ))}
     </div>
@@ -379,13 +402,14 @@ export function HallView() {
     ['rencana', 'Papan rencana'],
     ['kalender', 'Kalender'],
     ['persetujuan', `Persetujuan${data.pending ? ` · ${data.pending}` : ''}`],
+    ['arsip', 'Arsip rapat'],
   ];
   const zoomed = !!view.zoomed;
 
   const openAction = (id) => {
     if (id === 'meeting') {
       if (meetingActive) setMode('meeting');
-      else setAsking(true);
+      else if (!account || account.role === 'owner') setAsking(true);
       return;
     }
     setMode(id);
@@ -438,6 +462,7 @@ export function HallView() {
           {tab === 'rencana' && <PlanBoard />}
           {tab === 'kalender' && <CalendarMonth />}
           {tab === 'persetujuan' && <Approvals />}
+          {tab === 'arsip' && <ArchiveView />}
           {tab === 'lobi' && mode === 'meeting' && <MeetingView onLeave={() => setMode('lobby')} onReport={() => setMode('report')} />}
           {tab === 'lobi' && mode === 'report' && <ReportView onClose={() => setMode(meetingJoined ? 'meeting' : 'lobby')} />}
           {tab === 'lobi' && mode === 'chief' && <ChiefView />}
@@ -452,7 +477,7 @@ export function HallView() {
       <HallScene data={data} me={me} dina={dina} mates={mates} call={LOBBY_CALL} view={view} setView={setView} mobile={mobile} />
       <div className="hall-overlay top">
         {head}
-        <MeetingBanner onJoin={() => setMode('meeting')} />
+        <MeetingBanner onJoin={() => setMode('meeting')} onArchive={() => setTab('arsip')} />
       </div>
       {zoomed && (
         <button className="hbtn pri zoom-back" onClick={() => setView(baseView)}>
@@ -468,8 +493,7 @@ export function HallView() {
           onCancel={() => setAsking(false)}
           onStart={async (title) => {
             setAsking(false);
-            await useMeeting.getState().start(title);
-            setMode('meeting');
+            if (await useMeeting.getState().start(title)) setMode('meeting');
           }}
         />
       )}
