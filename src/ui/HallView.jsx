@@ -361,6 +361,13 @@ export function HallView() {
   useEffect(() => {
     useMeeting.getState().watch();
   }, [account]);
+  // keluar dari Hive Hall = keluar meeting (mic & suara tidak tertinggal menyala)
+  useEffect(
+    () => () => {
+      if (useMeeting.getState().joined) useMeeting.getState().leave();
+    },
+    [],
+  );
 
   const tabs = [
     ['lobi', 'Lobi'],

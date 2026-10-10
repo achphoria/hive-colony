@@ -35,7 +35,18 @@ Hive Hall sekarang berupa **lobi**: ruang 3D, banner status meeting, dan 4 tombo
 - **Ngobrol dengan Chief**: mode chat (lampiran file apa pun, seret-lepas) dan mode suara (tahan untuk bicara, memakai pengenal suara bawaan browser).
 - **Portal karyawan**: segera hadir.
 
-Fase berikutnya: suara antar-peserta (WebRTC), transkrip sungguhan (speech-to-text), dan jawaban AI sungguhan untuk Queen Bea. Saat ini transkrip meeting dan jawaban Queen Bea masih simulasi.
+### Meeting suara (LiveKit)
+
+Untuk staff yang login, meeting memakai suara sungguhan lewat **LiveKit Cloud**:
+
+- Edge Function Supabase `livekit-token` (`supabase/functions/livekit-token`) memeriksa bahwa peminta adalah staff Hive Colony (punya baris `hc_profiles`, bukan viewer), lalu membuat tiket masuk ruang `hive-hall` yang berlaku 2 jam. `LIVEKIT_URL`, `LIVEKIT_API_KEY`, dan `LIVEKIT_API_SECRET` disimpan di Supabase Edge Function Secrets, tidak pernah ada di website.
+- Mic sungguhan, suara peserta lain terdengar, indikator "sedang bicara" berasal dari suara asli, dan tombol mic benar-benar mematikan mic. Tangan terangkat terlihat oleh semua peserta.
+- Transkrip: browser tiap peserta mentranskrip suaranya sendiri (Web Speech API, `id-ID`), lalu barisnya dibagikan ke semua lewat kanal data LiveKit. Paling akurat di Chrome/Edge; disarankan memakai headset.
+- Library `livekit-client` hanya dimuat saat staff masuk meeting. Meninggalkan Hive Hall otomatis keluar dari meeting.
+
+Tanpa login, meeting tetap berupa demo dengan transkrip simulasi.
+
+Fase berikutnya: jawaban AI sungguhan untuk Queen Bea dan analisis file. Saat ini jawaban Queen Bea masih versi demo.
 
 ## Akun staff (Supabase)
 
@@ -48,7 +59,7 @@ Tanpa login, Hive Colony berjalan dalam mode demo. Dengan login, data tersimpan 
 
 Tabel memakai awalan `hc_` (`hc_profiles`, `hc_invites`, `hc_approvals`, `hc_plan_tasks`, `hc_activity`) dengan Row Level Security. Website hanya memakai anon key publik; service_role key tidak pernah dipakai di sini.
 
-Call suara antar-staff (WebRTC) masih tahap berikutnya.
+Meeting suara antar-staff memakai LiveKit; lihat bagian "Meeting suara (LiveKit)" di atas.
 
 ## Siklus siang-malam
 

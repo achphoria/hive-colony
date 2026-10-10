@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMeeting, AI_GUESTS } from './meeting';
+import { canTranscribe } from './voice';
 import { useAuth } from '../sim/auth';
 import { useHive } from '../sim/store';
 
@@ -25,12 +26,43 @@ function useElapsed(startedAt) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+function VoiceStatus({ m }) {
+  if (!m.live) return null;
+  if (m.voice === 'connecting') return <div className="voice-note">⏳ Menyambungkan suara…</div>;
+  if (m.voice === 'error')
+    return (
+      <div className="voice-note warn">
+        <span>⚠ {m.voiceError || 'Suara belum tersambung.'}</span>
+        <button className="hbtn" onClick={m.retryVoice}>
+          Sambung ulang
+        </button>
+      </div>
+    );
+  if (m.audioBlocked)
+    return (
+      <div className="voice-note">
+        <span>🔈 Browser menahan suara peserta lain.</span>
+        <button className="hbtn pri" onClick={m.unlockAudio}>
+          Aktifkan suara
+        </button>
+      </div>
+    );
+  if (m.micError) return <div className="voice-note warn">⚠ {m.micError}</div>;
+  if (m.voice === 'on' && m.mic && !canTranscribe)
+    return <div className="voice-note">Browser ini belum bisa mentranskrip suara Anda. Suara tetap terdengar; untuk transkrip pakai Chrome atau Edge.</div>;
+  return null;
+}
+
 function Tile({ name, sub, color, ai, crown, speaking, muted, hand }) {
   return (
     <div className={`mtile${speaking ? ' speaking' : ''}`}>
       {ai && <span className="mtile-ai">AI</span>}
-      {hand && <span className="mtile-flag">✋</span>}
-      {muted && <span className="mtile-flag">🔇</span>}
+      {(hand || muted) && (
+        <span className="mtile-flag">
+          {hand && '✋'}
+          {muted && '🔇'}
+        </span>
+      )}
       <div className="mtile-av" style={{ '--c': color }}>
         {crown ? '👑' : initials(name)}
       </div>
@@ -77,6 +109,14 @@ export function MeetingView({ onLeave, onReport }) {
   const kinds = ['kondisi', 'mendesak', 'race'];
   const askIdx = useRef(0);
   const notInvited = AI_GUESTS.filter((a) => !m.aiGuests.includes(a.id));
+  const talking = (id) => m.speaking === id || m.talking.includes(id);
+  const badge = !m.live
+    ? '● Transkrip live oleh AI · demo'
+    : m.voice === 'on'
+      ? `● Suara tersambung${m.txOn ? ' · transkrip live' : ''}`
+      : m.voice === 'connecting'
+        ? '○ Menyambungkan suara…'
+        : '○ Suara belum tersambung';
 
   return (
     <div className="meet">
@@ -87,17 +127,26 @@ export function MeetingView({ onLeave, onReport }) {
             {elapsed} berjalan · {m.people.length + m.aiGuests.length + 1} peserta
           </span>
         </div>
-        <span className="rec-badge">● Transkrip live oleh AI{!m.live ? ' · demo' : ''}</span>
+        <span className={`rec-badge${m.live && m.voice !== 'on' ? ' off' : ''}`}>{badge}</span>
       </div>
+      <VoiceStatus m={m} />
       <div className="meet-grid">
         <div className="meet-tiles">
-          <Tile name={`${myName} (Anda)`} sub={account ? ROLE_LABEL[account.role] : 'Anda'} color={profile?.outfitColor || '#4A6FA5'} speaking={m.speaking === 'me'} muted={!m.mic} hand={m.hand} />
+          <Tile name={`${myName} (Anda)`} sub={account ? ROLE_LABEL[account.role] : 'Anda'} color={profile?.outfitColor || '#4A6FA5'} speaking={talking('me')} muted={!m.mic} hand={m.hand} />
           {m.aiGuests.map((id) => {
             const a = AI_GUESTS.find((g) => g.id === id);
-            return <Tile key={id} name={a.name} sub={a.role} color={a.color} ai crown={a.crown} speaking={m.speaking === id} />;
+            return <Tile key={id} name={a.name} sub={a.role} color={a.color} ai crown={a.crown} speaking={talking(id)} />;
           })}
           {m.people.map((p) => (
-            <Tile key={p.id} name={p.name} sub={p.role || 'Staff'} color={p.color || '#C0C5CE'} speaking={m.speaking === p.id} />
+            <Tile
+              key={p.id}
+              name={p.name}
+              sub={ROLE_LABEL[p.role] || p.role || 'Staff'}
+              color={p.color || '#C0C5CE'}
+              speaking={talking(p.id)}
+              muted={m.voice === 'on' && m.peerMuted.includes(p.id)}
+              hand={m.hands.includes(p.id)}
+            />
           ))}
           {notInvited.length > 0 && (
             <button className="mtile invite" onClick={() => setPicker(!picker)}>
@@ -137,7 +186,7 @@ export function MeetingView({ onLeave, onReport }) {
                 </div>
               ) : (
                 <div key={l.id} className={`tx${l.who === 'ceo' ? ' ceo' : ''}`}>
-                  <span className="tx-t">{l.t}</span> <b>{nameOf(l.who)}:</b> {l.text}
+                  <span className="tx-t">{l.t}</span> <b>{l.name || nameOf(l.who)}:</b> {l.text}
                 </div>
               ),
             )}
@@ -177,7 +226,9 @@ export function MeetingView({ onLeave, onReport }) {
         </button>
       </div>
       <p className="demo-note">
-        Tampilan siap pakai. Suara antar-peserta (WebRTC) dan transkrip sungguhan (speech-to-text) disambungkan di fase berikutnya; transkrip sekarang masih simulasi.
+        {m.live
+          ? 'Suara antar-peserta tersambung lewat LiveKit. Transkrip dibuat pengenal suara browser tiap peserta (paling akurat di Chrome/Edge); pakai headset agar suara orang lain tidak ikut tertranskrip. Jawaban Queen Bea masih versi demo.'
+          : 'Mode demo: suara dan transkrip disimulasikan. Login sebagai staff untuk meeting dengan suara sungguhan.'}
       </p>
     </div>
   );

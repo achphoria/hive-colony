@@ -167,6 +167,31 @@
   border-radius: 999px;
   padding: 4px 12px;
 }
+.rec-badge.off {
+  background: #f1efe8;
+  color: #6b6658 !important;
+}
+.voice-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: #fdf3d9;
+  color: #6b4e00;
+  font-size: 13px;
+  font-weight: 600;
+}
+.voice-note.warn {
+  background: #fcebeb;
+  color: #a32d2d;
+}
+.voice-note .hbtn {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
 .meet-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
