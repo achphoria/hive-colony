@@ -309,7 +309,7 @@ function Stool({ deg }) {
 
 /* ---------- scene ---------- */
 
-export function HallScene({ data, me, dina, call, view, setView, mobile = false }) {
+export function HallScene({ data, me, dina, mates = [], call, view, setView, mobile = false }) {
   const focus = (target, distance) => setView({ target, pos: [target[0], target[1] + 0.3, target[2] + distance], zoomed: true });
   const ceoSpeaking = call.speaker === 'ceo';
   const ceoThinking = call.speaker === 'thinking';
@@ -370,6 +370,22 @@ export function HallScene({ data, me, dina, call, view, setView, mobile = false 
           ))}
         </div>
       </Screen>
+      {data.real ? (
+      <Screen position={[7.9, 3.65, -5.95]} frame={[2.35, 3.55]} className="side" onFocus={() => focus([7.9, 3.65, -5.9], 6.2)}>
+        <div className="ws-head green">Agent AI · {data.aiOn}/21</div>
+        <div className="ws-body">
+          {data.aiAgents.map((a) => (
+            <div key={a.id} className="ws-row person">
+              <i style={{ background: a.on ? '#8DBF5A' : '#C0C5CE' }} />
+              <span>{a.nick}</span>
+              <small className={a.on ? 'here' : ''}>{a.on ? 'online' : 'off'}</small>
+            </div>
+          ))}
+          <div className="ws-trend">{data.aiAgents[0].model}</div>
+          <div className="ws-empty">20 agent lain belum tersambung</div>
+        </div>
+      </Screen>
+      ) : (
       <Screen position={[7.9, 3.65, -5.95]} frame={[2.35, 3.55]} className="side" onFocus={() => focus([7.9, 3.65, -5.9], 6.2)}>
         <div className="ws-head green">Skor skill</div>
         <div className="ws-body">
@@ -385,12 +401,34 @@ export function HallScene({ data, me, dina, call, view, setView, mobile = false 
           <div className="ws-trend">{data.mover && data.mover.done > 0 ? `▲ ${data.mover.nick} +${data.mover.done}` : 'Naik tiap misi beres'}</div>
         </div>
       </Screen>
+      )}
 
         </>
       )}
       {mobile && <MobileWallArt />}
 
-      {/* peserta: manusia di kiri, AI melingkar ke kanan, Queen Bea di tengah */}
+      {/* mode real: hanya Queen Bea (agent yang tersambung AI) + staff yang sedang di Hive Hall */}
+      {data.real && (
+        <>
+          <HumanSeat who="me" profile={me} deg={-26} speaking={call.speaker === 'me'} muted={!call.mic} />
+          <NameTag deg={-26} label={me.name || 'Anda'} kind="human me" />
+          {mates.slice(0, 4).map((p, i) => {
+            const deg = [26, -53, 53, -80][i];
+            return (
+              <group key={p.id}>
+                <HumanSeat who={p.id} profile={p} deg={deg} />
+                <NameTag deg={deg} label={p.name || 'Staff'} kind="human" />
+              </group>
+            );
+          })}
+          <BeeFigure position={bee(0).pos} facing={bee(0).facing} crown speaking={ceoSpeaking} thinking={ceoThinking} />
+          <NameTag deg={0} label="Queen Bea" kind="ai ceo" />
+        </>
+      )}
+
+      {/* mode demo: manusia di kiri, AI melingkar ke kanan, Queen Bea di tengah */}
+      {!data.real && (
+        <>
       {dina && <HumanSeat who={dina.name} profile={dina} deg={-80} />}
       <HumanSeat who="me" profile={me} deg={-53} speaking={call.speaker === 'me'} muted={!call.mic} />
       <BeeFigure position={bee(-26).pos} facing={bee(-26).facing} muted />
@@ -405,6 +443,8 @@ export function HallScene({ data, me, dina, call, view, setView, mobile = false 
       <NameTag deg={26} label="Spark · Mkt" kind="ai" />
       <NameTag deg={53} label="Graph · Fin" kind="ai" />
       <NameTag deg={80} label="Bumble · CX" kind="ai" />
+        </>
+      )}
 
       <OrbitControls
         makeDefault

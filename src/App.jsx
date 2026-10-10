@@ -9,6 +9,8 @@ import { useRoute } from './ui/nav';
 import { useHive } from './sim/store';
 import { useAuth, toAvatarProfile } from './sim/auth';
 import { startLoop } from './sim/loop';
+import { setRealMode } from './sim/engine';
+import { checkAi } from './hall/queenBea';
 import { upsertWalker, removeWalker } from './sim/outdoor';
 import { startPresence, stopPresence } from './sim/presence';
 import { startHallSync, stopHallSync } from './sim/hallSync';
@@ -38,6 +40,7 @@ function useColonyMode() {
   const account = useAuth((s) => s.account);
   const uid = useAuth((s) => s.session?.user?.id);
   useEffect(() => {
+    setRealMode(!!(account && uid)); // login = mode real; pengunjung tanpa login = simulasi demo
     if (account && uid) {
       DEMO_STAFF.forEach((s) => removeWalker(s.id));
       startPresence(uid, toAvatarProfile(account));
@@ -51,6 +54,7 @@ function useColonyMode() {
       if (local) upsertWalker(local);
       else removeWalker('me');
     }
+    checkAi();
     useHive.getState().bumpOutdoor();
     // profil avatar dikirim ulang lewat presence saat akun diperbarui
   }, [account, uid]);

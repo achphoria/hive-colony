@@ -46,7 +46,19 @@ Untuk staff yang login, meeting memakai suara sungguhan lewat **LiveKit Cloud**:
 
 Tanpa login, meeting tetap berupa demo dengan transkrip simulasi.
 
-Fase berikutnya: jawaban AI sungguhan untuk Queen Bea dan analisis file. Saat ini jawaban Queen Bea masih versi demo.
+### Queen Bea tersambung ke Claude
+
+Untuk staff yang login, Queen Bea dijawab **Claude Haiku 5.5** lewat Edge Function `queen-bea` (`supabase/functions/queen-bea`):
+
+- Fungsi memeriksa bahwa peminta adalah staff Hive Colony, lalu menyertakan data koloni asli dari database (staff, persetujuan menunggu, tugas terbuka, aktivitas terbaru). Queen Bea diminta tidak mengarang data yang tidak ada.
+- Dipakai di **Ngobrol dengan Chief** (chat & suara) dan di **meeting** (pertanyaan bebas; Queen Bea membaca transkrip rapat, jawabannya dibagikan ke semua peserta).
+- Kunci API disimpan sebagai `ANTHROPIC_API_KEY` di Supabase Edge Function Secrets, tidak pernah ada di website.
+- Belum bisa: membaca isi file lampiran, mengirim misi ke agent lain, atau mengubah data.
+
+## Mode real vs mode demo
+
+- **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.
+- **Tanpa login (mode demo)**: simulasi lengkap 21 agent untuk pengunjung.
 
 ## Akun staff (Supabase)
 

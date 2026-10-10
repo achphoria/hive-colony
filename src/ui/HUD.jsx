@@ -8,6 +8,7 @@ import { go } from './nav';
 import { useAuth } from '../sim/auth';
 import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
+import { useAi } from '../hall/queenBea';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -135,20 +136,49 @@ function AccountChip() {
   );
 }
 
+// angka header saat mode real: hanya data sungguhan
+function RealStats() {
+  const online = useHive((s) => s.onlineStaff.length) + 1;
+  const dbActivity = useHive((s) => s.dbActivity);
+  const ai = useAi((s) => s.status);
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  const todayCount = dbActivity.filter((a) => new Date(new Date(a.created_at).getTime() + 7 * 3600e3).toISOString().slice(0, 10) === today).length;
+  return (
+    <div className="stats">
+      <div>
+        <b>{online}</b>
+        <span>staff online</span>
+      </div>
+      <div>
+        <b>{ai === 'on' ? 1 : 0}/21</b>
+        <span>agent tersambung AI</span>
+      </div>
+      <div>
+        <b>{todayCount}</b>
+        <span>aktivitas hari ini</span>
+      </div>
+    </div>
+  );
+}
+
 function Brand() {
   const stats = useHive((s) => s.stats);
   const agentStates = useHive((s) => s.agentStates);
+  const real = useAuth((s) => !!s.account);
   const working = Object.values(agentStates).filter((a) => a.missionId).length;
   return (
     <header className="panel brand">
       <Logo />
       <div>
         <h1>Hive Colony</h1>
-        <p>Kantor virtual 21 agent AI · mode simulasi</p>
+        <p>Kantor virtual 21 agent AI · {real ? 'mode real' : 'mode simulasi'}</p>
       </div>
       <Clock />
       <SoundToggle />
       <AccountChip />
+      {real ? (
+        <RealStats />
+      ) : (
       <div className="stats">
         <div>
           <b>{working}</b>
@@ -163,6 +193,7 @@ function Brand() {
           <span>madu</span>
         </div>
       </div>
+      )}
     </header>
   );
 }
@@ -363,7 +394,11 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
 
 function MissionBoard({ className = 'panel board', onPick }) {
   const missions = useHive((s) => s.missions);
-  const log = useHive((s) => s.log);
+  const simLog = useHive((s) => s.log);
+  const dbActivity = useHive((s) => s.dbActivity);
+  const real = useAuth((s) => !!s.account);
+  // mode real: log koloni = aktivitas sungguhan dari database
+  const log = real ? dbActivity.map((a) => ({ id: `db-${a.id}`, kind: a.kind || 'human', text: a.text })) : simLog;
   const [tab, setTab] = useState('active');
   return (
     <aside className={className}>
@@ -377,7 +412,9 @@ function MissionBoard({ className = 'panel board', onPick }) {
       </div>
       {tab === 'active' ? (
         <div className="list">
-          {missions.length === 0 && <p className="empty">Queen Bea sedang menyiapkan misi berikutnya…</p>}
+          {missions.length === 0 && (
+            <p className="empty">{real ? 'Belum ada misi. Agent sedang bebas; misi datang dari agent AI yang sudah tersambung.' : 'Queen Bea sedang menyiapkan misi berikutnya…'}</p>
+          )}
           {missions.map((m) => (
             <button
               key={m.id}

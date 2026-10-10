@@ -59,6 +59,9 @@ export const world = {
   honey: 0,
   done: 0,
   doneBy: {}, // jumlah misi selesai per agent (dasar skor skill)
+  // Mode real (staff login): tidak ada misi atau tamu simulasi. Agent yang menganggur
+  // tetap bebas berkeliaran, istirahat, dan tidur, tapi tidak dicatat sebagai aktivitas.
+  real: false,
 };
 
 for (const def of AGENTS) {
@@ -286,7 +289,7 @@ function behaviours(dt) {
         const dest = claimSpot('hall');
         if (dest) sendTo(a, dest, 'meeting', rand(13, 17));
       }
-      log('meeting', `Rapat di Comb Hall: ${team.map((a) => a.def.nick).join(', ')}`);
+      if (!world.real) log('meeting', `Rapat di Comb Hall: ${team.map((a) => a.def.nick).join(', ')}`);
     }
   }
 }
@@ -378,6 +381,7 @@ function completeMission(m) {
 }
 
 function missions(dt) {
+  if (world.real) return; // misi sungguhan datang dari agent AI yang tersambung, bukan simulasi
   world.nextMission -= dt;
   const active = world.missions.filter((m) => m.phase !== 'done');
   if (world.nextMission <= 0) {
@@ -416,7 +420,7 @@ function walkPath(g, points, arriveState, facing) {
 
 function guests(dt) {
   world.nextGuest -= dt;
-  if (world.nextGuest <= 0) {
+  if (world.nextGuest <= 0 && !world.real) {
     world.nextGuest = rand(28, 45);
     const g = world.guests.find((x) => !x.active);
     if (g && !world.night) {
@@ -501,6 +505,35 @@ export function update(rawDt) {
   missions(dt);
   guests(dt);
   effects(dt);
+}
+
+// Mode real hidup/mati. Saat hidup, semua misi, tamu, dan log simulasi dibersihkan.
+export function setRealMode(on) {
+  if (world.real === on) return;
+  world.real = on;
+  if (!on) return;
+  for (const m of world.missions) {
+    for (const id of [m.leadId, m.collabId]) {
+      const a = id && world.byId[id];
+      if (!a) continue;
+      a.missionId = null;
+      if (a.state === 'visit' || (a.state === 'fly' && a.arriveState === 'visit')) goHome(a);
+    }
+  }
+  world.missions = [];
+  world.effects = [];
+  world.done = 0;
+  world.honey = 0;
+  world.doneBy = {};
+  for (const g of world.guests) {
+    g.active = false;
+    g.state = 'hidden';
+    g.path = null;
+    g.timer = 0;
+  }
+  world.doorOpen = false;
+  useHive.setState({ log: [], missions: [] });
+  syncUI();
 }
 
 // Lompat waktu: beralih ke jam simulasi (berjalan cepat) mulai dari jam tertentu

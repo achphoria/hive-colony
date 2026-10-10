@@ -60,7 +60,7 @@ function PlanBoard() {
               <button key={t.id} className={`kcard ${t.kind}`} onClick={() => run(() => advanceTask(t))} title="Klik untuk pindah kolom">
                 <span className={`who ${t.kind}`}>{t.who}</span>
                 <p>{t.title}</p>
-                <small>Rencana HYROX Race · klik untuk pindah</small>
+                <small>Klik untuk pindah kolom</small>
               </button>
             ))}
           {c.id === 'doing' &&
@@ -94,7 +94,8 @@ function CalendarMonth() {
   const offset = (first.getUTCDay() + 6) % 7;
   const days = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
   const today = now.getUTCDate();
-  const events = demoEvents();
+  const real = useAuth((s) => !!s.account);
+  const events = real ? [] : demoEvents(); // mode real: kalender belum tersambung ke sumber jadwal
   const cells = [];
   for (let i = 0; i < offset; i++) cells.push(null);
   for (let d = 1; d <= days; d++) cells.push(d);
@@ -139,6 +140,7 @@ function Approvals() {
     <>
       {err && <div className="error hall-error">{err}</div>}
       <div className="approvals">
+        {approvals.length === 0 && <p className="muted">Belum ada pengajuan persetujuan. Nanti agent AI dan staff mengajukan di sini.</p>}
         {approvals.map((a) => (
           <div key={a.id} className={`appr ${a.status}`}>
             <div className="appr-top">
@@ -354,6 +356,8 @@ export function HallView() {
   const onlineStaff = useHive((s) => s.onlineStaff);
   const mate = onlineStaff.find((o) => o.page === '/hall') || onlineStaff[0];
   const dina = account ? (mate ? { ...mate.profile, name: mate.name } : null) : DEMO_STAFF[0];
+  // mode real: staff yang sedang membuka Hive Hall duduk di meja
+  const mates = account ? onlineStaff.filter((o) => o.page === '/hall').map((o) => ({ ...o.profile, id: o.id, name: o.name })) : [];
   const data = useHallData(me);
   const meetingActive = useMeeting((s) => s.active);
   const meetingJoined = useMeeting((s) => s.joined);
@@ -445,7 +449,7 @@ export function HallView() {
 
   return (
     <div className="hall3d">
-      <HallScene data={data} me={me} dina={dina} call={LOBBY_CALL} view={view} setView={setView} mobile={mobile} />
+      <HallScene data={data} me={me} dina={dina} mates={mates} call={LOBBY_CALL} view={view} setView={setView} mobile={mobile} />
       <div className="hall-overlay top">
         {head}
         <MeetingBanner onJoin={() => setMode('meeting')} />

@@ -1055,3 +1055,27 @@
   color: #8a8371;
   font-style: italic;
 }
+.msg.ai.err .bub {
+  background: #fcebeb;
+  color: #a32d2d;
+}
+.ask-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 6px 6px 6px 14px;
+  border: 1.5px solid var(--line, #eadfc6);
+  border-radius: 999px;
+  background: #fffdf7;
+}
+.ask-row input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 4px;
+  outline: none;
+}

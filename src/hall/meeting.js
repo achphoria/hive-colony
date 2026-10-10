@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useAuth, toAvatarProfile } from '../sim/auth';
 import { buildAnswer, speak } from './ai';
+import { askQueenBea } from './queenBea';
 import { connectVoice, disconnectVoice, setMic, startAudio, publish, startTranscribe, stopTranscribe, canTranscribe, roomStatus } from './voice';
 
 export const AI_GUESTS = [
@@ -56,7 +57,7 @@ const nowLabel = () => {
 };
 const pushNote = (note) => useMeeting.setState((s) => ({ notes: [...s.notes, note].slice(-8) }));
 
-const VOICE_RESET = { voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false, partials: {} };
+const VOICE_RESET = { chiefBusy: false, voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false, partials: {} };
 const myId = () => useAuth.getState().session?.user?.id;
 const inHall = () => window.location.hash.startsWith('#/hall');
 
@@ -205,7 +206,15 @@ export const useMeeting = create((set, get) => ({
     speakTimer = setTimeout(() => set({ speaking: null }), ms);
   },
 
-  askChief: (kind, voice) => {
+  chiefBusy: false,
+
+  // mode login: pertanyaan bebas ke Queen Bea (Claude) dengan transkrip rapat sebagai konteks.
+  // mode demo: jawaban contoh bergilir.
+  askChief: (kind, voice, question = '') => {
+    if (get().live) {
+      askChiefLive(question, voice);
+      return;
+    }
     const r = buildAnswer(kind);
     const shared = get().voice === 'on';
     get().say('me', r.q, 2500);
@@ -253,6 +262,32 @@ function subscribeChannel() {
     channelReady = status === 'SUBSCRIBED';
     if (channelReady && myMeta) ch.track(myMeta);
   });
+}
+
+/* ---------- Queen Bea (Claude) di meeting ---------- */
+
+async function askChiefLive(question, voice) {
+  const st = useMeeting.getState();
+  if (st.chiefBusy) return;
+  const q = question.trim() || 'Tolong ringkas rapat sejauh ini dan apa langkah berikutnya.';
+  const myName = useAuth.getState().account?.name || 'Saya';
+  const nameOf = (l) =>
+    l.name || (l.who === 'me' ? myName : l.who === 'ceo' ? 'Queen Bea' : st.people.find((p) => p.id === l.who)?.name || 'Peserta');
+  const transcript = st.transcript.filter((l) => l.who !== 'system').map((l) => ({ who: nameOf(l), text: l.text }));
+  st.addLine('me', `👑 ${q}`);
+  if (st.voice === 'on') publish({ t: 'tx', text: `👑 ${q}` });
+  useMeeting.setState({ chiefBusy: true });
+  try {
+    const reply = await askQueenBea({ mode: 'meeting', messages: [{ role: 'user', content: q }], transcript });
+    if (!useMeeting.getState().joined) return;
+    useMeeting.getState().say('ceo', reply, Math.min(16000, 2500 + reply.length * 60));
+    if (useMeeting.getState().voice === 'on') publish({ t: 'ai', who: 'ceo', text: reply });
+    if (voice) speak(reply);
+  } catch (e) {
+    useMeeting.getState().addLine('system', e.message);
+  } finally {
+    useMeeting.setState({ chiefBusy: false });
+  }
 }
 
 /* ---------- suara sungguhan (LiveKit) ---------- */

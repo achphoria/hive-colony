@@ -6,6 +6,7 @@ import { useHive } from '../sim/store';
 import { world } from '../sim/engine';
 import { outdoor } from '../sim/outdoor';
 import { useAuth } from '../sim/auth';
+import { useAi, modelLabel } from '../hall/queenBea';
 
 // jam WIB (desimal) dari timestamp database
 const wibHourOf = (iso) => {
@@ -84,17 +85,23 @@ export function useHallData(me) {
   const agentStates = useHive((s) => s.agentStates);
   const onlineStaff = useHive((s) => s.onlineStaff);
   const dbActivity = useHive((s) => s.dbActivity);
+  const planTasks = useHive((s) => s.planTasks);
   const account = useAuth((s) => s.account);
+  const ai = useAi();
+  const real = !!account; // mode real: hanya data sungguhan dari database
 
-  // aktivitas agent (simulasi) + aktivitas manusia (Supabase), terbaru di atas
-  const human = dbActivity.map((a) => ({ id: `db-${a.id}`, clock: wibHourOf(a.created_at), text: a.text, kind: 'human' }));
-  const merged = [...log.map((e) => ({ ...e, text: feedText(e) })), ...human].sort((a, b) => (b.clock ?? 0) - (a.clock ?? 0));
+  // mode real: aktivitas sungguhan saja (database, terbaru di atas)
+  // mode demo: aktivitas agent simulasi + aktivitas manusia
+  const human = dbActivity.map((a) => ({ id: `db-${a.id}`, at: new Date(a.created_at).getTime(), clock: wibHourOf(a.created_at), text: a.text, kind: 'human' }));
+  const merged = real ? human : [...log.map((e) => ({ ...e, text: feedText(e) })), ...human].sort((a, b) => (b.clock ?? 0) - (a.clock ?? 0));
   const feed = merged.slice(0, 6).map((e) => ({ id: e.id, t: hhmm(e.clock), text: e.text, kind: e.kind }));
 
   const pending = approvals.filter((a) => a.status === 'pending');
+  const openTasks = planTasks.filter((t) => t.col !== 'done');
   const open = [
     ...pending.map((a) => ({ title: a.title, sub: `${a.by} · tunggu Anda`, color: '#E24B4A' })),
-    ...[...missions]
+    ...(real ? openTasks.map((t) => ({ title: t.title, sub: `${t.who} · ${t.col === 'doing' ? 'jalan' : 'belum'}`, color: t.col === 'doing' ? '#F5B700' : '#C0C5CE' })) : []),
+    ...[...(real ? [] : missions)]
       .sort((a, b) => a.progress - b.progress)
       .map((m) => ({
         title: m.title,
@@ -107,17 +114,27 @@ export function useHallData(me) {
   const dow = (now.getUTCDay() + 6) % 7;
   const week = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + (i - dow) * 864e5));
   const wStart = dayStart(week[0]);
-  const events = demoEvents().filter((e) => e.ts >= wStart && e.ts < wStart + 7 * 864e5);
+  const events = real ? [] : demoEvents().filter((e) => e.ts >= wStart && e.ts < wStart + 7 * 864e5);
 
   const awake = Object.values(agentStates).filter((a) => a.state !== 'sleep').length;
-  const ticker = [
+  const aiOn = ai.status === 'on' ? 1 : 0;
+  const ticker = real
+    ? [
+        `${hhmm(stats.clock)} WIB`,
+        `Staff online ${onlineStaff.length + 1}`,
+        `Agent tersambung AI ${aiOn}/21`,
+        `Persetujuan menunggu ${pending.length}`,
+        `Tugas terbuka ${openTasks.length}`,
+        dbActivity.length ? `Aktivitas terakhir ${hhmm(wibHourOf(dbActivity[0].created_at))}` : 'Belum ada aktivitas',
+      ]
+    : [
     `${hhmm(stats.clock)} WIB`,
     `Madu ${stats.honey}`,
     `Misi selesai ${stats.done}`,
     `Misi berjalan ${missions.length}`,
     `Agent aktif ${awake}/21`,
     `Persetujuan menunggu ${pending.length}`,
-  ];
+      ];
 
   const online = account
     ? [
@@ -139,6 +156,10 @@ export function useHallData(me) {
 
   const skills = skillScores();
   const mover = [...skills].sort((a, b) => b.done - a.done)[0];
+  // mode real: panel "Agent AI" menggantikan skor skill simulasi
+  const aiAgents = [
+    { id: 'ceo', nick: 'Queen Bea', on: ai.status === 'on', model: ai.status === 'on' ? modelLabel(ai.model) : ai.status === 'unknown' ? 'memeriksa…' : 'belum tersambung' },
+  ];
 
-  return { feed, open, week, dow, events, ticker, online, skills: skills.slice(0, 5), mover, pending: pending.length };
+  return { real, feed, open, week, dow, events, ticker, online, skills: skills.slice(0, 5), mover, aiAgents, aiOn, pending: pending.length };
 }

@@ -108,6 +108,11 @@ export function MeetingView({ onLeave, onReport }) {
   };
   const kinds = ['kondisi', 'mendesak', 'race'];
   const askIdx = useRef(0);
+  const [question, setQuestion] = useState('');
+  const ask = () => {
+    m.askChief(kinds[askIdx.current++ % kinds.length], voice, question);
+    setQuestion('');
+  };
   const notInvited = AI_GUESTS.filter((a) => !m.aiGuests.includes(a.id));
   const talking = (id) => m.speaking === id || m.talking.includes(id);
   const badge = !m.live
@@ -135,7 +140,17 @@ export function MeetingView({ onLeave, onReport }) {
           <Tile name={`${myName} (Anda)`} sub={account ? ROLE_LABEL[account.role] : 'Anda'} color={profile?.outfitColor || '#4A6FA5'} speaking={talking('me')} muted={!m.mic} hand={m.hand} />
           {m.aiGuests.map((id) => {
             const a = AI_GUESTS.find((g) => g.id === id);
-            return <Tile key={id} name={a.name} sub={a.role} color={a.color} ai crown={a.crown} speaking={talking(id)} />;
+            return (
+              <Tile
+                key={id}
+                name={a.name}
+                sub={id === 'ceo' && m.live ? (m.chiefBusy ? 'Berpikir…' : 'Claude AI') : a.role}
+                color={a.color}
+                ai
+                crown={a.crown}
+                speaking={talking(id) || (id === 'ceo' && m.chiefBusy)}
+              />
+            );
           })}
           {m.people.map((p) => (
             <Tile
@@ -148,7 +163,7 @@ export function MeetingView({ onLeave, onReport }) {
               hand={m.hands.includes(p.id)}
             />
           ))}
-          {notInvited.length > 0 && (
+          {!m.live && notInvited.length > 0 && (
             <button className="mtile invite" onClick={() => setPicker(!picker)}>
               <div className="mtile-av">＋</div>
               <b>Undang AI</b>
@@ -210,6 +225,24 @@ export function MeetingView({ onLeave, onReport }) {
           </div>
         </aside>
       </div>
+      {m.live && (
+        <form
+          className="ask-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            ask();
+          }}
+        >
+          <span aria-hidden="true">👑</span>
+          <input
+            value={question}
+            maxLength={300}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={m.chiefBusy ? 'Queen Bea sedang berpikir…' : 'Tanya Queen Bea… (kosongkan untuk minta ringkasan rapat)'}
+            disabled={m.chiefBusy}
+          />
+        </form>
+      )}
       <div className="meet-bar">
         <button className={`hbtn${m.mic ? ' pri' : ''}`} onClick={m.toggleMic} aria-label={m.mic ? 'Matikan mic' : 'Nyalakan mic'}>
           {m.mic ? '🎙' : '🔇'}
@@ -218,8 +251,9 @@ export function MeetingView({ onLeave, onReport }) {
         <button className={`hbtn${m.hand ? ' pri' : ''}`} onClick={m.toggleHand} aria-label="Angkat tangan">
           ✋<span className="lbl"> Angkat tangan</span>
         </button>
-        <button className="hbtn pri main" onClick={() => m.askChief(kinds[askIdx.current++ % kinds.length], voice)}>
-          👑 Tanya<span className="lbl"> Queen Bea</span>
+        <button className="hbtn pri main" onClick={ask} disabled={m.chiefBusy}>
+          👑 {m.chiefBusy ? 'Berpikir…' : 'Tanya'}
+          <span className="lbl">{m.chiefBusy ? '' : ' Queen Bea'}</span>
         </button>
         <button className={`hbtn${voice ? ' pri' : ''}`} onClick={() => setVoice(!voice)} aria-label="Suara AI">
           {voice ? '🔊' : '🔈'}
@@ -234,7 +268,7 @@ export function MeetingView({ onLeave, onReport }) {
       </div>
       <p className="demo-note">
         {m.live
-          ? 'Suara antar-peserta tersambung lewat LiveKit. Transkrip dibuat pengenal suara browser tiap peserta (paling akurat di Chrome/Edge); pakai headset agar suara orang lain tidak ikut tertranskrip. Jawaban Queen Bea masih versi demo.'
+          ? 'Suara antar-peserta tersambung lewat LiveKit. Transkrip dibuat pengenal suara browser tiap peserta (paling akurat di Chrome/Edge); pakai headset agar suara orang lain tidak ikut tertranskrip. Queen Bea dijawab Claude dan membaca transkrip rapat.'
           : 'Mode demo: suara dan transkrip disimulasikan. Login sebagai staff untuk meeting dengan suara sungguhan.'}
       </p>
     </div>

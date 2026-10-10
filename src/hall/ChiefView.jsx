@@ -1,10 +1,11 @@
 // Ngobrol dengan Chief (Queen Bea): mode chat (teks + lampiran file apa pun) dan mode suara.
 // Mode suara memakai pengenal suara bawaan browser (Web Speech API) dan suara browser untuk jawaban.
-// Jawaban masih versi demo; AI sungguhan disambungkan di fase berikutnya.
+// Staff yang login: jawaban dari Claude (lihat queenBea.js). Tanpa login: jawaban demo.
 import { useEffect, useRef, useState } from 'react';
 import { chiefReply, speak, stopSpeaking } from './ai';
 import { useAuth } from '../sim/auth';
 import { useHive } from '../sim/store';
+import { askQueenBea, useAi, modelLabel } from './queenBea';
 
 const STORE_KEY = 'hive.chiefChat';
 const WELCOME = {
@@ -99,7 +100,7 @@ function ChatMode({ msgs, send, busy }) {
               ))}
             </div>
           ) : (
-            <div key={m.id} className="msg ai">
+            <div key={m.id} className={`msg ai${m.error ? ' err' : ''}`}>
               <div className="qb">👑</div>
               <div className="bub">
                 <p>{m.text}</p>
@@ -276,17 +277,39 @@ export function ChiefView() {
   const [busy, setBusy] = useState(false);
   const account = useAuth((s) => s.account);
   const profile = useHive((s) => s.profile);
+  const ai = useAi();
+  const live = !!account;
 
   useEffect(() => saveChat(msgs), [msgs]);
 
-  const send = (text, files) => {
+  const reply = (text, extra = {}) => setMsgs((m) => [...m, { id: `a${Date.now()}`, from: 'ceo', text, files: [], ...extra }]);
+
+  const send = async (text, files) => {
     const mine = { id: `m${Date.now()}`, from: 'me', text, files };
-    setMsgs((m) => [...m, mine]);
+    const next = [...msgs, mine];
+    setMsgs(next);
     setBusy(true);
-    setTimeout(() => {
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, from: 'ceo', text: chiefReply(text, files), files: [] }]);
+    if (!live) {
+      setTimeout(() => {
+        reply(chiefReply(text, files));
+        setBusy(false);
+      }, 1100 + Math.random() * 700);
+      return;
+    }
+    // riwayat untuk Claude: tanpa salam pembuka dan pesan galat; lampiran disebut namanya saja
+    const history = next
+      .filter((m) => m.id !== 'w' && !m.error)
+      .map((m) => ({
+        role: m.from === 'me' ? 'user' : 'assistant',
+        content: [m.text, ...m.files.map((f) => `[Lampiran: ${f.name}, ${fmtSize(f.size)}; isinya belum bisa dibaca]`)].filter(Boolean).join('\n'),
+      }));
+    try {
+      reply(await askQueenBea({ messages: history }));
+    } catch (e) {
+      reply(e.message, { error: true });
+    } finally {
       setBusy(false);
-    }, 1100 + Math.random() * 700);
+    }
   };
   const lastReply = [...msgs].reverse().find((m) => m.from === 'ceo')?.text || '';
 
@@ -302,7 +325,7 @@ export function ChiefView() {
           </button>
         </div>
         <span className="muted">
-          {account?.name || profile?.name || 'Anda'} ↔ Queen Bea · mode demo
+          {account?.name || profile?.name || 'Anda'} ↔ Queen Bea · {live ? (ai.status === 'off' ? 'AI belum tersambung' : modelLabel(ai.model)) : 'mode demo'}
         </span>
       </div>
       <div className="chief-box">
@@ -312,7 +335,11 @@ export function ChiefView() {
           <VoiceMode send={send} lastReply={lastReply} busy={busy} onChat={() => setMode('chat')} />
         )}
       </div>
-      <p className="demo-note">Jawaban Queen Bea masih versi demo berbasis data koloni. Analisis isi file dan jawaban AI sungguhan disambungkan di fase berikutnya.</p>
+      <p className="demo-note">
+        {live
+          ? 'Queen Bea dijawab Claude dengan data koloni asli dari database. Isi file lampiran belum bisa dibaca; itu menyusul di fase berikutnya.'
+          : 'Mode demo: jawaban Queen Bea contoh. Login sebagai staff untuk ngobrol dengan Queen Bea versi AI (Claude).'}
+      </p>
     </div>
   );
 }
