@@ -167,6 +167,138 @@ function Brand() {
   );
 }
 
+/* ---------- HP: header ringkas + panel akun ---------- */
+
+function ClockCompact() {
+  const clock = useHive((s) => s.stats.clock ?? 8);
+  const night = isNightHour(clock);
+  const hh = String(Math.floor(clock)).padStart(2, '0');
+  const mm = String(Math.floor((clock % 1) * 60)).padStart(2, '0');
+  return (
+    <div className={`clock-mini${night ? ' is-night' : ''}`} title={`${dayPhase(clock)} · Jakarta`}>
+      <span aria-hidden="true">{night ? '☾' : '☀'}</span>
+      <b>
+        {hh}:{mm}
+      </b>
+      <small>WIB</small>
+    </div>
+  );
+}
+
+function AvatarButton({ onClick }) {
+  const account = useAuth((s) => s.account);
+  const profile = useHive((s) => s.profile);
+  const label = account?.name || profile?.name || '';
+  return (
+    <button
+      className={`avatar-btn${account ? ' in' : ''}`}
+      onClick={onClick}
+      aria-label={account ? `Akun ${label}` : 'Masuk atau atur akun'}
+      style={{ '--c': profile?.outfitColor || '#FFF8E7' }}
+    >
+      {label ? initialsOf(label) : '☰'}
+    </button>
+  );
+}
+
+function initialsOf(name) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function MobileBrand({ onAvatar }) {
+  return (
+    <header className="panel brand mobile-brand">
+      <Logo />
+      <h1>Hive Colony</h1>
+      <ClockCompact />
+      <AvatarButton onClick={onAvatar} />
+    </header>
+  );
+}
+
+function AccountPanel({ onPick }) {
+  const ready = useAuth((s) => s.ready);
+  const account = useAuth((s) => s.account);
+  const session = useAuth((s) => s.session);
+  const signOut = useAuth((s) => s.signOut);
+  const profile = useHive((s) => s.profile);
+  const online = useHive((s) => s.onlineStaff.length);
+  const nav = (path) => {
+    onPick?.();
+    go(path);
+  };
+  return (
+    <div className="acct-panel">
+      {ready && account ? (
+        <div className="acct-card">
+          <div className="acct-avatar" style={{ '--c': profile?.outfitColor || '#FFB020' }}>
+            {initialsOf(account.name || 'A')}
+          </div>
+          <div>
+            <b>{account.name}</b>
+            <span>
+              {ROLE_LABEL[account.role]} · {DEPTS[account.primary_dept]?.short}
+            </span>
+            <span>{online} rekan online</span>
+          </div>
+        </div>
+      ) : (
+        <div className="acct-card">
+          <div className="acct-avatar">?</div>
+          <div>
+            <b>Mode demo</b>
+            <span>{session ? 'Masukkan kode undangan untuk aktif' : 'Masuk supaya avatar tersimpan dan terlihat rekan'}</span>
+          </div>
+        </div>
+      )}
+      <div className="acct-actions">
+        {!session && (
+          <button className="acct-btn" onClick={() => nav('/login')}>
+            Masuk
+          </button>
+        )}
+        {session && !account && (
+          <button className="acct-btn" onClick={() => nav('/join')}>
+            Pakai kode undangan
+          </button>
+        )}
+        <button className="acct-btn ghost" onClick={() => nav('/avatar')}>
+          {profile ? 'Ubah avatar' : 'Buat avatar'}
+        </button>
+        <button className="acct-btn ghost" onClick={() => nav('/hall')}>
+          Hive Hall
+        </button>
+        {account && ['owner', 'lead'].includes(account.role) && (
+          <button className="acct-btn ghost" onClick={() => nav('/undang')}>
+            Undang staff
+          </button>
+        )}
+        {session && (
+          <button
+            className="acct-btn ghost danger"
+            onClick={() => {
+              onPick?.();
+              signOut();
+            }}
+          >
+            Keluar
+          </button>
+        )}
+      </div>
+      <div className="acct-row">
+        <span>Musik latar</span>
+        <SoundToggle />
+      </div>
+    </div>
+  );
+}
+
 function FloorSwitch({ onPick }) {
   const floor = useHive((s) => s.floor);
   const setFloor = (f) => {
@@ -421,7 +553,7 @@ function RoomCard() {
   );
 }
 
-function useIsMobile() {
+export function useIsMobile() {
   const query = '(max-width: 760px)';
   const [mobile, setMobile] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -487,7 +619,7 @@ function MobileHUD() {
   const close = () => setDrawer(null);
   return (
     <div className="hud is-mobile">
-      <Brand />
+      <MobileBrand onAvatar={() => setDrawer('akun')} />
       <button className="edge-tab edge-menu" onClick={() => setDrawer('menu')} aria-label="Buka menu lantai dan agent">
         <LayersIcon />
         <span>Menu</span>
@@ -508,6 +640,15 @@ function MobileHUD() {
         <FloorSwitch onPick={close} />
         <Controls className="controls controls-inline" onPick={close} />
         <Directory defaultOpen onPick={close} />
+      </aside>
+      <aside className={`drawer drawer-missions${drawer === 'akun' ? ' open' : ''}`} aria-hidden={drawer !== 'akun'}>
+        <div className="drawer-head">
+          <h2>Akun</h2>
+          <button className="close" onClick={close} aria-label="Tutup panel akun">
+            ×
+          </button>
+        </div>
+        <AccountPanel onPick={close} />
       </aside>
       <aside className={`drawer drawer-missions${drawer === 'missions' ? ' open' : ''}`} aria-hidden={drawer !== 'missions'}>
         <div className="drawer-head">

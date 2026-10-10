@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { AGENT_BY_ID, DEPTS } from '../data/hive';
 import { DEMO_STAFF, DEFAULT_PROFILE } from '../data/staff';
 import { useHive } from '../sim/store';
-import { HallScene, DEFAULT_VIEW } from '../scene/HallScene';
+import { HallScene, DEFAULT_VIEW, DEFAULT_VIEW_MOBILE } from '../scene/HallScene';
 import { cut, MONTH, wibNow, dayStart, demoEvents, useHallData } from './hallData';
-import { SoundToggle } from './HUD';
+import { SoundToggle, useIsMobile } from './HUD';
+import { DAY } from './hallData';
 import { go } from './nav';
 import { useAuth } from '../sim/auth';
 import { decideApproval, advanceTask } from '../sim/hallSync';
@@ -247,11 +248,89 @@ function Approvals() {
   );
 }
 
+/* ---------- HP: isi layar dinding sebagai kartu geser ---------- */
+
+function MobileScreens({ data }) {
+  return (
+    <div className="mscreens" role="list" aria-label="Layar dinding Hive Hall">
+      <section className="mcard" role="listitem">
+        <div className="ws-head gold">
+          <i className="live" /> Aktivitas live
+        </div>
+        <div className="mcard-body">
+          {data.feed.length === 0 && <p className="ws-empty">Menunggu aktivitas pertama…</p>}
+          {data.feed.slice(0, 4).map((f) => (
+            <div key={f.id} className="mrow">
+              <span className="t">{f.t}</span>
+              <span>{cut(f.text, 40)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="mcard" role="listitem">
+        <div className="ws-head amber">Belum selesai · {data.open.length}</div>
+        <div className="mcard-body">
+          {data.open.length === 0 && <p className="ws-empty ok">Semua beres</p>}
+          {data.open.slice(0, 3).map((o, i) => (
+            <div key={i} className="mrow task" style={{ '--c': o.color }}>
+              <b>{cut(o.title, 34)}</b>
+              <small>{o.sub}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="mcard" role="listitem">
+        <div className="ws-head gold">Kalender minggu ini</div>
+        <div className="mcard-body">
+          {data.events.length === 0 && <p className="ws-empty">Belum ada agenda minggu ini</p>}
+          {data.events.slice(0, 4).map((e) => {
+            const d = new Date(e.ts);
+            return (
+              <div key={e.title} className={`mrow ev${e.big ? ' big' : ''}`} style={{ '--c': e.color }}>
+                {DAY[d.getUTCDay()]} {d.getUTCDate()} · {e.title}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      <section className="mcard" role="listitem">
+        <div className="ws-head blue">Online · {data.online.length}</div>
+        <div className="mcard-body">
+          {data.online.slice(0, 4).map((o) => (
+            <div key={o.name} className="mrow person">
+              <i style={{ background: o.color }} />
+              <span>{cut(o.name, 22)}</span>
+              <small className={o.here ? 'here' : ''}>{o.where}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="mcard" role="listitem">
+        <div className="ws-head green">Skor skill agent</div>
+        <div className="mcard-body">
+          {data.skills.slice(0, 4).map((k) => (
+            <div key={k.id} className="mrow skill">
+              <span>{k.nick}</span>
+              <div className="sbar">
+                <i style={{ width: `${k.score}%`, background: k.score >= 85 ? '#F5B700' : '#FF8C1A' }} />
+              </div>
+              <b>{k.score}</b>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 /* ---------- halaman ---------- */
 
 export function HallView() {
   const [tab, setTab] = useState('rapat');
-  const [view, setView] = useState(DEFAULT_VIEW);
+  const mobile = useIsMobile();
+  const baseView = mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW;
+  const [view, setView] = useState(baseView);
+  useEffect(() => setView(baseView), [mobile]); // eslint-disable-line react-hooks/exhaustive-deps
   const profile = useHive((s) => s.profile);
   const me = profile || { ...DEFAULT_PROFILE, name: 'Anda' };
   const account = useAuth((s) => s.account);
@@ -270,8 +349,8 @@ export function HallView() {
 
   const head = (
     <div className="hall-head">
-      <button className="back" onClick={() => go('/')}>
-        ← Koloni
+      <button className="back" onClick={() => go('/')} aria-label="Kembali ke koloni">
+        ← <span className="lbl">Koloni</span>
       </button>
       <div className="hall-title">
         <h1>Hive Hall</h1>
@@ -303,14 +382,15 @@ export function HallView() {
 
   return (
     <div className="hall3d">
-      <HallScene data={data} me={me} dina={dina} call={call} view={view} setView={setView} />
+      <HallScene data={data} me={me} dina={dina} call={call} view={view} setView={setView} mobile={mobile} />
       <div className="hall-overlay top">{head}</div>
       {zoomed && (
-        <button className="hbtn pri zoom-back" onClick={() => setView(DEFAULT_VIEW)}>
+        <button className="hbtn pri zoom-back" onClick={() => setView(baseView)}>
           ← Lihat seluruh ruangan
         </button>
       )}
       <div className="hall-overlay bottom">
+        {mobile && <MobileScreens data={data} />}
         <div className="caption">
           {call.caption || 'Tekan "Panggil Queen Bea" untuk bertanya. Klik layar di dinding untuk memperbesar.'}
         </div>
@@ -334,17 +414,27 @@ export function HallView() {
           ))}
         </div>
         <div className="hall-row center">
-          <button className={`hbtn${call.mic ? ' pri' : ''}`} onClick={() => setCall((c) => ({ ...c, mic: !c.mic, speaker: null }))}>
-            {call.mic ? '🎙 Mic nyala' : '🔇 Mic mati'}
+          <button
+            className={`hbtn${call.mic ? ' pri' : ''}`}
+            onClick={() => setCall((c) => ({ ...c, mic: !c.mic, speaker: null }))}
+            aria-label={call.mic ? 'Matikan mic' : 'Nyalakan mic'}
+          >
+            {call.mic ? '🎙' : '🔇'}
+            <span className="lbl">{call.mic ? ' Mic nyala' : ' Mic mati'}</span>
           </button>
-          <button className="hbtn pri" onClick={ask}>
-            👑 Panggil Queen Bea
+          <button className="hbtn pri main" onClick={ask}>
+            👑 Panggil<span className="lbl"> Queen Bea</span>
           </button>
-          <button className={`hbtn${call.voice ? ' pri' : ''}`} onClick={() => setCall((c) => ({ ...c, voice: !c.voice }))}>
-            {call.voice ? '🔊 Suara AI nyala' : '🔈 Suara AI mati'}
+          <button
+            className={`hbtn${call.voice ? ' pri' : ''}`}
+            onClick={() => setCall((c) => ({ ...c, voice: !c.voice }))}
+            aria-label={call.voice ? 'Matikan suara AI' : 'Nyalakan suara AI'}
+          >
+            {call.voice ? '🔊' : '🔈'}
+            <span className="lbl">{call.voice ? ' Suara AI nyala' : ' Suara AI mati'}</span>
           </button>
-          <button className="hbtn danger" onClick={() => go('/')}>
-            Keluar
+          <button className="hbtn danger" onClick={() => go('/')} aria-label="Keluar dari Hive Hall">
+            ✕<span className="lbl"> Keluar</span>
           </button>
         </div>
       </div>

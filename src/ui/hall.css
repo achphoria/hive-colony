@@ -771,3 +771,173 @@
   border-radius: 10px;
   background: #fcebeb;
 }
+
+/* ---------- Hive Hall di HP (revamp) ---------- */
+.mscreens {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 2px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.mscreens::-webkit-scrollbar {
+  display: none;
+}
+.mcard {
+  flex: 0 0 82%;
+  scroll-snap-align: center;
+  background: #fffdf7;
+  border: 1.5px solid #c98a00;
+  border-radius: 14px;
+  overflow: hidden;
+  min-height: 132px;
+  box-shadow: 0 6px 18px rgba(138, 90, 0, 0.18);
+}
+.mcard .ws-head {
+  font-size: 15px;
+  padding: 7px 12px;
+}
+.mcard-body {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mcard .ws-empty {
+  margin: 0;
+  font-size: 13px;
+}
+.mrow {
+  font-size: 13px;
+  line-height: 1.35;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.mrow .t {
+  color: #8a6a3a;
+  flex: none;
+}
+.mrow.task {
+  flex-direction: column;
+  gap: 0;
+  border-left: 4px solid var(--c);
+  padding-left: 8px;
+}
+.mrow.task small {
+  font-size: 11.5px;
+  color: #8a6a3a;
+}
+.mrow.ev {
+  border-left: 4px solid var(--c);
+  padding-left: 8px;
+}
+.mrow.ev.big {
+  background: #ffe2c2;
+  color: #993c1d;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.mrow.person {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+}
+.mrow.person i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.mrow.person small {
+  font-size: 11.5px;
+  color: #854f0b;
+}
+.mrow.person small.here {
+  color: #3b6d11;
+  font-weight: 700;
+}
+.mrow.skill {
+  display: grid;
+  grid-template-columns: 64px 1fr 26px;
+  align-items: center;
+}
+.mrow.skill b {
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  /* header dua baris: [kembali] [judul] [speaker] / [tab penuh] */
+  .hall-overlay.top .hall-head,
+  .hall-page .hall-head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'back title sound' 'tabs tabs tabs';
+    gap: 8px;
+    align-items: center;
+  }
+  .hall-head .back {
+    grid-area: back;
+    padding: 6px 12px;
+  }
+  .hall-head .back .lbl {
+    display: none;
+  }
+  .hall-head .hall-title {
+    grid-area: title;
+    min-width: 0;
+  }
+  .hall-head .hall-title h1 {
+    font-size: 18px;
+    white-space: nowrap;
+  }
+  .hall-head .hall-title p {
+    display: none;
+  }
+  .hall-head .sound-toggle {
+    grid-area: sound;
+  }
+  .hall-head .hall-tabs {
+    grid-area: tabs;
+    width: 100%;
+    margin: 0;
+  }
+  .hall-head .hall-tabs button {
+    flex: 1 0 auto;
+    padding: 6px 10px;
+    font-size: 12.5px;
+  }
+  /* kontrol bawah: ikon ringkas dalam satu baris */
+  .hall-overlay .hall-row.center {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .hall-overlay .hbtn .lbl {
+    display: none;
+  }
+  .hall-overlay .hbtn {
+    min-width: 46px;
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+  .hall-overlay .hbtn.main {
+    flex: 1;
+    font-size: 14px;
+  }
+  .hall-overlay.bottom .caption {
+    font-size: 12.5px;
+    padding: 8px 12px;
+    max-height: 64px;
+    overflow-y: auto;
+  }
+  /* label nama: hanya Queen Bea dan Anda supaya tidak menumpuk */
+  .seat-tag.ai:not(.ceo),
+  .seat-tag.human:not(.me) {
+    display: none;
+  }
+  .zoom-back {
+    top: 104px;
+    bottom: auto;
+  }
+}

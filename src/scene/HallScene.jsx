@@ -11,6 +11,8 @@ import { DAY, cut } from '../ui/hallData';
 
 const SEAT_R = 2.9;
 const DEFAULT_VIEW = { target: [0, 2.4, -2.4], pos: [0, 5.0, 9.9] };
+// HP (layar tegak): fokus ke meja dan Queen Bea; isi layar dinding dibaca lewat kartu geser
+const DEFAULT_VIEW_MOBILE = { target: [0, 0.55, -0.9], pos: [0, 4.3, 8.6] };
 
 function seat(deg) {
   const a = (deg * Math.PI) / 180;
@@ -212,18 +214,33 @@ function Ticker({ data }) {
   );
 }
 
+// Di HP isi layar dinding tampil sebagai kartu geser; dinding cukup diberi bingkai dekoratif
+function MobileWallArt() {
+  return (
+    <group position={[0, 3.6, -5.95]}>
+      {[-4.5, 0, 4.5].map((x) => (
+        <group key={x} position={[x, 0, 0]}>
+          <Box p={[0, 0, -0.06]} s={[4.45, 3.55, 0.12]} m={M.royal} />
+          <Box p={[0, 0, 0.01]} s={[4.25, 3.35, 0.02]} m={M.cream} shadow={false} />
+          <Box p={[0, 1.45, 0.03]} s={[4.25, 0.45, 0.02]} m={x === 4.5 ? M.amber : M.gold} shadow={false} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 /* ---------- kamera ---------- */
 
-function HallCamera({ view }) {
+function HallCamera({ view, mobile }) {
   const { camera, controls } = useThree();
   const anim = useRef(null);
   useEffect(() => {
     // layar tegak (HP) butuh kamera lebih mundur
-    const fit = Math.max(1, 0.85 / camera.aspect);
+    const fit = mobile ? 1 : Math.max(1, 0.85 / camera.aspect);
     const t = new THREE.Vector3(...view.target);
     const p = new THREE.Vector3(...view.pos).sub(t).multiplyScalar(fit).add(t);
     anim.current = { t, p, time: 0 };
-  }, [view, camera]);
+  }, [view, camera, mobile]);
   useEffect(() => {
     if (!controls) return;
     const stop = () => (anim.current = null);
@@ -292,7 +309,7 @@ function Stool({ deg }) {
 
 /* ---------- scene ---------- */
 
-export function HallScene({ data, me, dina, call, view, setView }) {
+export function HallScene({ data, me, dina, call, view, setView, mobile = false }) {
   const focus = (target, distance) => setView({ target, pos: [target[0], target[1] + 0.3, target[2] + distance], zoomed: true });
   const ceoSpeaking = call.speaker === 'ceo';
   const ceoThinking = call.speaker === 'thinking';
@@ -308,7 +325,11 @@ export function HallScene({ data, me, dina, call, view, setView }) {
   const bee = (deg) => seat(deg);
 
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: DEFAULT_VIEW.pos, fov: 38, near: 0.1, far: 200 }}>
+    <Canvas
+      shadows
+      dpr={[1, 2]}
+      camera={{ position: (mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW).pos, fov: mobile ? 52 : 38, near: 0.1, far: 200 }}
+    >
       <color attach="background" args={['#FFF3D6']} />
       <hemisphereLight args={['#FFF8E7', '#C98A00', 0.85]} />
       <ambientLight intensity={0.35} />
@@ -330,6 +351,8 @@ export function HallScene({ data, me, dina, call, view, setView }) {
         <Stool key={s.deg} deg={s.deg} />
       ))}
 
+      {!mobile && (
+        <>
       <FeedScreen data={data} onFocus={() => focus([-4.5, 3.65, -5.9], 7.2)} />
       <CalendarScreen data={data} onFocus={() => focus([0, 3.65, -5.9], 7.2)} />
       <OpenScreen data={data} onFocus={() => focus([4.5, 3.65, -5.9], 7.2)} />
@@ -363,6 +386,10 @@ export function HallScene({ data, me, dina, call, view, setView }) {
         </div>
       </Screen>
 
+        </>
+      )}
+      {mobile && <MobileWallArt />}
+
       {/* peserta: manusia di kiri, AI melingkar ke kanan, Queen Bea di tengah */}
       {dina && <HumanSeat who={dina.name} profile={dina} deg={-80} />}
       <HumanSeat who="me" profile={me} deg={-53} speaking={call.speaker === 'me'} muted={!call.mic} />
@@ -381,7 +408,7 @@ export function HallScene({ data, me, dina, call, view, setView }) {
 
       <OrbitControls
         makeDefault
-        target={DEFAULT_VIEW.target}
+        target={(mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW).target}
         enableDamping
         dampingFactor={0.08}
         minDistance={3.5}
@@ -391,9 +418,9 @@ export function HallScene({ data, me, dina, call, view, setView }) {
         minAzimuthAngle={-0.75}
         maxAzimuthAngle={0.75}
       />
-      <HallCamera view={view} />
+      <HallCamera view={view} mobile={mobile} />
     </Canvas>
   );
 }
 
-export { DEFAULT_VIEW };
+export { DEFAULT_VIEW, DEFAULT_VIEW_MOBILE };
