@@ -1040,3 +1040,13 @@
     font-size: 11px;
   }
 }
+
+.hall-activate {
+  display: block;
+  margin-top: 1px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #a32d2d;
+  text-align: left;
+}

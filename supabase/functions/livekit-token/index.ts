@@ -39,13 +39,16 @@ Deno.serve(async (req) => {
   const secret = Deno.env.get('LIVEKIT_API_SECRET');
   if (!url || !key || !secret) return json({ error: 'livekit_not_configured' }, 500);
 
-  // Pastikan yang meminta adalah staff yang login (pakai sesi Supabase miliknya, tunduk RLS)
+  // Pastikan yang meminta adalah staff yang login (pakai sesi Supabase miliknya, tunduk RLS).
+  // Token diperiksa langsung ke Supabase Auth, jadi berlaku untuk kunci JWT lama maupun baru.
   const auth = req.headers.get('Authorization') ?? '';
+  const jwt = auth.replace(/^Bearer\s+/i, '');
+  if (!jwt) return json({ error: 'not_logged_in' }, 401);
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: auth } },
-    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userErr } = await sb.auth.getUser();
+  const { data: userData, error: userErr } = await sb.auth.getUser(jwt);
   if (userErr || !userData?.user) return json({ error: 'not_logged_in' }, 401);
   const uid = userData.user.id;
 

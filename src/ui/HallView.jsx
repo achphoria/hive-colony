@@ -350,6 +350,7 @@ export function HallView() {
   const profile = useHive((s) => s.profile);
   const me = profile || { ...DEFAULT_PROFILE, name: 'Anda' };
   const account = useAuth((s) => s.account);
+  const session = useAuth((s) => s.session);
   const onlineStaff = useHive((s) => s.onlineStaff);
   const mate = onlineStaff.find((o) => o.page === '/hall') || onlineStaff[0];
   const dina = account ? (mate ? { ...mate.profile, name: mate.name } : null) : DEMO_STAFF[0];
@@ -397,7 +398,13 @@ export function HallView() {
       </button>
       <div className="hall-title">
         <h1>{mode !== 'lobby' && tab === 'lobi' ? VIEW_TITLE[mode] : 'Hive Hall'}</h1>
-        <p>{account ? 'Tersambung ke database' : 'Mode demo'}</p>
+        {!account && session ? (
+          <button className="link-btn hall-activate" onClick={() => go('/join')}>
+            Akun belum aktif · masukkan kode undangan
+          </button>
+        ) : (
+          <p>{account ? 'Tersambung ke database' : 'Mode demo'}</p>
+        )}
       </div>
       <div className="hall-tabs" role="tablist">
         {tabs.map(([id, label]) => (

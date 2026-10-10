@@ -96,7 +96,7 @@ export function LoginPage() {
 }
 
 export function JoinPage() {
-  const { session, account, signUpWithInvite, acceptInvite } = useAuth();
+  const { session, account, signUpWithInvite, acceptInvite, inviteError, signOut } = useAuth();
   const [code, setCode] = useState(queryParam('code'));
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -108,6 +108,9 @@ export function JoinPage() {
   useEffect(() => {
     if (session && account) go('/avatar');
   }, [session, account]);
+  useEffect(() => {
+    if (inviteError) setError(inviteError);
+  }, [inviteError]);
 
   if (sent) {
     return (
@@ -149,7 +152,14 @@ export function JoinPage() {
   };
 
   return (
-    <Shell title="Gabung ke Hive Colony" sub="Divisi dan peranmu sudah ditentukan admin lewat kode undangan.">
+    <Shell
+      title={loggedInNoProfile ? 'Aktifkan akun kamu' : 'Gabung ke Hive Colony'}
+      sub={
+        loggedInNoProfile
+          ? `Kamu sudah login sebagai ${session.user.email}, tapi akun ini belum terhubung ke undangan Hive Colony. Masukkan kode undangan dari admin.`
+          : 'Divisi dan peranmu sudah ditentukan admin lewat kode undangan.'
+      }
+    >
       <form onSubmit={submit} className="auth-form">
         <label>
           Kode undangan
@@ -176,7 +186,11 @@ export function JoinPage() {
           {busy ? 'Memproses…' : loggedInNoProfile ? 'Pakai kode undangan' : 'Daftar'}
         </button>
       </form>
-      {!loggedInNoProfile && (
+      {loggedInNoProfile ? (
+        <p className="auth-foot">
+          Salah akun? <button className="link-btn" onClick={signOut}>Keluar dan pakai email lain</button>
+        </p>
+      ) : (
         <p className="auth-foot">
           Sudah punya akun? <button className="link-btn" onClick={() => go('/login')}>Masuk</button>
         </p>

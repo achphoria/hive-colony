@@ -35,6 +35,8 @@ const errText = (e) => {
   if (/Email not confirmed/i.test(m)) return 'Email belum dikonfirmasi. Cek kotak masuk email kamu.';
   if (/already registered/i.test(m)) return 'Email ini sudah terdaftar. Silakan masuk.';
   if (/Password should be/i.test(m)) return 'Password minimal 6 karakter.';
+  if (/untuk email lain/i.test(m))
+    return 'Undangan ini dikunci untuk alamat email lain. Daftar memakai email yang diundang, atau minta admin membuat undangan baru untuk email kamu.';
   return m;
 };
 
@@ -43,6 +45,7 @@ export const useAuth = create((set, get) => ({
   session: null,
   account: null, // baris hc_profiles
   needsInvite: false,
+  inviteError: '', // alasan kode undangan tertunda ditolak (mis. email berbeda)
 
   init: async () => {
     const { data } = await supabase.auth.getSession();
@@ -53,7 +56,7 @@ export const useAuth = create((set, get) => ({
       const had = get().session?.user?.id;
       set({ session });
       if (!session) {
-        set({ account: null, needsInvite: false });
+        set({ account: null, needsInvite: false, inviteError: '' });
         return;
       }
       if (session.user.id !== had) get().loadAccount();
@@ -76,13 +79,16 @@ export const useAuth = create((set, get) => ({
         get().applyAccount(prof);
         return prof;
       }
+      writePending(null); // kode ini sudah dicoba; alasannya ditampilkan di halaman gabung
+      set({ needsInvite: true, account: null, inviteError: errText(error || 'Kode undangan tidak valid atau sudah dipakai.') });
+      return null;
     }
     set({ needsInvite: true, account: null });
     return null;
   },
 
   applyAccount: (row) => {
-    set({ account: row, needsInvite: false });
+    set({ account: row, needsInvite: false, inviteError: '' });
     const profile = toAvatarProfile(row);
     useHive.getState().setProfile(profile);
     upsertWalker(profile);
@@ -109,7 +115,7 @@ export const useAuth = create((set, get) => ({
     if (!data.session) return { confirmEmail: true };
     set({ session: data.session });
     const prof = await get().loadAccount();
-    if (!prof) throw new Error('Kode undangan tidak valid atau sudah dipakai.');
+    if (!prof) throw new Error(get().inviteError || 'Kode undangan tidak valid atau sudah dipakai.');
     return { confirmEmail: false };
   },
 
@@ -137,6 +143,6 @@ export const useAuth = create((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ session: null, account: null, needsInvite: false });
+    set({ session: null, account: null, needsInvite: false, inviteError: '' });
   },
 }));
