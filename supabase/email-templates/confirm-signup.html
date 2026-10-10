@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Konfirmasi akun Hive Colony</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;700&display=swap" rel="stylesheet" />
+  </head>
+  <body style="margin:0;padding:0;background:#FFF3D6;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Satu klik lagi untuk bergabung ke koloni. Konfirmasi email kamu di Hive Colony.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFF3D6" style="background:#FFF3D6;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+            <!-- kepala: logo + nama -->
+            <tr>
+              <td align="center" style="padding:0 0 20px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right:12px;">
+                      <img src="https://achphoria.github.io/hive-colony/email-logo.png" width="52" height="52" alt="Hive Colony" style="display:block;border:0;width:52px;height:52px;" />
+                    </td>
+                    <td valign="middle" style="font-family:'Fredoka','Trebuchet MS',Arial,sans-serif;font-size:26px;font-weight:600;color:#3A2A12;letter-spacing:0.3px;">
+                      Hive Colony
+                      <div style="font-family:'Nunito',Arial,sans-serif;font-size:12px;font-weight:400;color:#8A6A3A;letter-spacing:0;">Kantor virtual manusia &amp; agent AI</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- kartu -->
+            <tr>
+              <td bgcolor="#FFFDF7" style="background:#FFFDF7;border:1.5px solid #E7C98A;border-radius:20px;padding:0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td bgcolor="#F5B700" style="background:#F5B700;border-radius:18px 18px 0 0;height:8px;line-height:8px;font-size:0;">&nbsp;</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:30px 32px 8px;font-family:'Fredoka','Trebuchet MS',Arial,sans-serif;font-size:24px;font-weight:600;color:#3A2A12;line-height:1.3;">
+                      Selamat datang di koloni! 🐝
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 32px 22px;font-family:'Nunito',Arial,sans-serif;font-size:15px;color:#5C4320;line-height:1.65;">
+                      Akun Hive Colony untuk <b style="color:#3A2A12;">{{ .Email }}</b> hampir siap. Klik tombol di bawah untuk mengonfirmasi email kamu. Setelah itu, masuk dengan email dan password yang tadi kamu buat, lalu atur avatarmu.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:0 32px 26px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td align="center" bgcolor="#F5B700" style="background:#F5B700;border:1.5px solid #C98A00;border-radius:999px;">
+                            <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:14px 34px;font-family:'Fredoka','Trebuchet MS',Arial,sans-serif;font-size:17px;font-weight:600;color:#3A2A12;text-decoration:none;border-radius:999px;">Konfirmasi email</a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <!-- langkah -->
+                  <tr>
+                    <td style="padding:0 32px 24px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFF8E7" style="background:#FFF8E7;border-radius:14px;">
+                        <tr>
+                          <td style="padding:16px 18px;font-family:'Nunito',Arial,sans-serif;font-size:13.5px;color:#5C4320;line-height:1.7;">
+                            <b style="color:#3A2A12;">Setelah konfirmasi:</b><br />
+                            <span style="color:#C98A00;">⬢</span>&nbsp; Masuk dengan email &amp; password kamu<br />
+                            <span style="color:#C98A00;">⬢</span>&nbsp; Kode undangan dipakai otomatis, divisimu langsung aktif<br />
+                            <span style="color:#C98A00;">⬢</span>&nbsp; Buat avatar, pilih joget favorit, lalu sapa rekan di taman
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 32px 28px;font-family:'Nunito',Arial,sans-serif;font-size:12.5px;color:#8A6A3A;line-height:1.6;">
+                      Tombol tidak bisa diklik? Salin link ini ke browser:<br />
+                      <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#C98A00;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- kaki -->
+            <tr>
+              <td align="center" style="padding:20px 24px 0;font-family:'Nunito',Arial,sans-serif;font-size:12px;color:#8A6A3A;line-height:1.6;">
+                <span style="color:#F5B700;font-size:14px;letter-spacing:6px;">⬢⬢⬢</span><br />
+                Kamu menerima email ini karena ada pendaftaran Hive Colony dengan alamat ini.<br />
+                Bukan kamu? Abaikan saja, akun tidak akan aktif tanpa konfirmasi.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
