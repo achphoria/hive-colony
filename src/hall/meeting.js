@@ -35,6 +35,8 @@ const SCRIPT = [
 ];
 
 let channel = null;
+let channelReady = false;
+let myMeta = null; // status "saya di meeting"; didaftarkan ulang setiap kanal tersambung kembali
 let scriptTimer = null;
 let scriptIdx = 0;
 let speakTimer = null;
@@ -87,7 +89,12 @@ export const useMeeting = create((set, get) => ({
         people: all.filter((p) => p.key !== me).map((p) => ({ id: p.key, name: p.name, color: p.color, role: p.role })),
       });
     });
-    channel.subscribe();
+    // Setiap kali kanal (kembali) tersambung, daftarkan ulang kehadiran saya di meeting.
+    // Tanpa ini, koneksi yang sempat putus (layar HP mati, ganti jaringan) membuat saya tak terlihat.
+    channel.subscribe((status) => {
+      channelReady = status === 'SUBSCRIBED';
+      if (channelReady && myMeta) channel.track(myMeta);
+    });
     set({ live: true, active: false, people: [], title: '', startedAt: null });
   },
 
@@ -106,14 +113,15 @@ export const useMeeting = create((set, get) => ({
     const live = isLive() && channel;
     if (live) {
       const prof = toAvatarProfile(acc);
-      await channel.track({
+      myMeta = {
         name: acc.name,
         color: prof.outfitColor,
         role: acc.role,
         title: get().title,
         startedAt: asHost ? get().startedAt : get().startedAt || Date.now(),
         joinedAt: Date.now(),
-      });
+      };
+      if (channelReady) await channel.track(myMeta); // kalau belum siap, dikirim saat tersambung
     }
     set({ joined: true, hand: false, ...(live ? { aiGuests: ['ceo'], speaking: null } : {}) });
     get().addLine('system', `${acc?.name || 'Anda'} bergabung ke meeting`);
@@ -125,7 +133,8 @@ export const useMeeting = create((set, get) => ({
     stopScript();
     stopTranscribe();
     disconnectVoice();
-    if (isLive() && channel) await channel.untrack();
+    myMeta = null;
+    if (isLive() && channel && channelReady) await channel.untrack();
     set({ joined: false, speaking: null, ...VOICE_RESET });
     if (!isLive() && get().people.length === 0) set({ active: false });
   },
@@ -255,4 +264,6 @@ function stopScript() {
 export function unwatch() {
   if (channel) supabase.removeChannel(channel);
   channel = null;
+  channelReady = false;
+  myMeta = null;
 }
