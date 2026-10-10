@@ -21,10 +21,10 @@ const b64url = (bytes: Uint8Array) =>
 const enc = new TextEncoder();
 
 // Token akses LiveKit = JWT HS256 (iss = API key, sub = identitas peserta, video = izin ruang)
-async function livekitToken(key: string, secret: string, claims: Record<string, unknown>) {
+async function livekitToken(key: string, secret: string, claims: Record<string, unknown>, ttl = TTL_SEC) {
   const header = b64url(enc.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
   const now = Math.floor(Date.now() / 1000);
-  const payload = b64url(enc.encode(JSON.stringify({ iss: key, nbf: now - 10, exp: now + TTL_SEC, ...claims })));
+  const payload = b64url(enc.encode(JSON.stringify({ iss: key, nbf: now - 10, exp: now + ttl, ...claims })));
   const hmac = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', hmac, enc.encode(`${header}.${payload}`)));
   return `${header}.${payload}.${b64url(sig)}`;
@@ -54,6 +54,28 @@ Deno.serve(async (req) => {
 
   const { data: prof } = await sb.from('hc_profiles').select('name, role, primary_dept, avatar').eq('id', uid).maybeSingle();
   if (!prof) return json({ error: 'not_hive_staff' }, 403);
+  const body = await req.json().catch(() => ({}));
+
+  // { action: 'status' } -> siapa saja yang sedang ada di ruang suara (sumber kebenaran kedua
+  // untuk banner meeting di lobi, kalau kanal realtime perangkat sempat terputus)
+  if (body?.action === 'status') {
+    const admin = await livekitToken(key, secret, { sub: 'hive-status', video: { room: ROOM, roomAdmin: true, roomList: true } }, 60);
+    const http = url.replace(/^ws/, 'http').replace(/\/+$/, '');
+    const res = await fetch(`${http}/twirp/livekit.RoomService/ListParticipants`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${admin}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room: ROOM }),
+    });
+    if (!res.ok) return json({ people: [], lk: res.status }); // 404 = ruang belum ada = tidak ada meeting
+    const data = await res.json().catch(() => ({}));
+    const people = (data.participants ?? []).map((p: { identity: string; name?: string; joined_at?: string | number }) => ({
+      id: p.identity,
+      name: p.name || 'Staff',
+      joinedAt: Number(p.joined_at || 0) * 1000,
+    }));
+    return json({ people });
+  }
+
   if (prof.role === 'viewer') return json({ error: 'viewer_cannot_join' }, 403);
 
   const token = await livekitToken(key, secret, {

@@ -1050,3 +1050,8 @@
   color: #a32d2d;
   text-align: left;
 }
+
+.tx.partial {
+  color: #8a8371;
+  font-style: italic;
+}

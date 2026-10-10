@@ -100,7 +100,7 @@ export function MeetingView({ onLeave, onReport }) {
   }, []);
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [m.transcript.length]);
+  }, [m.transcript.length, m.partials]);
 
   const leave = async () => {
     await m.leave();
@@ -190,6 +190,13 @@ export function MeetingView({ onLeave, onReport }) {
                 </div>
               ),
             )}
+            {Object.entries(m.partials)
+              .filter(([, p]) => Date.now() - p.at < 6000)
+              .map(([id, p]) => (
+                <div key={`part-${id}`} className="tx partial" aria-live="polite">
+                  <b>{id === 'me' ? myName : p.name || nameOf(id)}:</b> {p.text}…
+                </div>
+              ))}
           </div>
           <div className="ai-notes">
             <b>Dicatat AI</b>

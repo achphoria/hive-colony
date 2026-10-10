@@ -39,6 +39,14 @@ async function fetchTicket() {
   return data;
 }
 
+// Siapa saja yang sedang ada di ruang suara, langsung dari server LiveKit.
+// Dipakai lobi sebagai cek kedua selain kanal realtime (yang bisa terputus di HP).
+export async function roomStatus() {
+  const { data, error } = await supabase.functions.invoke('livekit-token', { body: { action: 'status' } });
+  if (error || !Array.isArray(data?.people)) return null;
+  return data.people;
+}
+
 // cb: { state(voice, err), speakers(ids), peers(list), audioBlocked(bool), data(msg, id, name) }
 export async function connectVoice(cb) {
   disconnectVoice();
@@ -105,8 +113,8 @@ export function disconnectVoice() {
 
 export const setMic = (on) => room?.localParticipant.setMicrophoneEnabled(on);
 export const startAudio = () => room?.startAudio();
-export function publish(msg) {
-  room?.localParticipant.publishData(enc.encode(JSON.stringify(msg)), { reliable: true }).catch(() => {});
+export function publish(msg, reliable = true) {
+  room?.localParticipant.publishData(enc.encode(JSON.stringify(msg)), { reliable }).catch(() => {});
 }
 
 /* ---------- transkrip dari pengenal suara browser ---------- */
@@ -116,7 +124,9 @@ export const canTranscribe = !!SpeechRec;
 let rec = null;
 let recOn = false;
 
-export function startTranscribe(onFinal, onDenied) {
+// onPartial: teks yang sedang diucapkan (belum final), supaya transkrip terasa langsung.
+// iPhone lambat memfinalkan kalimat; teks sementara ini muncul jauh lebih cepat.
+export function startTranscribe(onFinal, onDenied, onPartial) {
   if (!SpeechRec) return false;
   stopTranscribe();
   recOn = true;
@@ -125,12 +135,16 @@ export function startTranscribe(onFinal, onDenied) {
     const r = new SpeechRec();
     r.lang = 'id-ID';
     r.continuous = true;
-    r.interimResults = false;
+    r.interimResults = true;
     r.onresult = (e) => {
+      let mid = '';
       for (let k = e.resultIndex; k < e.results.length; k++) {
-        const t = e.results[k].isFinal && e.results[k][0].transcript.trim();
-        if (t) onFinal(t[0].toUpperCase() + t.slice(1));
+        const t = e.results[k][0].transcript.trim();
+        if (!t) continue;
+        if (e.results[k].isFinal) onFinal(t[0].toUpperCase() + t.slice(1));
+        else mid += (mid ? ' ' : '') + t;
       }
+      onPartial?.(mid);
     };
     r.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {

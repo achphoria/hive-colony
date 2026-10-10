@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useAuth, toAvatarProfile } from '../sim/auth';
 import { buildAnswer, speak } from './ai';
-import { connectVoice, disconnectVoice, setMic, startAudio, publish, startTranscribe, stopTranscribe, canTranscribe } from './voice';
+import { connectVoice, disconnectVoice, setMic, startAudio, publish, startTranscribe, stopTranscribe, canTranscribe, roomStatus } from './voice';
 
 export const AI_GUESTS = [
   { id: 'ceo', name: 'Queen Bea', role: 'Chief Executive', color: '#F5B700', crown: true },
@@ -37,6 +37,14 @@ const SCRIPT = [
 let channel = null;
 let channelReady = false;
 let myMeta = null; // status "saya di meeting"; didaftarkan ulang setiap kanal tersambung kembali
+// Dua sumber status meeting: kehadiran di kanal realtime (judul, warna, peran) dan
+// daftar peserta di ruang suara LiveKit (tetap benar walau kanal realtime HP sempat putus).
+let presAll = []; // [{ key, name, color, role, title, startedAt, joinedAt }] termasuk saya
+let roomAll = []; // [{ id, name, joinedAt }] termasuk saya
+let pollTimer = null;
+let hiddenAt = 0;
+let lastPartialAt = 0;
+let partialTimer = null;
 let scriptTimer = null;
 let scriptIdx = 0;
 let speakTimer = null;
@@ -48,7 +56,58 @@ const nowLabel = () => {
 };
 const pushNote = (note) => useMeeting.setState((s) => ({ notes: [...s.notes, note].slice(-8) }));
 
-const VOICE_RESET = { voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false };
+const VOICE_RESET = { voice: 'off', voiceError: '', micError: '', talking: [], peerMuted: [], hands: [], audioBlocked: false, txOn: false, partials: {} };
+const myId = () => useAuth.getState().session?.user?.id;
+const inHall = () => window.location.hash.startsWith('#/hall');
+
+// gabungkan kedua sumber menjadi status lobi
+function derive() {
+  const me = myId();
+  const host = [...presAll].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))[0];
+  const known = new Set(presAll.map((p) => p.key));
+  const people = [
+    ...presAll.filter((p) => p.key !== me).map((p) => ({ id: p.key, name: p.name, color: p.color, role: p.role })),
+    ...roomAll.filter((p) => p.id !== me && !known.has(p.id)).map((p) => ({ id: p.id, name: p.name, color: null, role: null })),
+  ];
+  const active = presAll.length > 0 || roomAll.length > 0 || useMeeting.getState().joined;
+  const firstRoom = roomAll.length ? Math.min(...roomAll.map((p) => p.joinedAt || Date.now())) : null;
+  useMeeting.setState((s) => ({
+    active,
+    people,
+    title: host?.title || (s.joined && s.title) || (active ? 'Rapat koloni' : ''),
+    startedAt: host?.startedAt || (s.joined && s.startedAt) || firstRoom,
+  }));
+}
+
+async function pollRoom() {
+  if (!channel || document.hidden || !inHall()) return;
+  if (useMeeting.getState().joined) return; // saat di meeting, daftar peserta datang langsung dari LiveKit
+  const list = await roomStatus();
+  if (!list || !channel) return;
+  roomAll = list;
+  derive();
+}
+
+// HP mematikan koneksi saat layar mati / pindah app. Begitu kembali, sambung ulang kanal
+// dan cek ruang suara saat itu juga, tanpa menunggu koneksi lama pulih sendiri.
+function onWake() {
+  if (!channel) return;
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    return;
+  }
+  const slept = hiddenAt && Date.now() - hiddenAt > 5000;
+  hiddenAt = 0;
+  if (slept || !channelReady) subscribeChannel();
+  pollRoom();
+}
+
+// jaringan baru tersambung (ganti Wi-Fi/data): kanal lama pasti mati, sambung ulang
+function onOnline() {
+  if (!channel) return;
+  subscribeChannel();
+  pollRoom();
+}
 
 export const useMeeting = create((set, get) => ({
   live: false, // tersambung ke presence Supabase
@@ -75,27 +134,15 @@ export const useMeeting = create((set, get) => ({
       return;
     }
     if (channel) return;
-    const me = useAuth.getState().session.user.id;
-    channel = supabase.channel('hc-meeting', { config: { presence: { key: me } } });
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState();
-      const all = Object.entries(state).map(([key, metas]) => ({ key, ...metas[metas.length - 1] }));
-      const host = [...all].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))[0];
-      set({
-        live: true,
-        active: all.length > 0,
-        title: host?.title || 'Rapat koloni',
-        startedAt: host?.startedAt || null,
-        people: all.filter((p) => p.key !== me).map((p) => ({ id: p.key, name: p.name, color: p.color, role: p.role })),
-      });
-    });
-    // Setiap kali kanal (kembali) tersambung, daftarkan ulang kehadiran saya di meeting.
-    // Tanpa ini, koneksi yang sempat putus (layar HP mati, ganti jaringan) membuat saya tak terlihat.
-    channel.subscribe((status) => {
-      channelReady = status === 'SUBSCRIBED';
-      if (channelReady && myMeta) channel.track(myMeta);
-    });
+    presAll = [];
+    roomAll = [];
     set({ live: true, active: false, people: [], title: '', startedAt: null });
+    subscribeChannel();
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('online', onOnline);
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollRoom, 15000);
+    pollRoom();
   },
 
   /* ---------- masuk / keluar ---------- */
@@ -134,8 +181,13 @@ export const useMeeting = create((set, get) => ({
     stopTranscribe();
     disconnectVoice();
     myMeta = null;
-    if (isLive() && channel && channelReady) await channel.untrack();
+    roomAll = roomAll.filter((p) => p.id !== myId());
     set({ joined: false, speaking: null, ...VOICE_RESET });
+    if (isLive() && channel) {
+      if (channelReady) await channel.untrack();
+      derive();
+      pollRoom();
+    }
     if (!isLive() && get().people.length === 0) set({ active: false });
   },
 
@@ -181,6 +233,28 @@ export const useMeeting = create((set, get) => ({
   },
 }));
 
+/* ---------- kanal realtime status meeting ---------- */
+
+function subscribeChannel() {
+  const me = myId();
+  if (!me) return;
+  if (channel) supabase.removeChannel(channel);
+  channelReady = false;
+  const ch = supabase.channel('hc-meeting', { config: { presence: { key: me } } });
+  channel = ch;
+  ch.on('presence', { event: 'sync' }, () => {
+    if (channel !== ch) return;
+    presAll = Object.entries(ch.presenceState()).map(([key, metas]) => ({ key, ...metas[metas.length - 1] }));
+    derive();
+  });
+  // Setiap kali kanal (kembali) tersambung, daftarkan ulang kehadiran saya di meeting.
+  ch.subscribe((status) => {
+    if (channel !== ch) return;
+    channelReady = status === 'SUBSCRIBED';
+    if (channelReady && myMeta) ch.track(myMeta);
+  });
+}
+
 /* ---------- suara sungguhan (LiveKit) ---------- */
 
 async function joinVoice() {
@@ -191,7 +265,11 @@ async function joinVoice() {
       if (voice !== 'on') stopTranscribe();
     },
     speakers: (talking) => useMeeting.setState({ talking }),
-    peers: (list) => useMeeting.setState({ peerMuted: list.filter((p) => p.muted).map((p) => p.id) }),
+    peers: (list) => {
+      useMeeting.setState({ peerMuted: list.filter((p) => p.muted).map((p) => p.id) });
+      roomAll = [{ id: myId(), name: '', joinedAt: Date.now() }, ...list.map((p) => ({ id: p.id, name: p.name || 'Staff', joinedAt: Date.now() }))];
+      derive();
+    },
     audioBlocked: (audioBlocked) => useMeeting.setState({ audioBlocked }),
     data: onData,
   });
@@ -216,18 +294,44 @@ async function applyMic(on) {
   }
   const started = startTranscribe(
     (text) => {
+      clearTimeout(partialTimer);
+      setPartial('me', '');
       useMeeting.getState().addLine('me', text);
       publish({ t: 'tx', text });
     },
     () => useMeeting.setState({ txOn: false }),
+    (text) => {
+      setPartial('me', text);
+      // kirim teks sementara paling sering ~3x per detik (kanal cepat, boleh hilang)
+      clearTimeout(partialTimer);
+      const send = () => {
+        lastPartialAt = Date.now();
+        publish({ t: 'part', text: text.slice(-200) }, false);
+      };
+      const wait = 330 - (Date.now() - lastPartialAt);
+      if (wait <= 0) send();
+      else partialTimer = setTimeout(send, wait);
+    },
   );
   useMeeting.setState({ txOn: started && canTranscribe });
 }
 
+function setPartial(id, text, name) {
+  useMeeting.setState((s) => {
+    const partials = { ...s.partials };
+    if (text) partials[id] = { text, name, at: Date.now() };
+    else delete partials[id];
+    return { partials };
+  });
+}
+
 function onData(msg, id, name) {
   const st = useMeeting.getState();
-  if (msg.t === 'tx' && msg.text) st.addLine(id, String(msg.text).slice(0, 500), name);
-  else if (msg.t === 'ai' && msg.text) {
+  if (msg.t === 'part') setPartial(id, String(msg.text || '').slice(-200), name);
+  else if (msg.t === 'tx' && msg.text) {
+    setPartial(id, '');
+    st.addLine(id, String(msg.text).slice(0, 500), name);
+  } else if (msg.t === 'ai' && msg.text) {
     const who = AI_GUESTS.some((a) => a.id === msg.who) ? msg.who : 'ceo';
     st.say(who, String(msg.text).slice(0, 800), 7000);
     if (msg.note) pushNote({ type: 'task', text: String(msg.note).slice(0, 200) });
@@ -266,4 +370,10 @@ export function unwatch() {
   channel = null;
   channelReady = false;
   myMeta = null;
+  presAll = [];
+  roomAll = [];
+  clearInterval(pollTimer);
+  pollTimer = null;
+  document.removeEventListener('visibilitychange', onWake);
+  window.removeEventListener('online', onOnline);
 }
