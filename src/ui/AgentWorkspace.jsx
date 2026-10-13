@@ -30,6 +30,7 @@ import {
   loadMyFeedback,
 } from '../hall/agentApi';
 import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraining';
+import { useConversation } from './useConversation';
 import { go } from './nav';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -270,6 +271,12 @@ export function AgentWorkspace({ agentId }) {
   const [myFb, setMyFb] = useState({});
   const [engine, setEngine] = useState(loadEngine);
   const [waiting, setWaiting] = useState(null); // { threadId, since } saat menunggu balasan Grok Bot
+  // mode percakapan suara: dengar -> kirim -> jawaban dibacakan -> dengar lagi
+  const convo = useConversation({
+    onSend: (t) => deliver(t, []),
+    onError: (m) => setError(m),
+    onIdle: () => setNotice('Mode percakapan berhenti karena tidak ada suara.'),
+  });
   const [tab, setTab] = useState('info');
   const listRef = useRef(null);
   const fileRef = useRef(null);
@@ -283,6 +290,7 @@ export function AgentWorkspace({ agentId }) {
     setThreadId(null);
     setMsgs([]);
     setWaiting(null);
+    convo.stop();
     setError('');
     setTaskFor(null);
     setFiles([]);
@@ -334,6 +342,7 @@ export function AgentWorkspace({ agentId }) {
     const stop = setTimeout(() => {
       setWaiting(null);
       setError('Belum ada balasan, coba lagi.');
+      convo.replyArrived('Belum ada balasan, coba lagi.');
     }, Math.max(0, waiting.since + WAIT_MAX_MS - Date.now()));
     return () => {
       clearInterval(poll);
@@ -346,6 +355,10 @@ export function AgentWorkspace({ agentId }) {
     if (!waiting || waiting.threadId !== threadId || !answered(msgs)) return;
     setWaiting(null);
     const last = msgs[msgs.length - 1];
+    if (convo.active) {
+      convo.replyArrived(last?.content || '');
+      return;
+    }
     if (voiceOn && last?.role === 'agent') {
       setSpeaking(last.id);
       speak(plain(last.content), () => setSpeaking((s) => (s === last.id ? null : s)));
@@ -447,13 +460,8 @@ export function AgentWorkspace({ agentId }) {
     setListening(true);
   };
 
-  const send = async () => {
-    const m = text.trim();
-    if ((!m && !files.length) || busy || waiting) return;
-    recRef.current?.stop();
-    const pending = files;
-    setText('');
-    setFiles([]);
+  // kirim satu pesan (dipakai ketik biasa & mode percakapan); hasil: { thread_id, reply, status, meta }
+  const deliver = async (m, pending) => {
     setError('');
     setBusy(true);
     setMsgs((x) => [
@@ -464,7 +472,7 @@ export function AgentWorkspace({ agentId }) {
       const refs = pending.length ? await uploadFiles(pending) : [];
       const r = await sendToAgent({ agent, message: m, threadId, files: refs, engine });
       if (r.status === 'pending') setWaiting({ threadId: r.thread_id, since: Date.now() });
-      if (voiceOn && r.status === 'ok' && r.reply) {
+      if (voiceOn && !convo.active && r.status === 'ok' && r.reply) {
         setSpeaking('last');
         speak(plain(r.reply), () => setSpeaking((s) => (s === 'last' ? null : s)));
       }
@@ -474,13 +482,28 @@ export function AgentWorkspace({ agentId }) {
       } else {
         setMsgs(await loadMessages(r.thread_id));
       }
+      return r;
     } catch (e) {
       setError(e.message);
-      if (!m) setFiles(pending);
-      else setText(m);
       setMsgs((x) => x.filter((y) => !String(y.id).startsWith('tmp-')));
+      throw e;
     } finally {
       setBusy(false);
+    }
+  };
+
+  const send = async () => {
+    const m = text.trim();
+    if ((!m && !files.length) || busy || waiting) return;
+    recRef.current?.stop();
+    const pending = files;
+    setText('');
+    setFiles([]);
+    try {
+      await deliver(m, pending);
+    } catch {
+      if (!m) setFiles(pending);
+      else setText(m);
     }
   };
 
@@ -752,6 +775,42 @@ export function AgentWorkspace({ agentId }) {
               {readOnly ? (
                 <p className="aw-readonly">Ini percakapan milik {names[thread.user_id] || 'staff lain'} (hanya bisa dibaca).</p>
               ) : (
+                convo.active ? (
+                  <div className={`aw-convo ${convo.phase}`} role="status" aria-live="polite">
+                    <span className="aw-orb" aria-hidden="true" />
+                    <div className="aw-convo-text">
+                      <b>
+                        {convo.phase === 'listening'
+                          ? 'Mendengarkan… bicara saja'
+                          : convo.phase === 'thinking'
+                            ? `${def.nick} sedang berpikir`
+                            : convo.phase === 'speaking'
+                              ? `${def.nick} sedang bicara`
+                              : 'Mode percakapan'}
+                      </b>
+                      <span>
+                        {convo.phase === 'listening'
+                          ? convo.interim || 'Diam sebentar setelah selesai bicara, pesan terkirim otomatis.'
+                          : convo.phase === 'speaking'
+                            ? 'Tekan Potong (atau spasi) untuk menyela.'
+                            : 'Jawaban akan dibacakan, lalu mikrofon menyala lagi.'}
+                      </span>
+                    </div>
+                    {convo.phase === 'listening' && convo.interim && (
+                      <button className="aw-convo-btn" onClick={convo.sendNow}>
+                        Kirim
+                      </button>
+                    )}
+                    {convo.phase === 'speaking' && (
+                      <button className="aw-convo-btn" onClick={convo.interrupt}>
+                        ✋ Potong
+                      </button>
+                    )}
+                    <button className="aw-convo-btn stop" onClick={convo.stop}>
+                      Selesai
+                    </button>
+                  </div>
+                ) : (
                 <div className="aw-inputwrap">
                   <FileChips files={files} onRemove={(i) => setFiles((x) => x.filter((_, k) => k !== i))} />
                   <div className={`aw-input${listening ? ' rec' : ''}`}>
@@ -797,11 +856,24 @@ export function AgentWorkspace({ agentId }) {
                     <button className={`aw-tool${listening ? ' on' : ''}`} onClick={toggleMic} disabled={busy} aria-label={listening ? 'Berhenti dikte' : 'Dikte dengan suara'} title="Dikte dengan suara">
                       {listening ? '⏺' : '🎤'}
                     </button>
+                    <button
+                      className="aw-tool convo"
+                      onClick={() => {
+                        recRef.current?.stop();
+                        convo.start();
+                      }}
+                      disabled={busy || !!waiting || !convo.supported}
+                      aria-label="Mode percakapan suara"
+                      title={convo.supported ? 'Mode percakapan: bicara, agent menjawab dengan suara' : 'Butuh Chrome atau Edge'}
+                    >
+                      🗣
+                    </button>
                     <button className="aw-send" onClick={send} disabled={busy || !!waiting || (!text.trim() && !files.length)} aria-label="Kirim">
                       ➤
                     </button>
                   </div>
                 </div>
+                )
               )}
             </>
           )}

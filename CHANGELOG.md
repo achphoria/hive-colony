@@ -4,6 +4,12 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Mode percakapan suara di Ruang Kerja
+- Tombol 🗣 di kotak chat: bicara → terkirim otomatis setelah diam ±1,5 detik → jawaban agent dibacakan → mikrofon menyala lagi, sampai Selesai.
+- Bisa menyela dengan ✋ Potong atau spasi; berhenti sendiri setelah 90 detik tanpa suara; bunyi penanda saat mikrofon mulai mendengar.
+- Berlaku untuk semua agent, termasuk Grok Bot yang balasannya menyusul. Semua tetap tersimpan sebagai teks di riwayat.
+- Memakai pengenalan & suara bawaan browser (gratis; paling stabil di Chrome/Edge).
+
 ### Grok Bot: riwayat & persona ikut terkirim
 - Payload ke Grok Bot sekarang membawa `history` (10 pesan terakhir thread) dan `persona` (prompt lengkap agent dari `hc_agent_prompts`, atau persona Queen Bea yang sama dengan Claude).
 - Persona Queen Bea dipindah ke `supabase/functions/_shared/queenPersona.ts`, dipakai bersama `queen-bea` dan `agent-chat`.
