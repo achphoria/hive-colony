@@ -1,10 +1,12 @@
 // Hive Hall 3D: ruang rapat diorama dengan layar dinding live (panel DOM ditempel di dinding 3D
 // supaya teksnya tajam), meja heksagon, Hive Worker AI, dan avatar staff manusia.
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
-import { M, Box, Cyl, Hex, Sph } from './materials';
+import { M, std, Box, Cyl, Hex, Sph, Cone } from './materials';
+import { marbleTexture, hexLineTexture, honeyGlassTexture } from './textures';
+import { WarmEnvironment, LookFX } from './Look';
 import { BeeFigure, SpeakRing, SoundBars } from './BeeFigure';
 import { StaffAvatar } from './StaffAvatar';
 import { DAY, cut } from '../ui/hallData';
@@ -23,55 +25,200 @@ function seat(deg) {
 
 /* ---------- ruangan ---------- */
 
-function Room() {
+// material khusus Hive Hall: lantai marmer bergaris sarang menyala, kaca madu, panel amber
+function useHallMaterials() {
+  return useMemo(() => {
+    const marble = marbleTexture().clone();
+    marble.needsUpdate = true;
+    marble.repeat.set(5, 3);
+    const lines = hexLineTexture(1).clone();
+    lines.needsUpdate = true;
+    lines.repeat.set(7, 4);
+    const comb = honeyGlassTexture().clone();
+    comb.needsUpdate = true;
+    return {
+      floor: new THREE.MeshStandardMaterial({
+        color: '#E9DAC0',
+        map: marble,
+        emissiveMap: lines,
+        emissive: '#FFA820',
+        emissiveIntensity: 1.6,
+        roughness: 0.22,
+        metalness: 0.08,
+      }),
+      cell: new THREE.MeshStandardMaterial({
+        color: '#E9A23A',
+        map: comb,
+        emissiveMap: comb,
+        emissive: '#FF8A10',
+        emissiveIntensity: 0.42,
+        roughness: 0.18,
+        metalness: 0.15,
+      }),
+      wallBack: std('#5E3604', { roughness: 0.5, metalness: 0.35 }),
+      panel: new THREE.MeshStandardMaterial({
+        color: '#FFD98A',
+        emissive: '#FFB020',
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.38,
+        roughness: 0.1,
+        metalness: 0.2,
+      }),
+      plaque: std('#4A2A08', { roughness: 0.35, metalness: 0.4 }),
+    };
+  }, []);
+}
+
+// Dinding sarang lebah: ratusan sel heksagon kaca madu dalam satu InstancedMesh
+function CombWall({ width, height, position, rotation = [0, 0, 0], mat }) {
+  const ref = useRef();
+  const cells = useMemo(() => {
+    const out = [];
+    const rad = 0.6;
+    const w = rad * 1.5;
+    const h = rad * Math.sqrt(3);
+    for (let c = 0; c * w <= width + w; c++) {
+      for (let r = 0; r * h <= height + h; r++) {
+        const x = -width / 2 + c * w;
+        const y = r * h + (c % 2 ? h / 2 : 0);
+        if (y > height + 0.2) continue;
+        out.push([x, y, 0.06 + ((c * 7 + r * 3) % 5) * 0.035]);
+      }
+    }
+    return out;
+  }, [width, height]);
+  const geo = useMemo(() => {
+    const g = new THREE.CylinderGeometry(0.54, 0.54, 0.3, 6, 1, false, Math.PI / 2);
+    g.rotateX(Math.PI / 2);
+    return g;
+  }, []);
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    cells.forEach(([x, y, z], i) => {
+      m.makeTranslation(x, y, z);
+      ref.current.setMatrixAt(i, m);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+  }, [cells]);
+  return (
+    <group position={position} rotation={rotation}>
+      <Box p={[0, height / 2, -0.12]} s={[width, height, 0.2]} m={mat.wallBack} />
+      <instancedMesh ref={ref} args={[geo, mat.cell, cells.length]} />
+    </group>
+  );
+}
+
+// tetesan madu di bibir atas dinding
+function HoneyDrips({ xs, y, z }) {
   return (
     <group>
-      {/* lantai */}
-      <Box p={[0, -0.15, -1]} s={[20.4, 0.3, 11]} m={M.creamDark} />
+      <Box p={[0, y + 0.05, z]} s={[20.6, 0.22, 0.5]} m={M.honey} shadow={false} />
+      {xs.map(([x, len], i) => (
+        <group key={i} position={[x, y, z + 0.18]}>
+          <mesh position={[0, -len / 2, 0]} material={M.honey}>
+            <capsuleGeometry args={[0.09, len, 4, 10]} />
+          </mesh>
+          <Sph p={[0, -len - 0.08, 0]} rad={0.13} m={M.honey} seg={[12, 10]} shadow={false} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// lentera heksagon emas yang menyala
+function Lantern({ p }) {
+  return (
+    <group position={p}>
+      <Cyl p={[0, 0.75, 0]} a={[0.02, 0.02, 1.5, 4]} m={M.gold} shadow={false} />
+      <Cyl p={[0, 0.02, 0]} a={[0.42, 0.34, 0.12, 6]} m={M.gold} />
+      <mesh position={[0, -0.36, 0]} material={M.lantern}>
+        <cylinderGeometry args={[0.32, 0.28, 0.62, 6]} />
+      </mesh>
+      {[0, 1, 2, 3, 4, 5].map((i) => {
+        const a = (i * Math.PI) / 3;
+        return <Cyl key={i} p={[0.33 * Math.cos(a), -0.36, 0.33 * Math.sin(a)]} a={[0.025, 0.025, 0.66, 4]} m={M.gold} shadow={false} />;
+      })}
+      <Cyl p={[0, -0.72, 0]} a={[0.3, 0.38, 0.1, 6]} m={M.gold} />
+      <Cone p={[0, -0.88, 0]} a={[0.12, 0.2, 6]} m={M.gold} />
+      <pointLight position={[0, -0.4, 0.3]} color="#FFB54A" intensity={10} distance={9} decay={2} />
+    </group>
+  );
+}
+
+// pot emas berisi tanaman & bunga putih
+function GoldPlant({ p, s = 1 }) {
+  return (
+    <group position={p} scale={s}>
+      <Cyl p={[0, 0.45, 0]} a={[0.5, 0.36, 0.9, 16]} m={M.pot} />
+      <mesh position={[0, 0.9, 0]} rotation={[Math.PI / 2, 0, 0]} material={M.gold}>
+        <torusGeometry args={[0.5, 0.05, 8, 20]} />
+      </mesh>
+      <Sph p={[0, 1.35, 0]} rad={0.62} sc={[1.1, 0.95, 1]} m={M.leafDark} seg={[14, 10]} />
+      <Sph p={[0.32, 1.65, 0.2]} rad={0.4} m={M.leaf} seg={[12, 10]} />
+      <Sph p={[-0.35, 1.55, -0.1]} rad={0.38} m={M.leaf} seg={[12, 10]} />
+      {[
+        [0.15, 1.95, 0.32],
+        [-0.3, 1.82, 0.35],
+        [0.45, 1.7, -0.15],
+      ].map((q, i) => (
+        <group key={i} position={q}>
+          <Sph rad={0.11} sc={[1, 0.5, 1]} m={M.white} seg={[10, 6]} shadow={false} />
+          <Sph p={[0, 0.04, 0]} rad={0.045} m={M.nectar} seg={[6, 4]} shadow={false} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function Room() {
+  const mat = useHallMaterials();
+  const drips = useMemo(
+    () => [-9.2, -7.6, -5.9, -3.1, -1.4, 2.2, 3.9, 6.4, 8.1, 9.5].map((x, i) => [x, 0.25 + ((i * 37) % 10) / 14]),
+    [],
+  );
+  return (
+    <group>
+      {/* lantai marmer dengan garis sarang yang menyala */}
+      <mesh position={[0, -0.15, -1]} material={mat.floor} receiveShadow>
+        <boxGeometry args={[20.4, 0.3, 11]} />
+      </mesh>
       <Box p={[0, -0.32, -1]} s={[20.8, 0.1, 11.4]} m={M.royal} />
-      <Hex p={[0, 0.015, 0]} rad={4.2} h={0.03} m={M.nectar} shadow={false} />
-      <Hex p={[0, 0.03, 0]} rad={3.7} h={0.03} m={M.cream} shadow={false} />
-      {/* dinding */}
-      <Box p={[0, 3.5, -6.2]} s={[20.4, 7, 0.4]} m={M.cream} />
-      <Box p={[0, 7.05, -6.15]} s={[20.6, 0.2, 0.55]} m={M.gold} />
-      <Box p={[0, 0.25, -5.95]} s={[20.4, 0.5, 0.15]} m={M.gold} />
+      {/* dinding sarang madu: belakang & samping */}
+      <CombWall width={20.4} height={7} position={[0, 0, -6.3]} mat={mat} />
       {[-1, 1].map((sx) => (
         <group key={sx}>
-          <Box p={[sx * 10.2, 3.5, -1.2]} r={[0, Math.PI / 2, 0]} s={[10.4, 7, 0.4]} m={M.creamDark} />
-          <Box p={[sx * 10.15, 7.05, -1.2]} r={[0, Math.PI / 2, 0]} s={[10.6, 0.2, 0.55]} m={M.gold} />
-          {/* jendela sarang */}
-          {[
-            [0, 4.2, -2.6],
-            [0, 4.2, -1.3],
-            [0, 3.1, -1.95],
-            [0, 5.3, -1.95],
-          ].map(([, y, z], i) => (
-            <group key={i} position={[sx * 9.98, y, z]} rotation={[0, 0, Math.PI / 2]}>
-              <Hex rad={0.62} h={0.06} m={M.gold} shadow={false} />
-              <Hex p={[-sx * 0.02, 0, 0]} rad={0.5} h={0.08} m={M.sky} shadow={false} />
-            </group>
-          ))}
-          {/* tanaman */}
-          <group position={[sx * 9, 0, 2.6]}>
-            <Cyl p={[0, 0.35, 0]} a={[0.38, 0.3, 0.7, 6]} m={M.amber} />
-            <Sph p={[0, 1.15, 0]} rad={0.6} m={M.leaf} seg={[7, 5]} />
-            <Sph p={[0.25, 1.6, 0.1]} rad={0.38} m={M.leafDark} seg={[6, 4]} />
-          </group>
+          <CombWall width={10.6} height={7} position={[sx * 10.3, 0, -1.2]} rotation={[0, (-sx * Math.PI) / 2, 0]} mat={mat} />
+          <Box p={[sx * 10.15, 7.05, -1.2]} r={[0, Math.PI / 2, 0]} s={[10.6, 0.25, 0.6]} m={M.gold} />
+          <GoldPlant p={[sx * 8.7, 0, 2.4]} />
         </group>
       ))}
-      {/* lampu gantung */}
-      {[-4.5, 4.5].map((x) => (
-        <group key={x} position={[x, 6.1, -1.5]}>
-          <Cyl p={[0, 0.5, 0]} a={[0.015, 0.015, 1, 4]} m={M.graphite} shadow={false} />
-          <Hex rad={0.45} h={0.35} m={M.gold} />
-          <Hex p={[0, -0.2, 0]} rad={0.35} h={0.06} m={M.led} shadow={false} />
-          <pointLight position={[0, -0.6, 0]} color="#FFC266" intensity={14} distance={9} decay={2} />
-        </group>
+      <Box p={[0, 7.05, -6.15]} s={[20.6, 0.25, 0.6]} m={M.gold} />
+      <Box p={[0, 0.2, -5.95]} s={[20.4, 0.4, 0.2]} m={M.gold} />
+      <HoneyDrips xs={drips} y={6.9} z={-5.95} />
+      {/* panel kaca amber di belakang layar, berbingkai emas */}
+      <group position={[0, 3.42, -6.0]}>
+        <mesh material={mat.panel}>
+          <boxGeometry args={[19.2, 4.9, 0.08]} />
+        </mesh>
+        {[
+          [0, 2.5, 19.4, 0.14],
+          [0, -2.5, 19.4, 0.14],
+          [-9.65, 0, 0.14, 5.1],
+          [9.65, 0, 0.14, 5.1],
+        ].map(([x, y, w, h], i) => (
+          <Box key={i} p={[x, y, 0.05]} s={[w, h, 0.14]} m={M.gold} shadow={false} />
+        ))}
+      </group>
+      {/* lentera gantung */}
+      {[-6.5, 6.5].map((x) => (
+        <Lantern key={x} p={[x, 6.4, -2.4]} />
       ))}
-      {/* papan nama */}
-      <group position={[0, 6.55, -5.95]}>
-        <Box s={[3.4, 0.55, 0.1]} m={M.royal} />
-        <Html transform distanceFactor={5} position={[0, 0, 0.07]} pointerEvents="none">
+      {/* papan nama emas */}
+      <group position={[0, 6.55, -5.85]}>
+        <Box s={[4.4, 0.8, 0.14]} m={M.gold} />
+        <Box p={[0, 0, 0.06]} s={[4.15, 0.6, 0.06]} m={mat.plaque} shadow={false} />
+        <Html transform distanceFactor={5} position={[0, 0, 0.1]} pointerEvents="none">
           <div className="wall-sign">HIVE HALL</div>
         </Html>
       </group>
@@ -79,6 +226,7 @@ function Room() {
   );
 }
 
+// Meja jadi podium madu bercahaya bertingkat
 function Table() {
   const holo = useRef();
   useFrame((st) => {
@@ -89,10 +237,12 @@ function Table() {
   });
   return (
     <group>
-      <Hex p={[0, 0.38, 0]} rad={0.55} h={0.76} m={M.royal} />
-      <Hex p={[0, 0.8, 0]} rad={1.95} h={0.14} m={M.gold} />
-      <Hex p={[0, 0.72, 0]} rad={2.0} h={0.06} m={M.royal} />
-      <Hex p={[0, 0.89, 0]} rad={0.7} h={0.03} m={M.nectar} shadow={false} />
+      <Hex p={[0, 0.1, 0]} rad={2.35} h={0.2} m={M.gold} />
+      <Hex p={[0, 0.38, 0]} rad={0.7} h={0.6} m={M.royal} />
+      <Hex p={[0, 0.72, 0]} rad={2.05} h={0.08} m={M.gold} />
+      <Hex p={[0, 0.82, 0]} rad={1.95} h={0.14} m={M.honey} />
+      <Hex p={[0, 0.9, 0]} rad={1.3} h={0.04} m={M.led} shadow={false} />
+      <Hex p={[0, 0.92, 0]} rad={0.75} h={0.04} m={M.honey} shadow={false} />
       <group ref={holo} position={[0, 1.35, 0]}>
         <mesh material={M.holo}>
           <cylinderGeometry args={[0.45, 0.45, 0.6, 6, 1, true, Math.PI / 2]} />
@@ -106,6 +256,24 @@ function Table() {
         ))}
       </group>
     </group>
+  );
+}
+
+
+// ikon garis kecil untuk header layar dinding (gaya referensi)
+const ICON_PATHS = {
+  users: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 19v-1a4 4 0 0 0-3-3.9M16 3.1a3.5 3.5 0 0 1 0 6.8',
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  calendar: 'M8 2v4M16 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  check: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+  bot: 'M12 8V4M8 4h8M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM9 13h.01M15 13h.01',
+  chart: 'M3 3v18h18M7 15l4-4 3 3 5-6',
+};
+export function WsIcon({ name }) {
+  return (
+    <svg className="ws-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={ICON_PATHS[name]} />
+    </svg>
   );
 }
 
@@ -134,7 +302,7 @@ function FeedScreen({ data, onFocus }) {
   return (
     <Screen position={[-4.5, 3.65, -5.95]} onFocus={onFocus}>
       <div className="ws-head gold">
-        <i className="live" /> Aktivitas live
+        <WsIcon name="list" /> Aktivitas live <i className="live" />
       </div>
       <div className="ws-body">
         {data.feed.length === 0 && <div className="ws-empty">Menunggu aktivitas pertama…</div>}
@@ -152,7 +320,9 @@ function FeedScreen({ data, onFocus }) {
 function CalendarScreen({ data, onFocus }) {
   return (
     <Screen position={[0, 3.65, -5.95]} onFocus={onFocus}>
-      <div className="ws-head gold">Kalender minggu ini</div>
+      <div className="ws-head gold">
+        <WsIcon name="calendar" /> Kalender minggu ini
+      </div>
       <div className="ws-body">
         <div className="ws-week">
           {data.week.map((d, i) => (
@@ -179,7 +349,9 @@ function CalendarScreen({ data, onFocus }) {
 function OpenScreen({ data, onFocus }) {
   return (
     <Screen position={[4.5, 3.65, -5.95]} onFocus={onFocus}>
-      <div className="ws-head amber">Belum selesai · {data.open.length}</div>
+      <div className="ws-head amber">
+        <WsIcon name="check" /> Belum selesai · {data.open.length}
+      </div>
       <div className="ws-body">
         {data.open.length === 0 && <div className="ws-empty ok">Semua beres</div>}
         {data.open.slice(0, 4).map((o, i) => (
@@ -330,12 +502,13 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
       dpr={[1, 2]}
       camera={{ position: (mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW).pos, fov: mobile ? 52 : 38, near: 0.1, far: 200 }}
     >
-      <color attach="background" args={['#FFF3D6']} />
-      <hemisphereLight args={['#FFF8E7', '#C98A00', 0.85]} />
-      <ambientLight intensity={0.35} />
+      <color attach="background" args={['#3A2206']} />
+      <WarmEnvironment intensity={0.55} />
+      <LookFX quality={mobile ? 'low' : 'high'} bloom={0.55} threshold={0.86} aoRadius={1.2} />
+      <hemisphereLight args={['#FFF1D6', '#B0680A', 0.35]} />
       <directionalLight
         position={[6, 12, 8]}
-        intensity={1.5}
+        intensity={1.6}
         color="#FFE6B0"
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -359,7 +532,9 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
       <Ticker data={data} />
 
       <Screen position={[-7.9, 3.65, -5.95]} frame={[2.35, 3.55]} className="side" onFocus={() => focus([-7.9, 3.65, -5.9], 6.2)}>
-        <div className="ws-head blue">Online · {data.online.length}</div>
+        <div className="ws-head blue">
+          <WsIcon name="users" /> Online · {data.online.length}
+        </div>
         <div className="ws-body">
           {data.online.slice(0, 5).map((o) => (
             <div key={o.name} className="ws-row person">
@@ -372,7 +547,9 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
       </Screen>
       {data.real ? (
       <Screen position={[7.9, 3.65, -5.95]} frame={[2.35, 3.55]} className="side" onFocus={() => focus([7.9, 3.65, -5.9], 6.2)}>
-        <div className="ws-head green">Agent AI · {data.aiOn}/21</div>
+        <div className="ws-head green">
+          <WsIcon name="bot" /> Agent AI · {data.aiOn}/21
+        </div>
         <div className="ws-body">
           {data.aiAgents.map((a) => (
             <div key={a.id} className="ws-row person">
@@ -387,7 +564,9 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
       </Screen>
       ) : (
       <Screen position={[7.9, 3.65, -5.95]} frame={[2.35, 3.55]} className="side" onFocus={() => focus([7.9, 3.65, -5.9], 6.2)}>
-        <div className="ws-head green">Skor skill</div>
+        <div className="ws-head green">
+          <WsIcon name="chart" /> Skor skill
+        </div>
         <div className="ws-body">
           {data.skills.slice(0, 5).map((k) => (
             <div key={k.id} className="ws-row skill">

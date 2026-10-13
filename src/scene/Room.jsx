@@ -4,7 +4,8 @@ import { Html } from '@react-three/drei';
 import { ROOM_R, APOTHEM, WALL_H, SEATS_BY_ROOM, DEPTS } from '../data/hive';
 import { useHive } from '../sim/store';
 import { world } from '../sim/engine';
-import { M, std, HEX_START } from './materials';
+import { M, std, HEX_START, Cyl, Sph, Hex } from './materials';
+import { woodTexture, marbleTexture, grassTexture } from './textures';
 import {
   DESKS,
   DeptProp,
@@ -20,6 +21,46 @@ import {
 } from './Furniture';
 
 const WALL_ANGLES = [0, 1, 2, 3, 4, 5].map((i) => ((30 + 60 * i) * Math.PI) / 180);
+
+// lantai per jenis ruangan: marmer untuk ruang utama, kayu hangat untuk ruang kerja, rumput di taman
+const MARBLE = new Set(['royal', 'hall', 'mission', 'lobby']);
+function floorMaterial(room) {
+  if (room.kind === 'garden') return std('#FFFFFF', { map: grassTexture(), roughness: 0.9 });
+  if (MARBLE.has(room.kind)) return std('#FFFFFF', { map: marbleTexture(), roughness: 0.32, metalness: 0.05 });
+  if (room.kind === 'server' || room.kind === 'pods') return std(room.kind === 'server' ? '#C9CED6' : '#F4F1EA', { map: marbleTexture(), roughness: 0.4 });
+  return std(room.dept === 'it' ? '#E9E4DA' : '#FFF1DC', { map: woodTexture(), roughness: 0.62 });
+}
+
+// tanaman dalam pot emas
+function Plant({ p, s = 1 }) {
+  return (
+    <group position={p} scale={s}>
+      <Cyl p={[0, 0.22, 0]} a={[0.26, 0.19, 0.44, 12]} m={M.pot} />
+      <Cyl p={[0, 0.45, 0]} a={[0.27, 0.27, 0.04, 12]} m={M.gold} shadow={false} />
+      <Sph p={[0, 0.78, 0]} rad={0.36} sc={[1, 1.1, 1]} m={M.leaf} seg={[12, 10]} />
+      <Sph p={[0.16, 1.02, 0.08]} rad={0.24} m={M.leafDark} seg={[10, 8]} />
+      <Sph p={[-0.14, 0.98, -0.1]} rad={0.22} m={M.leaf} seg={[10, 8]} />
+    </group>
+  );
+}
+
+// dekorasi umum: karpet, dua tanaman di sudut belakang
+function RoomDecor({ room }) {
+  if (room.kind === 'garden' || room.kind === 'server') return null;
+  const corner = (deg) => {
+    const a = (deg * Math.PI) / 180;
+    const r = ROOM_R * 0.8;
+    return [r * Math.cos(a), 0, r * Math.sin(a)];
+  };
+  return (
+    <group>
+      <Hex p={[0, 0.012, 0]} rad={ROOM_R * 0.36} h={0.02} m={M.rug} shadow={false} />
+      <Hex p={[0, 0.014, 0]} rad={ROOM_R * 0.3} h={0.02} m={M.rugInner} shadow={false} />
+      <Plant p={corner(240)} s={0.95} />
+      <Plant p={corner(300)} s={0.8} />
+    </group>
+  );
+}
 const SETS = {
   lobby: LobbySet,
   lounge: LoungeSet,
@@ -111,7 +152,7 @@ export function Room({ room }) {
   const walls = useRef([]);
   const accent = room.dept ? DEPTS[room.dept].color : '#F5B700';
   const rim = useMemo(() => std(accent, { emissive: '#FFB020', emissiveIntensity: 0 }), [accent]);
-  const floorMat = useMemo(() => std(room.floor), [room.floor]);
+  const floorMat = useMemo(() => floorMaterial(room), [room]);
   const wallMat = room.kind === 'server' ? M.silver : room.kind === 'royal' ? M.nectar : M.cream;
   const isGarden = room.kind === 'garden';
   const wallH = isGarden ? 0.45 : WALL_H;
@@ -199,6 +240,17 @@ export function Room({ room }) {
                 <cylinderGeometry args={[0.32, 0.32, 0.03, 6, 1, false, HEX_START]} />
               </mesh>
             )}
+            {/* lampu dinding kecil yang berpendar */}
+            {!isGarden && i % 2 === 0 && (
+              <group position={[sideLen * 0.32, wallH * 0.7, 0.14]}>
+                <mesh material={M.lantern}>
+                  <cylinderGeometry args={[0.07, 0.09, 0.2, 6]} />
+                </mesh>
+                <mesh position={[0, -0.13, -0.03]} material={M.gold}>
+                  <boxGeometry args={[0.16, 0.05, 0.1]} />
+                </mesh>
+              </group>
+            )}
           </group>
         );
       })}
@@ -211,6 +263,7 @@ export function Room({ room }) {
           </group>
         );
       })}
+      <RoomDecor room={room} />
       {room.kind === 'dept' && <DeptProp dept={room.dept} />}
       {room.kind === 'royal' && <RoyalDecor />}
       {Set && <Set />}

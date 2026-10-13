@@ -88,6 +88,15 @@ Buka **`#/tv`** (https://achphoria.github.io/hive-colony/#/tv) atau tombol **ðŸ“
 - Overlay: jam & tanggal WIB, badge LIVE, jumlah staff online & agent AI, caption ala siaran TV, dan ticker aktivitas.
 - Gerakkan mouse untuk kontrol (shot berikutnya, layar penuh, keluar). Keyboard: `N`/â†’ shot berikutnya, `F` layar penuh.
 
+### Tampilan "golden honey"
+
+Tampilan koloni dan Hive Hall mengikuti konsep visual atasan (diorama pulau melayang & aula madu):
+
+- **Look bersama** (`src/scene/Look.jsx`): lingkungan cahaya hangat buatan lokal untuk kilau emas, bloom pada benda menyala, ambient occlusion (laptop/TV saja), tone mapping Neutral, vignette. Kualitas otomatis lebih ringan di HP.
+- **Tekstur prosedural** (`src/scene/textures.js`): lantai kayu, marmer, garis sarang menyala, kaca madu, rumput; digambar dengan canvas, tanpa file gambar.
+- **Koloni**: kubah langit gradasi + lautan awan, pulau rumput berbunga dengan semak, pinus, batu, lampu taman berpendar, sarang lebah kayu; lift kaca sarang madu; lantai kayu/marmer per ruangan, karpet, tanaman pot emas, lampu dinding. Siang-malam tetap mengikuti WIB.
+- **Hive Hall**: dinding sel kaca madu berpendar, madu menetes, panel kaca amber di balik layar, papan nama emas bercahaya, lantai marmer bergaris heksagon menyala, podium madu, lentera, pot emas berbunga; layar dinding & kartu aksi bergaya kaca dengan ikon.
+
 ## Mode real vs mode demo
 
 - **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.

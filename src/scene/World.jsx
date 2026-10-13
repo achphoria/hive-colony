@@ -1,11 +1,12 @@
 // Komponen dunia: simulasi, pulau, lift madu, efek misi, dan kamera.
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { AGENTS, GUESTS, LIFT_X, tierY, tierOf } from '../data/hive';
 import { useHive } from '../sim/store';
 import { world } from '../sim/engine';
-import { M, Box, Cyl, Hex, Sph, Cone, HEX_START } from './materials';
+import { M, std, Box, Cyl, Hex, Sph, Cone, HEX_START } from './materials';
+import { grassTexture, honeyGlassTexture } from './textures';
 import { HiveWorker } from './HiveWorker';
 
 export function Agents() {
@@ -22,24 +23,112 @@ function seeded(seed) {
   };
 }
 
+// Pohon pinus berlapis (lebih rimbun dari sebelumnya)
 function Tree({ p, s = 1 }) {
   return (
     <group position={p} scale={s}>
-      <Cyl p={[0, 0.6, 0]} a={[0.15, 0.22, 1.2, 6]} m={M.wood} />
-      <Cone p={[0, 1.7, 0]} a={[1, 1.6, 7]} m={M.leaf} />
-      <Cone p={[0, 2.5, 0]} a={[0.7, 1.2, 7]} m={M.leafDark} />
+      <Cyl p={[0, 0.5, 0]} a={[0.13, 0.2, 1.0, 8]} m={M.wood} />
+      <Cone p={[0, 1.45, 0]} a={[1.15, 1.5, 9]} m={M.pine} />
+      <Cone p={[0, 2.2, 0]} a={[0.92, 1.3, 9]} m={M.pineLight} />
+      <Cone p={[0, 2.9, 0]} a={[0.66, 1.1, 9]} m={M.pine} />
+      <Cone p={[0, 3.5, 0]} a={[0.38, 0.8, 9]} m={M.pineLight} />
     </group>
   );
 }
 
+// Lampu taman emas dengan lentera yang berpendar (ikut bloom)
 function LampPost({ p }) {
   return (
     <group position={p}>
-      <Hex p={[0, 0.08, 0]} rad={0.25} h={0.16} m={M.graphite} />
-      <Cyl p={[0, 1.1, 0]} a={[0.05, 0.06, 2.1, 6]} m={M.graphite} />
-      <Hex p={[0, 2.2, 0]} rad={0.24} h={0.06} m={M.gold} />
-      <Sph p={[0, 2.38, 0]} rad={0.17} m={M.led} shadow={false} />
-      <Cone p={[0, 2.62, 0]} a={[0.26, 0.22, 6]} m={M.gold} />
+      <Cyl p={[0, 0.1, 0]} a={[0.22, 0.28, 0.2, 8]} m={M.royal} />
+      <Cyl p={[0, 1.15, 0]} a={[0.05, 0.065, 2.1, 8]} m={M.gold} />
+      <Cyl p={[0, 2.2, 0]} a={[0.2, 0.16, 0.08, 6]} m={M.gold} />
+      <mesh position={[0, 2.42, 0]} material={M.lantern}>
+        <cylinderGeometry args={[0.15, 0.17, 0.36, 6]} />
+      </mesh>
+      {[0, 1, 2, 3, 4, 5].map((i) => {
+        const a = (i * Math.PI) / 3;
+        return <Cyl key={i} p={[0.17 * Math.cos(a), 2.42, 0.17 * Math.sin(a)]} a={[0.015, 0.015, 0.38, 4]} m={M.gold} shadow={false} />;
+      })}
+      <Cone p={[0, 2.72, 0]} a={[0.24, 0.24, 6]} m={M.gold} />
+      <Sph p={[0, 2.88, 0]} rad={0.05} m={M.gold} />
+    </group>
+  );
+}
+
+// Bunga, semak, dan batu sebagai InstancedMesh (ratusan objek, sedikit draw call)
+function Scatter({ items, geometry, material }) {
+  const ref = useRef();
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    items.forEach(([x, y, z, sx, sy, sz, ry = 0], i) => {
+      q.setFromEuler(new THREE.Euler(0, ry, 0));
+      m.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(sx, sy, sz));
+      ref.current.setMatrixAt(i, m);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+  }, [items]);
+  return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow receiveShadow />;
+}
+
+const FLOWER_MATS = [M.white, M.pink, M.nectar, M.amber, std('#F48FB1'), std('#B39DDB')];
+
+function Garden() {
+  const data = useMemo(() => {
+    const rnd = seeded(19);
+    const flowers = FLOWER_MATS.map(() => []);
+    const bushes = [];
+    const rocks = [];
+    const clear = (x, z) => Math.abs(x) < 3.2 && z > 12; // jalan ke lobby
+    for (let i = 0; i < 360; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = 13.5 + rnd() * 12.5;
+      const x = r * Math.cos(a);
+      const z = r * Math.sin(a);
+      if (clear(x, z)) continue;
+      const k = 0.08 + rnd() * 0.08;
+      flowers[i % FLOWER_MATS.length].push([x, -2.12, z, k, k * 0.8, k]);
+    }
+    for (let i = 0; i < 70; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = 14 + rnd() * 12;
+      const x = r * Math.cos(a);
+      const z = r * Math.sin(a);
+      if (clear(x, z)) continue;
+      const k = 0.45 + rnd() * 0.55;
+      bushes.push([x, -2.15 + k * 0.35, z, k, k * 0.75, k]);
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = 15 + rnd() * 11;
+      const k = 0.25 + rnd() * 0.45;
+      rocks.push([r * Math.cos(a), -2.15, r * Math.sin(a), k, k * 0.6, k * 0.85, rnd() * 3]);
+    }
+    return { flowers, bushes, rocks };
+  }, []);
+  const flowerGeo = useMemo(() => new THREE.IcosahedronGeometry(1, 1), []);
+  const bushGeo = useMemo(() => new THREE.IcosahedronGeometry(1, 2), []);
+  const rockGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 0), []);
+  return (
+    <group>
+      {data.flowers.map((list, i) => (
+        <Scatter key={i} items={list} geometry={flowerGeo} material={FLOWER_MATS[i]} />
+      ))}
+      <Scatter items={data.bushes} geometry={bushGeo} material={M.leaf} />
+      <Scatter items={data.rocks} geometry={rockGeo} material={M.stone} />
+    </group>
+  );
+}
+
+// Kotak sarang lebah kayu di taman (seperti taman atap di referensi)
+function BeeBox({ p, r = 0 }) {
+  return (
+    <group position={p} rotation={[0, r, 0]}>
+      <Box p={[0, 0.25, 0]} s={[0.9, 0.5, 0.7]} m={M.cream} />
+      <Box p={[0, 0.62, 0]} s={[0.9, 0.24, 0.7]} m={M.nectar} />
+      <Box p={[0, 0.8, 0]} s={[1.0, 0.1, 0.8]} m={M.wood} />
+      <Box p={[0, 0.12, 0.36]} s={[0.3, 0.05, 0.04]} m={M.brown} shadow={false} />
     </group>
   );
 }
@@ -76,26 +165,23 @@ function LobbyStairs() {
 }
 
 export function Island() {
+  const grassMat = useMemo(() => std('#FFFFFF', { map: grassTexture(), roughness: 0.92 }), []);
   const rnd = seeded(7);
   const trees = [];
-  const flowers = [];
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 26; i++) {
     const a = rnd() * Math.PI * 2;
-    const r = 19 + rnd() * 5;
+    const r = 18.5 + rnd() * 6.5;
     if (Math.abs(r * Math.cos(a)) < 4 && r * Math.sin(a) > 10) continue; // jangan menutupi jalan ke lobby
-    trees.push(<Tree key={i} p={[r * Math.cos(a), -2.2, r * Math.sin(a)]} s={0.8 + rnd() * 0.6} />);
-  }
-  for (let i = 0; i < 40; i++) {
-    const a = rnd() * Math.PI * 2;
-    const r = 15 + rnd() * 10;
-    const m = [M.white, M.pink, M.nectar, M.amber][i % 4];
-    flowers.push(<Sph key={i} p={[r * Math.cos(a), -2.05, r * Math.sin(a)]} rad={0.18} m={m} seg={[6, 4]} />);
+    trees.push(<Tree key={i} p={[r * Math.cos(a), -2.2, r * Math.sin(a)]} s={0.75 + rnd() * 0.65} />);
   }
   return (
     <group>
-      <mesh position={[0, -2.35, 0]} receiveShadow>
+      <mesh position={[0, -2.35, 0]} material={grassMat} receiveShadow>
         <cylinderGeometry args={[27, 27, 0.3, 6, 1, false, HEX_START]} />
-        <primitive object={M.grass} attach="material" />
+      </mesh>
+      {/* tepi rumput membulat & lapisan tanah berundak */}
+      <mesh position={[0, -2.62, 0]} material={M.leafDark} receiveShadow>
+        <cylinderGeometry args={[27.3, 26.6, 0.4, 6, 1, false, HEX_START]} />
       </mesh>
       <mesh position={[0, -4.3, 0]} material={M.earth} receiveShadow>
         <cylinderGeometry args={[26.6, 20, 3.6, 6, 1, false, HEX_START]} />
@@ -103,27 +189,60 @@ export function Island() {
       <mesh position={[0, -7.3, 0]} rotation={[Math.PI, 0, 0]} material={M.earthDark}>
         <coneGeometry args={[20, 6, 6, 1, false, HEX_START]} />
       </mesh>
-      {/* kolam madu */}
+      {/* kolam madu bercahaya */}
       <Hex p={[-15, -2.17, 11]} rad={3.2} h={0.06} m={M.honey} shadow={false} />
-      <Hex p={[-15, -2.19, 11]} rad={3.6} h={0.05} m={M.royal} shadow={false} />
-      {/* jalan setapak + tangga menuju pintu lobby */}
-      {[0, 1, 2].map((i) => (
-        <Hex key={i} p={[0, -2.18, 19 + i * 2]} rad={0.85} h={0.06} m={M.stone} shadow={false} />
+      <Hex p={[-15, -2.19, 11]} rad={3.6} h={0.05} m={M.gold} shadow={false} />
+      <BeeBox p={[-19.2, -2.2, 12.5]} r={0.6} />
+      <BeeBox p={[-17.8, -2.2, 15.2]} r={-0.3} />
+      {/* jalan batu + tangga menuju pintu lobby */}
+      {[0, 1, 2, 3].map((i) => (
+        <Hex key={i} p={[i % 2 ? 0.35 : -0.35, -2.18, 18.6 + i * 1.7]} rad={0.78} h={0.08} m={M.stone} shadow={false} />
       ))}
       <LobbyStairs />
       {[-1, 1].map((sx) =>
         [18.4, 22.4].map((z) => <LampPost key={`${sx}-${z}`} p={[sx * 2, -2.2, z]} />),
       )}
+      {[
+        [-12, 17],
+        [12, 17],
+        [-21, -4],
+        [21, -4],
+        [0, -22],
+      ].map(([x, z]) => (
+        <LampPost key={`l${x}${z}`} p={[x, -2.2, z]} />
+      ))}
       {trees}
-      {flowers}
+      <Garden />
     </group>
   );
 }
 
 /* ---------- lift madu ---------- */
 
+// kaca sarang madu bercahaya untuk tabung lift
+function useHoneyGlass() {
+  return useMemo(() => {
+    const map = honeyGlassTexture().clone();
+    map.needsUpdate = true;
+    map.repeat.set(3, 9);
+    return new THREE.MeshStandardMaterial({
+      map,
+      emissiveMap: map,
+      emissive: '#FFB020',
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.26,
+      roughness: 0.15,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+  }, []);
+}
+
 export function Lift() {
   const cab = useRef();
+  const glass = useHoneyGlass();
   const top = tierY(2) + 5.5;
   const bottom = -2.2;
   const h = top - bottom;
@@ -132,7 +251,7 @@ export function Lift() {
   });
   return (
     <group position={[LIFT_X, 0, 0]}>
-      <mesh position={[0, (top + bottom) / 2, 0]} material={M.glass}>
+      <mesh position={[0, (top + bottom) / 2, 0]} material={glass}>
         <cylinderGeometry args={[1.3, 1.3, h, 6, 1, true, HEX_START]} />
       </mesh>
       {[0, 1, 2, 3, 4, 5].map((i) => {
@@ -143,6 +262,9 @@ export function Lift() {
         <group key={t} position={[0, tierY(t), 0]}>
           <Hex p={[0, -0.15, 0]} rad={1.75} h={0.3} m={M.royal} />
           <Hex p={[0, 0.02, 0]} rad={1.4} h={0.04} m={M.led} shadow={false} />
+          <mesh position={[0, 0.25, 0]} rotation={[Math.PI / 2, 0, 0]} material={M.gold}>
+            <torusGeometry args={[1.42, 0.07, 8, 6]} />
+          </mesh>
           <Box p={[-2.3, -0.15, 0]} s={[1.8, 0.2, 1.2]} m={M.gold} />
         </group>
       ))}

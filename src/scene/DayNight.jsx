@@ -9,11 +9,15 @@ import { world } from '../sim/engine';
 import { useHive } from '../sim/store';
 import { sound } from '../audio/sound';
 import { M } from './materials';
+import { skyUniforms } from './Atmosphere';
 
 const C = (hex) => new THREE.Color(hex);
-const SKY = { day: C('#FFF1D0'), dusk: C('#FFB27A'), night: C('#1B2040') };
+// langit golden hour hangat seperti diorama referensi; malam tetap biru
+const SKY = { day: C('#FFEAD0'), dusk: C('#FFB27A'), night: C('#1B2040') };
+const SKY_TOP = { day: C('#F7BF86'), dusk: C('#E98A55'), night: C('#0E1330') };
 const SUN = { day: C('#FFE6B0'), dusk: C('#FF9A4A'), night: C('#9FB4FF') };
 const HEMI_SKY = { day: C('#FFF8E7'), night: C('#5D6AAE') };
+const CLOUD = { day: C('#FFFFFF'), night: C('#46507E') };
 const HEMI_GROUND = { day: C('#C98A00'), night: C('#2A2440') };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -60,17 +64,25 @@ export function DayNight() {
     else tmp.copy(SKY.dusk).lerp(SKY.night, clamp(-e / 0.3, 0, 1));
     scene.background.copy(tmp);
     if (scene.fog) scene.fog.color.copy(tmp);
+    skyUniforms.bottom.value.copy(tmp);
+    if (e > 0) skyUniforms.top.value.copy(SKY_TOP.day).lerp(SKY_TOP.dusk, 1 - clamp(e / 0.35, 0, 1));
+    else skyUniforms.top.value.copy(SKY_TOP.dusk).lerp(SKY_TOP.night, clamp(-e / 0.3, 0, 1));
+    M.cloud.emissiveIntensity = 0.45 * d + 0.03;
+    M.cloud.color.copy(CLOUD.day).lerp(CLOUD.night, n);
+    // pantulan lingkungan hangat ikut meredup saat malam
+    scene.environmentIntensity = 0.42 * (0.18 + 0.82 * d);
+    M.lantern.emissiveIntensity = 1.6 + 2.4 * n;
 
     // matahari siang, bulan malam (cahaya utama tetap dari atas supaya bayangan rapi)
     const phi = ((h - 6) / 12) * Math.PI + (n > 0.5 ? Math.PI : 0);
     sun.current.position.set(42 * Math.cos(phi), 28 + 22 * Math.max(0.3, Math.abs(Math.sin(phi))), 22);
-    sun.current.intensity = 0.35 + 1.4 * d;
+    sun.current.intensity = 0.35 + 2.1 * d;
     if (e > 0) sun.current.color.copy(SUN.day).lerp(SUN.dusk, dusk * 0.8);
     else sun.current.color.copy(SUN.dusk).lerp(SUN.night, clamp(-e / 0.3, 0, 1));
-    hemi.current.intensity = 0.35 + 0.6 * d;
+    hemi.current.intensity = 0.25 + 0.22 * d;
     hemi.current.color.copy(HEMI_SKY.day).lerp(HEMI_SKY.night, n);
     hemi.current.groundColor.copy(HEMI_GROUND.day).lerp(HEMI_GROUND.night, n);
-    amb.current.intensity = 0.18 + 0.12 * n;
+    amb.current.intensity = 0.04 + 0.16 * n;
 
     // material yang menyala lebih terang saat malam
     M.led.emissiveIntensity = 1.4 + 2.2 * n;

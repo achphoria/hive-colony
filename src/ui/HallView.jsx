@@ -353,6 +353,11 @@ function ActionDock({ onAction }) {
           </span>
           <b>{it.title}</b>
           <span className="dock-sub">{it.sub}</span>
+          {!it.soon && (
+            <span className="dock-go" aria-hidden="true">
+              ›
+            </span>
+          )}
           {it.soon && <span className="soon-badge">{it.id === 'meeting' ? 'Khusus owner' : 'Segera hadir'}</span>}
         </button>
       ))}

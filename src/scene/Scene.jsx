@@ -5,12 +5,19 @@ import { Agents, Island, Lift, Effects, CameraRig } from './World';
 import { OutdoorStaff } from './StaffAvatar';
 import { DayNight, BuzzBridge } from './DayNight';
 import { TvDirector } from './TvDirector';
+import { SkyDome, CloudSea } from './Atmosphere';
+import { WarmEnvironment, LookFX, useQuality } from './Look';
 
 // tv: mode spectator untuk layar besar (kamera dikendalikan TvDirector)
 export function Scene({ tv = false }) {
+  const quality = useQuality();
   return (
     <>
-      <fog attach="fog" args={['#FFF1D0', 95, 200]} />
+      <fog attach="fog" args={['#FFEAD0', 90, 260]} />
+      <SkyDome />
+      <CloudSea />
+      <WarmEnvironment intensity={0.42} />
+      <LookFX quality={quality} ao aoRadius={2.2} />
       <DayNight />
       <BuzzBridge />
       <Island />

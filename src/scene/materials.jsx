@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 
+// Permukaan halus (bukan low-poly patah-patah) supaya mirip diorama referensi
 export const std = (color, extra = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: 0.68, metalness: 0, flatShading: true, ...extra });
+  new THREE.MeshStandardMaterial({ color, roughness: 0.68, metalness: 0, flatShading: false, ...extra });
 
 export const M = {
-  gold: std('#F5B700'),
-  amber: std('#FF8C1A'),
-  royal: std('#C98A00'),
+  // emas metalik: memantulkan lingkungan cahaya hangat (lihat Look.jsx)
+  gold: std('#E9AE14', { metalness: 0.72, roughness: 0.3 }),
+  amber: std('#FF8C1A', { roughness: 0.55 }),
+  royal: std('#C4870A', { metalness: 0.55, roughness: 0.36 }),
   nectar: std('#FFC93C'),
   hoodie: std('#FFB020'),
-  cream: std('#FFF8E7'),
-  creamDark: std('#F3E6C6'),
+  cream: std('#FFF6E6', { roughness: 0.82 }),
+  creamDark: std('#F2E4C4', { roughness: 0.85 }),
   silver: std('#C0C5CE', { metalness: 0.35, roughness: 0.4 }),
   graphite: std('#2B2B2E'),
   brown: std('#3A2A12'),
@@ -18,8 +20,17 @@ export const M = {
   wood: std('#B9853F'),
   pink: std('#FF9E7A'),
   white: std('#FFFFFF'),
-  leaf: std('#8DBF5A'),
-  leafDark: std('#6FA043'),
+  leaf: std('#7DB44A', { roughness: 0.8 }),
+  leafDark: std('#4F8A3A', { roughness: 0.85 }),
+  pine: std('#3F7A3C', { roughness: 0.85 }),
+  pineLight: std('#5E9C46', { roughness: 0.85 }),
+  pot: std('#E9AE14', { metalness: 0.6, roughness: 0.32 }),
+  terracotta: std('#C9783C', { roughness: 0.75 }),
+  rug: std('#E3B567', { roughness: 0.95 }),
+  rugInner: std('#F6DDA8', { roughness: 0.95 }),
+  sofa: std('#D9733A', { roughness: 0.8 }),
+  cloud: std('#FFFFFF', { roughness: 1, emissive: '#FFE8CF', emissiveIntensity: 0.45 }),
+  lantern: std('#FFD27A', { emissive: '#FFB020', emissiveIntensity: 2.2, roughness: 0.3 }),
   grass: std('#C2D87A'),
   earth: std('#D9A441'),
   earthDark: std('#B07A22'),

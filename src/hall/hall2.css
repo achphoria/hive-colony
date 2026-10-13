@@ -1366,3 +1366,72 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
+/* ---------- tampilan baru Hive Hall (golden honey) ---------- */
+.wscreen {
+  border-radius: 18px;
+  background: rgba(255, 251, 241, 0.97);
+  box-shadow: 0 0 0 3px rgba(255, 210, 120, 0.7), 0 0 26px rgba(255, 170, 40, 0.55), 0 12px 30px rgba(110, 55, 0, 0.35);
+}
+.ws-head {
+  gap: 9px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+.ws-head.gold { background: linear-gradient(180deg, #ffd24a, #f5b000); color: #3a2a12; }
+.ws-head.amber { background: linear-gradient(180deg, #ff9d3a, #f27a10); color: #fff; }
+.ws-head.blue { background: linear-gradient(180deg, #4c8ef0, #2d68cf); color: #fff; }
+.ws-head.green { background: linear-gradient(180deg, #5fc46a, #33a046); color: #fff; }
+.ws-ic {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+}
+.ws-head .live {
+  margin-left: auto;
+}
+.wall-sign {
+  color: #ffe7a0;
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(255, 176, 32, 0.95), 0 0 22px rgba(255, 140, 26, 0.7);
+}
+.wticker-track em {
+  color: #4a2a06;
+}
+.wticker-track em::before {
+  content: '⬢';
+  margin-right: 10px;
+  color: #c98a00;
+  font-size: 0.8em;
+}
+
+/* kartu aksi: kaca frosted bercahaya dengan panah */
+.dock-tile {
+  background: rgba(255, 250, 238, 0.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 205, 110, 0.95);
+  box-shadow: 0 0 18px rgba(255, 176, 32, 0.35), 0 10px 26px rgba(110, 55, 0, 0.18);
+}
+.dock-tile:hover {
+  box-shadow: 0 0 26px rgba(255, 176, 32, 0.55), 0 12px 30px rgba(110, 55, 0, 0.22);
+}
+.dock-go {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1.5px solid #e2cfa4;
+  background: #fffaf0;
+  color: #6b4e00;
+  font-size: 18px;
+  line-height: 1;
+}
+.dock-tile .soon-badge {
+  top: 10px;
+  right: 10px;
+}
