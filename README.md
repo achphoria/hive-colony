@@ -113,6 +113,10 @@ Tempat staff chat langsung dengan agent, seperti ngobrol dengan asisten AI:
 - **Aksi di jawaban agent**: 📋 Salin, 🔊 Dengar, 📌 Simpan (ke Hasil tersimpan), ✅ Jadikan tugas (dikerjakan agent otomatis lewat n8n, atau tugas untuk diri sendiri di papan rencana).
 - Kanan: tingkat akses kamu, tugas agent beserta hasil lengkapnya (`hc_plan_tasks.result`, bisa disalin/diunduh .md), Hasil tersimpan (`hc_agent_results`), peran agent, dan persona lengkap (khusus owner & Pelatih).
 - Queen Bea tahu status server agent (online/offline dari pengecekan terakhir) dan bisa membaca lampiran.
+- **Cari** di semua percakapan (judul & isi) dari kolom pencarian di kiri; hasil langsung membuka percakapannya.
+- **📌 Sematkan** dan **✏️ ganti judul** percakapan milik sendiri; percakapan tersemat selalu di atas.
+- **⬇ Unduh** percakapan yang sedang dibuka sebagai file .md.
+- **Sisa kuota** pesan hari ini tampil di bawah chat kalau owner mengaktifkan batas harian.
 - Pintu masuk: tombol 💬 di Daftar agent, "Buka ruang kerja" di kartu agent, dan tombol "Ruang kerja" di kontrol koloni.
 
 Semua pesan lewat Edge Function `agent-chat`, yang memeriksa login dan akses, menyimpan riwayat (`hc_agent_threads`, `hc_agent_messages`), lalu memanggil n8n dengan secret dari Vault. Browser tidak pernah memegang secret n8n.
@@ -132,7 +136,15 @@ Owner atau Pelatih bisa membuat jadwal per agent: setiap hari, Senin–Jumat, mi
 
 Agent `cloud` (Nimbus), `workflow` (Loop), dan `network` (Ping) selalu dijawab **Grok Bot**. Queen Bea memakai Claude secara default; di kepala chat Queen ada pilihan **Claude / Grok Bot** (tersimpan di browser). Untuk jalur Grok Bot, Edge Function `agent-chat` meneruskan pesan (+ isi lampiran) ke bot dan langsung menjawab `status: 'pending'`; bot sendiri yang menulis balasan ke `hc_agent_messages` (`role: 'agent'`, `meta.engine: 'grokbot'`). Ruang Kerja menampilkan "… sedang berpikir…", menunggu lewat Realtime + polling 5 detik, dan menyerah setelah 3 menit ("Belum ada balasan, coba lagi").
 
+**Tugas untuk agent Grok Bot** (Jadikan tugas, tugas rutin, delegasi Queen) dikirim lewat *thread tugas* (`hc_agent_threads.task_id`, judul "Tugas: …", ikon 🗂 di Ruang Kerja): pesan pertamanya diawali `TUGAS:`. Begitu bot menulis balasan di thread itu, trigger `hc_agent_task_reply` menyalinnya ke hasil tugas papan rencana dan menandai tugas selesai. Nimbus, Loop, dan Ping selalu tampil Online (tidak bergantung server n8n di PC kantor).
+
+**Queen Bea mode Grok** menerima field tambahan `context`: data koloni (staff, persetujuan, tugas, aktivitas, status server), daftar TIM AGENT, dan cara mendelegasikan. Untuk mendelegasikan, bot menulis jawabannya lalu menambahkan di baris terakhir `[[DELEGATE]] [{"agent":"<agent_id>","title":"…","detail":"…"}]` (maks. 3). Trigger `hc_agent_grok_delegate_notify` memanggil `agent-chat` (`grok_delegate`), yang mengirim tugasnya, menghapus blok itu dari pesan, dan menambahkan daftar tugas yang terkirim. Riset web di mode Grok bergantung pada fitur bot (mis. pencarian bawaan Grok).
+
 Alamat & kunci bot disimpan di Supabase Edge Function Secrets, satu pasang per agent: `GROKBOT_URL_CLOUD` / `GROKBOT_KEY_CLOUD`, `GROKBOT_URL_WORKFLOW` / `GROKBOT_KEY_WORKFLOW`, `GROKBOT_URL_NETWORK` / `GROKBOT_KEY_NETWORK`, `GROKBOT_URL_CEO` / `GROKBOT_KEY_CEO`. Kalau belum diisi atau bot tidak menjawab dalam 15 detik, chat menampilkan "<nama> (Grok Bot) tidak bisa dihubungi". Bot menerima `POST {thread_id, agent_id, message, user_name, message_id, history, persona}` dengan header `Authorization: Bearer <kunci>`. `history` = 10 pesan terakhir thread sebelum pesan ini (`[{role: 'user' | 'agent', content}]`); `persona` = prompt lengkap agent dari `hc_agent_prompts.system_prompt` (persona + skill + pelajaran), atau persona Queen Bea yang sama dengan `queen-bea` (`supabase/functions/_shared/queenPersona.ts`).
+
+### Statistik & batas pesan (`#/statistik`, khusus owner)
+
+Per agent: jumlah pesan, tugas, gagal/offline, rata-rata waktu balas, mesin (Claude/Grok/n8n), dan perkiraan token dari panjang teks chat; per hari dan per staff; periode hari ini / 7 / 30 hari (fungsi `hc_agent_stats`). Di halaman yang sama owner mengatur **batas pesan per staff per hari** (`hc_set_limits`, 0 = tanpa batas; owner, tugas rutin, dan delegasi tidak dihitung). Kalau batas habis, Ruang Kerja menolak pesan baru dengan penjelasan sampai besok (WIB). Biaya pasti tetap dicek di Claude Console dan xAI Console.
 
 ### Akses agent (`#/akses`, khusus owner)
 
@@ -147,7 +159,7 @@ Di koloni, lebah yang menganggur kebanyakan diam di mejanya dan sesekali istirah
 ## Tampilan koloni
 
 - **Pintu utama**: tombol besar **Hive Hall** dan **Ruang Kerja** di kiri bawah (di HP jadi dock bawah).
-- **Rak alat** di kanan bawah: Reset kamera, Mode TV, Avatar saya, Joget.
+- **Rak alat** di kanan bawah: Reset kamera, **⚡ Mode hemat** (tanpa efek cahaya/bloom & bayangan, resolusi maks. 1x; untuk laptop/TV yang berat, tersimpan per browser), 📊 Statistik (owner), Mode TV, Avatar saya, Joget.
 - **Header**: angka *online* membuka daftar staff yang sedang online (divisi & sedang di halaman mana); angka *server* membuka status sambungan (server agent n8n di PC kantor, Queen Bea/Claude, jam pengecekan terakhir, tombol Cek ulang). Sisa saldo token Claude tidak tersedia lewat API; owner mendapat tautan ke Claude Console → Billing.
 - **Daftar agent** tertutup secara default; buka dengan tombol +.
 - Dengung lebah saat kamera mendekat dihapus.

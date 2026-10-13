@@ -4,6 +4,14 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Grok Bot penuh, statistik & kuota, Ruang Kerja lebih nyaman
+- **Tugas untuk Nimbus, Loop, Ping lewat Grok Bot**: Jadikan tugas, tugas rutin, dan delegasi Queen dikirim lewat thread tugas; balasan bot otomatis jadi hasil tugas di papan rencana dan tugas ditandai selesai. Ketiganya selalu tampil Online (tidak bergantung n8n).
+- **Queen Bea mode Grok** sekarang menerima data koloni & daftar agent, dan bisa mendelegasikan tugas lewat blok `[[DELEGATE]]` yang diproses server (blok disembunyikan dari chat).
+- **⚡ Mode hemat** di rak alat: tanpa efek cahaya & bayangan, resolusi 1x, untuk laptop/TV yang berat.
+- **📊 Statistik** (owner): pesan per agent & staff, tugas, gagal, waktu balas rata-rata, perkiraan token, grafik harian; **batas pesan harian per staff** yang bisa diatur owner.
+- **Ruang Kerja**: cari di semua percakapan, sematkan & ganti judul percakapan, unduh percakapan (.md), sisa kuota hari ini.
+- Logika bersama Edge Function dipindah ke `supabase/functions/_shared/hive.ts`.
+
 ### Mode percakapan suara di Ruang Kerja
 - Tombol 🗣 di kotak chat: bicara → terkirim otomatis setelah diam ±1,5 detik → jawaban agent dibacakan → mikrofon menyala lagi, sampai Selesai.
 - Bisa menyela dengan ✋ Potong atau spasi; berhenti sendiri setelah 90 detik tanpa suara; bunyi penanda saat mikrofon mulai mendengar.

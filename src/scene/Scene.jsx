@@ -9,6 +9,7 @@ import { DayNight } from './DayNight';
 import { TvDirector } from './TvDirector';
 import { SkyDome, CloudSea } from './Atmosphere';
 import { WarmEnvironment, LookFX, useQuality } from './Look';
+import { useSaver } from '../sim/saver';
 
 // pengembangan saja: akses renderer untuk profil performa (tidak ikut build publik)
 function DevExpose() {
@@ -42,16 +43,17 @@ function ShadowThrottle({ hz = 5 }) {
 // tv: mode spectator untuk layar besar (kamera dikendalikan TvDirector)
 export function Scene({ tv = false }) {
   const quality = useQuality();
+  const saver = useSaver((s) => s.on);
   return (
     <>
       {import.meta.env.DEV && <DevExpose />}
-      <ShadowThrottle />
+      {!saver && <ShadowThrottle />}
       <fog attach="fog" args={['#FFEAD0', 90, 260]} />
       <SkyDome />
       <CloudSea />
       <WarmEnvironment intensity={0.42} />
       {/* tanpa AO (paling berat) supaya koloni tetap mulus */}
-      <LookFX quality={quality} ao={false} />
+      {!saver && <LookFX quality={quality} ao={false} />}
       <DayNight />
       <Island />
       {ROOM_LIST.map((r) => (

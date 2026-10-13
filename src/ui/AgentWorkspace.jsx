@@ -28,6 +28,10 @@ import {
   deleteResult,
   watchThread,
   loadMyFeedback,
+  updateThread,
+  searchConversations,
+  loadUsage,
+  GROK_AGENTS,
 } from '../hall/agentApi';
 import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraining';
 import { useConversation } from './useConversation';
@@ -39,8 +43,6 @@ const COL_LABEL = { todo: 'Belum', doing: 'Jalan', done: 'Selesai' };
 const SpeechRec = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 const VOICE_KEY = 'hc-aw-voice';
 const ENGINE_KEY = 'hc-aw-engine';
-// agent yang selalu dijawab Grok Bot (Queen Bea bisa dipilih di kepala chat)
-const GROK_AGENTS = ['cloud', 'workflow', 'network'];
 const WAIT_POLL_MS = 5000;
 const WAIT_MAX_MS = 3 * 60 * 1000;
 function loadEngine() {
@@ -63,9 +65,12 @@ const timeLabel = (iso) => {
 };
 const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
 const extOf = (name) => (name.split('.').pop() || 'file').slice(0, 4).toUpperCase();
+// blok delegasi di akhir jawaban Queen mode Grok diproses server, jangan ditampilkan
+const visible = (s) => String(s || '').replace(/\n?\s*\[\[DELEGATE\]\][\s\S]*$/, '').trim();
+const threadParam = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('thread');
 // teks polos untuk dibacakan / disalin
 const plain = (s) =>
-  s
+  visible(s)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/^#{1,4}\s+/gm, '')
     .replace(/^\s*[-*•]\s+/gm, '')
@@ -136,6 +141,7 @@ function usePresence() {
   const online = useAgentNet((s) => s.online);
   return (id) => {
     if (id === 'ceo') return ai === 'on' ? 'online' : 'offline';
+    if (GROK_AGENTS.includes(id)) return agentStates[id]?.missionId ? 'work' : 'online';
     if (!prompts.includes(id) || online === false) return 'offline';
     return agentStates[id]?.missionId ? 'work' : 'online';
   };
@@ -278,6 +284,9 @@ export function AgentWorkspace({ agentId }) {
     onIdle: () => setNotice('Mode percakapan berhenti karena tidak ada suara.'),
   });
   const [tab, setTab] = useState('info');
+  const [quota, setQuota] = useState(null); // { used, limit } pesan hari ini
+  const [search, setSearch] = useState('');
+  const [found, setFound] = useState(null); // hasil pencarian percakapan
   const listRef = useRef(null);
   const fileRef = useRef(null);
   const recRef = useRef(null);
@@ -296,6 +305,7 @@ export function AgentWorkspace({ agentId }) {
     setFiles([]);
     loadThreads(agent).then(setThreads);
     loadResults(agent).then(setResults);
+    if (threadParam()) setThreadId(threadParam());
     if (agent !== 'ceo')
       supabase
         .from('hc_agent_prompts')
@@ -305,6 +315,28 @@ export function AgentWorkspace({ agentId }) {
         .then(({ data }) => setPrompt(data?.system_prompt || ''));
     else setPrompt('');
   }, [agent, account]);
+
+  // pindah percakapan lewat ?thread= tanpa ganti agent
+  useEffect(() => {
+    const on = () => threadParam() && setThreadId(threadParam());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+
+  // kuota pesan harian (kalau owner mengaktifkan batas)
+  useEffect(() => {
+    if (account) loadUsage().then((q) => q && setQuota(q));
+  }, [account]);
+
+  // cari di semua percakapan (jeda 400 ms setelah berhenti mengetik)
+  useEffect(() => {
+    if (search.trim().length < 2) {
+      setFound(null);
+      return undefined;
+    }
+    const t = setTimeout(() => searchConversations(search).then(setFound), 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // owner melihat percakapan staff lain: tampilkan nama pemiliknya
   const trainsAny = access.owner || Object.values(access.levels).includes('train');
@@ -472,6 +504,7 @@ export function AgentWorkspace({ agentId }) {
       const refs = pending.length ? await uploadFiles(pending) : [];
       const r = await sendToAgent({ agent, message: m, threadId, files: refs, engine });
       if (r.status === 'pending') setWaiting({ threadId: r.thread_id, since: Date.now() });
+      if (r.quota) setQuota(r.quota);
       if (voiceOn && !convo.active && r.status === 'ok' && r.reply) {
         setSpeaking('last');
         speak(plain(r.reply), () => setSpeaking((s) => (s === 'last' ? null : s)));
@@ -562,6 +595,11 @@ export function AgentWorkspace({ agentId }) {
         </button>
         <h1>Ruang Kerja Agent</h1>
         {access.owner && (
+          <button className="hbtn" onClick={() => go('/statistik')}>
+            📊<span className="lbl"> Statistik</span>
+          </button>
+        )}
+        {access.owner && (
           <button className="hbtn" onClick={() => go('/akses')}>
             🔑<span className="lbl"> Akses agent</span>
           </button>
@@ -577,6 +615,40 @@ export function AgentWorkspace({ agentId }) {
               </option>
             ))}
           </select>
+          <div className="aw-search">
+            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔎 Cari di semua percakapan" aria-label="Cari percakapan" />
+          </div>
+          {found && (
+            <div className="aw-found">
+              <p className="aw-label">
+                Hasil pencarian
+                <button className="aw-link" onClick={() => setSearch('')}>
+                  tutup
+                </button>
+              </p>
+              {found.length === 0 && <p className="muted small">Tidak ada yang cocok.</p>}
+              {found.map((f) => (
+                <button
+                  key={f.threadId}
+                  className="aw-hit"
+                  onClick={() => {
+                    setSearch('');
+                    go(`/agent/${f.agent}?thread=${f.threadId}`);
+                    if (f.agent === agent) setThreadId(f.threadId);
+                  }}
+                >
+                  <b>
+                    {AGENT_BY_ID[f.agent]?.nick || f.agent} · {f.title}
+                  </b>
+                  {f.snippet && <span>{f.snippet}</span>}
+                  <small>
+                    {timeLabel(f.at)}
+                    {f.userId !== uid && names[f.userId] ? ` · ${names[f.userId]}` : ''}
+                  </small>
+                </button>
+              ))}
+            </div>
+          )}
           <AgentList current={agent} access={access} presence={presence} onPick={(id) => go(`/agent/${id}`)} />
           {level && (
             <>
@@ -585,14 +657,46 @@ export function AgentWorkspace({ agentId }) {
                 ＋ Percakapan baru
               </button>
               {threads.map((t) => (
-                <div key={t.id} className={`aw-thread${t.id === threadId ? ' on' : ''}`}>
+                <div key={t.id} className={`aw-thread${t.id === threadId ? ' on' : ''}${t.pinned ? ' pinned' : ''}`}>
                   <button onClick={() => setThreadId(t.id)}>
-                    <span>{t.title}</span>
+                    <span>
+                      {t.pinned && '📌 '}
+                      {t.task_id && '🗂 '}
+                      {t.title}
+                    </span>
                     <small>
                       {timeLabel(t.updated_at)}
                       {t.user_id !== uid && names[t.user_id] ? ` · ${names[t.user_id]}` : ''}
                     </small>
                   </button>
+                  {t.user_id === uid && (
+                    <span className="aw-thread-acts">
+                      <button
+                        className="aw-del"
+                        aria-label={t.pinned ? 'Lepas sematan' : 'Sematkan percakapan'}
+                        title={t.pinned ? 'Lepas sematan' : 'Sematkan'}
+                        onClick={async () => {
+                          await updateThread(t.id, { pinned: !t.pinned }).catch((e) => setError(e.message));
+                          loadThreads(agent).then(setThreads);
+                        }}
+                      >
+                        📌
+                      </button>
+                      <button
+                        className="aw-del"
+                        aria-label="Ganti judul percakapan"
+                        title="Ganti judul"
+                        onClick={async () => {
+                          const title = window.prompt('Judul percakapan', t.title);
+                          if (!title || title === t.title) return;
+                          await updateThread(t.id, { title }).catch((e) => setError(e.message));
+                          loadThreads(agent).then(setThreads);
+                        }}
+                      >
+                        ✏️
+                      </button>
+                    </span>
+                  )}
                   {t.user_id === uid && (
                     <button
                       className="aw-del"
@@ -669,6 +773,22 @@ export function AgentWorkspace({ agentId }) {
               <span className="aw-model">{model}</span>
             )}
             {level && <ScoreBadge agent={agent} />}
+            {level && threadId && msgs.length > 0 && (
+              <button
+                className="aw-voice"
+                title="Unduh percakapan ini (.md)"
+                onClick={() => {
+                  const t = threads.find((x) => x.id === threadId);
+                  const lines = msgs.map((m) => {
+                    const who = m.role === 'user' ? m.meta?.name || account.name : m.role === 'agent' ? def.nick : 'Sistem';
+                    return `**${who}** · ${timeLabel(m.created_at)} WIB\n\n${m.role === 'agent' ? visible(m.content) : m.content}\n`;
+                  });
+                  download(`${slug(`${def.nick}-${t?.title || 'percakapan'}`)}.md`, `# ${def.nick} · ${t?.title || 'Percakapan'}\n\n${lines.join('\n---\n\n')}`);
+                }}
+              >
+                ⬇<span className="lbl"> Unduh</span>
+              </button>
+            )}
             {level && (
               <button className={`aw-voice${voiceOn ? ' on' : ''}`} onClick={toggleVoice} title="Bacakan jawaban otomatis" aria-pressed={voiceOn}>
                 {voiceOn ? '🔊' : '🔈'}
@@ -703,7 +823,7 @@ export function AgentWorkspace({ agentId }) {
                     <div key={m.id} className={`aw-msg ${m.role}`}>
                       {m.role === 'agent' && avatar(true)}
                       <div className="aw-bub">
-                        {m.role === 'agent' ? <Rich text={m.content} /> : <p>{m.content}</p>}
+                        {m.role === 'agent' ? <Rich text={visible(m.content)} /> : <p>{m.content}</p>}
                         <FileChips files={m.meta?.files} onOpen={(f) => f.path && openFile(f.path)} />
                         {m.meta?.delegated?.length > 0 && (
                           <div className="aw-deleg">
@@ -771,6 +891,11 @@ export function AgentWorkspace({ agentId }) {
                 )}
               </div>
               {error && <div className="error aw-err">{error}</div>}
+              {quota?.limit > 0 && !readOnly && (
+                <p className={`aw-quota${quota.used >= quota.limit ? ' out' : ''}`}>
+                  Sisa pesan hari ini: {Math.max(0, quota.limit - quota.used)} dari {quota.limit}
+                </p>
+              )}
               {notice && <div className="aw-notice">{notice}</div>}
               {readOnly ? (
                 <p className="aw-readonly">Ini percakapan milik {names[thread.user_id] || 'staff lain'} (hanya bisa dibaca).</p>

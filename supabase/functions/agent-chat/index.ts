@@ -10,9 +10,26 @@
 //   POST { action: 'routine_run', routine_id }                    -> { task_id }   (Jalankan sekarang, owner/Pelatih)
 //   POST { action: 'resume', approval_id, status } + x-hive-secret -> 202          (dari trigger hc_approvals)
 //   POST { action: 'routines' } + x-hive-secret                   -> { ran }       (dari n8n "Hive - Routine Tick")
+//   POST { action: 'grok_delegate', message_id } + x-hive-secret  -> 202          (balasan Queen mode Grok berisi [[DELEGATE]])
+//   POST { action: 'usage' }                                      -> { used, limit } (kuota pesan harian saya)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
+import {
+  background,
+  n8nConfig,
+  callN8n,
+  callWorker,
+  GROK_AGENTS,
+  dispatchGrok,
+  startAgentTask,
+  loadAgents,
+  teamBlock,
+  parseDelegation,
+  delegateTasks,
+  colonyData,
+  GROK_DELEGATE_GUIDE,
+} from '../_shared/hive.ts';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
 const MAX_MESSAGE = 4000;
@@ -20,10 +37,6 @@ const MAX_FILES = 3;
 const MAX_FILE_TEXT = 30000; // karakter isi per lampiran
 const BUCKET = 'hc-agent-files';
 const MODEL = 'claude-haiku-5-5';
-// agent yang selalu dijawab Grok Bot (Queen Bea hanya kalau engine = 'grokbot'); URL & kunci di
-// Edge Function Secrets GROKBOT_URL_<AGENT> dan GROKBOT_KEY_<AGENT>, misalnya GROKBOT_URL_CLOUD
-const GROK_AGENTS = ['cloud', 'workflow', 'network'];
-
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -37,41 +50,12 @@ const ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
 const admin = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
-// kerja latar belakang setelah respons dikirim
-function background(p: Promise<unknown>) {
-  // deno-lint-ignore no-explicit-any
-  const rt = (globalThis as any).EdgeRuntime;
-  if (rt?.waitUntil) rt.waitUntil(p);
-  else p.catch(() => {});
-}
-
-let cache: { url: string; secret: string } | null = null;
-async function n8n() {
-  if (cache) return cache;
-  const [{ data: url }, { data: secret }] = await Promise.all([admin.rpc('hive_n8n_url'), admin.rpc('hive_webhook_secret')]);
-  if (typeof url !== 'string' || typeof secret !== 'string' || !url || !secret) throw new Error('n8n_not_configured');
-  cache = { url: url.replace(/\/+$/, ''), secret };
-  return cache;
-}
-
-function callN8n(path: string, body: unknown, timeoutMs: number) {
-  return n8n().then(({ url, secret }) =>
-    fetch(`${url}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1', 'x-hive-secret': secret },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    }),
-  );
-}
-const callWorker = (body: unknown, timeoutMs: number) => callN8n('/webhook/hive/agent-task', body, timeoutMs);
-
 // n8n hidup kalau menjawab JSON "unknown_agent" untuk agent fiktif (tanpa memanggil AI).
 // Hasilnya di-cache 2 menit di hc_system_status, berapa pun jumlah staff yang membuka website.
 const HEALTH_TTL_MS = 2 * 60 * 1000;
 async function ping() {
   try {
-    const r = await callWorker({ agent: '__ping__', message: 'ping' }, 8000);
+    const r = await callWorker(admin, { agent: '__ping__', message: 'ping' }, 8000);
     const d = await r.json().catch(() => null);
     return r.status === 404 && d?.error === 'unknown_agent';
   } catch {
@@ -99,7 +83,7 @@ async function resume(approvalId: string, status: string) {
   if (!ap) return;
   let d: { worker?: { reply?: string }; skipped?: boolean } | null = null;
   try {
-    const r = await callN8n('/webhook/hive/approval-resume', { approval_id: approvalId, status }, 140000);
+    const r = await callN8n(admin, '/webhook/hive/approval-resume', { approval_id: approvalId, status }, 140000);
     d = await r.json().catch(() => null);
   } catch (e) {
     console.error('approval-resume', String(e));
@@ -134,29 +118,11 @@ async function resume(approvalId: string, status: string) {
   await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', origin.thread_id);
 }
 
-// ---------- tugas agent: kartu papan rencana + dikerjakan worker n8n di latar belakang ----------
-async function startAgentTask(o: { agent: string; nick: string; dept: string | null; title: string; detail: string; by: string | null; caller: Record<string, unknown>; activity: string }) {
-  const { data: t, error } = await admin
-    .from('hc_plan_tasks')
-    .insert({ title: `${o.nick}: ${o.title}`.slice(0, 200), who: o.agent, kind: 'ai', col: 'todo', updated_by: o.by })
-    .select('id')
-    .single();
-  if (error || !t) throw new Error('db_error');
-  await admin.from('hc_activity').insert({ kind: 'task', dept: o.dept, text: o.activity.slice(0, 280) });
-  background(
-    callWorker({ agent: o.agent, title: o.title, detail: o.detail, task_id: t.id, caller: o.caller }, 110000)
-      .then((r) => r.json())
-      .then((d) => (d?.reply ? admin.from('hc_plan_tasks').update({ result: String(d.reply).slice(0, 20000), result_at: new Date().toISOString() }).eq('id', t.id) : null))
-      .catch((e) => console.error('task call', String(e))),
-  );
-  return t.id as string;
-}
-
 // ---------- tugas rutin: dipanggil workflow n8n "Hive - Routine Tick" tiap 5 menit ----------
-type Routine = { id: string; agent_id: string; title: string; instruction: string; next_run_at: string | null };
+type Routine = { id: string; agent_id: string; title: string; instruction: string; next_run_at: string | null; created_by: string | null };
 async function runRoutine(r: Routine, by: string | null, manual: boolean) {
   const { nick, dept } = await nickOf(r.agent_id);
-  const taskId = await startAgentTask({
+  const taskId = await startAgentTask(admin, {
     agent: r.agent_id,
     nick,
     dept,
@@ -173,7 +139,7 @@ async function runDueRoutines() {
   const nowIso = new Date().toISOString();
   const { data: due } = await admin
     .from('hc_agent_routines')
-    .select('id, agent_id, title, instruction, next_run_at')
+    .select('id, agent_id, title, instruction, next_run_at, created_by')
     .eq('active', true)
     .lte('next_run_at', nowIso)
     .order('next_run_at')
@@ -184,13 +150,38 @@ async function runDueRoutines() {
     const { data: claimed } = await admin.from('hc_agent_routines').update({ last_run_at: nowIso }).eq('id', r.id).eq('next_run_at', r.next_run_at).select('id').maybeSingle();
     if (!claimed) continue;
     try {
-      await runRoutine(r, null, false);
+      await runRoutine(r, r.created_by, false);
       ran++;
     } catch (e) {
       console.error('routine', r.id, String(e));
     }
   }
   return ran;
+}
+
+// ---------- Queen Bea mode Grok: blok [[DELEGATE]] di balasan bot -> tugas ke agent ----------
+async function grokDelegate(messageId: number) {
+  const { data: m } = await admin.from('hc_agent_messages').select('id, thread_id, content, meta').eq('id', messageId).maybeSingle();
+  if (!m || !String(m.content).includes('[[DELEGATE]]')) return;
+  const { data: t } = await admin.from('hc_agent_threads').select('agent_id, user_id').eq('id', m.thread_id).maybeSingle();
+  if (!t || t.agent_id !== 'ceo') return;
+  const { data: prof } = await admin.from('hc_profiles').select('role').eq('id', t.user_id).maybeSingle();
+  const parsed = parseDelegation(String(m.content), await loadAgents(admin));
+  const delegated = parsed.items.length && prof && prof.role !== 'viewer' ? await delegateTasks(admin, parsed.items, t.user_id) : [];
+  let reply = parsed.reply || 'Siap.';
+  const missing = delegated.filter((d) => !reply.includes(d.nick));
+  if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+  await admin
+    .from('hc_agent_messages')
+    .update({ content: reply.slice(0, 20000), meta: { ...(m.meta || {}), delegated } })
+    .eq('id', m.id);
+}
+
+// ---------- kuota pesan harian per staff (owner tanpa batas) ----------
+async function quota(sb: ReturnType<typeof createClient>, role: string) {
+  const [{ data: used }, { data: lim }] = await Promise.all([sb.rpc('hc_my_usage_today'), admin.from('hc_system_status').select('value').eq('key', 'limits').maybeSingle()]);
+  const limit = role === 'owner' ? 0 : Number(lim?.value?.daily_per_staff) || 0;
+  return { used: Number(used) || 0, limit };
 }
 
 // ---------- lampiran: teks dibaca langsung, gambar & PDF dibaca Claude ----------
@@ -253,10 +244,16 @@ Deno.serve(async (req) => {
   // panggilan dari trigger database (approval diputuskan): dijaga secret webhook, bukan login
   const hook = req.headers.get('x-hive-secret');
   if (hook) {
-    const { secret } = await n8n().catch(() => ({ secret: '' }));
+    const { secret } = await n8nConfig(admin).catch(() => ({ secret: '' }));
     if (!secret || hook !== secret) return json({ error: 'forbidden' }, 403);
     const b = await req.json().catch(() => ({}));
     if (b?.action === 'routines') return json({ ok: true, ran: await runDueRoutines() });
+    if (b?.action === 'grok_delegate') {
+      const mid = Number(b?.message_id);
+      if (!Number.isInteger(mid)) return json({ error: 'bad_request' }, 400);
+      background(grokDelegate(mid).catch((e) => console.error('grok_delegate', String(e))));
+      return json({ ok: true, queued: true }, 202);
+    }
     const id = String(b?.approval_id ?? '');
     if (b?.action !== 'resume' || !/^[0-9a-f-]{36}$/i.test(id) || !['approved', 'rejected'].includes(b?.status)) return json({ error: 'bad_request' }, 400);
     background(resume(id, b.status).catch((e) => console.error('resume', String(e))));
@@ -277,10 +274,11 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   if (body?.action === 'health') return json(await health());
+  if (body?.action === 'usage') return json(await quota(sb, me.role));
   // Jalankan sekarang (owner / Pelatih agent itu), jadwal rutin tidak berubah
   if (body?.action === 'routine_run') {
     const rid = String(body?.routine_id ?? '');
-    const { data: r } = await sb.from('hc_agent_routines').select('id, agent_id, title, instruction, next_run_at').eq('id', rid).maybeSingle();
+    const { data: r } = await sb.from('hc_agent_routines').select('id, agent_id, title, instruction, next_run_at, created_by').eq('id', rid).maybeSingle();
     if (!r) return json({ error: 'not_found' }, 404);
     const { data: lv } = await sb.rpc('hc_agent_level', { p_agent: r.agent_id });
     if (lv !== 'owner' && lv !== 'train') return json({ error: 'no_access' }, 403);
@@ -316,7 +314,7 @@ Deno.serve(async (req) => {
     const detail = String(body?.detail ?? '').trim().slice(0, 6000);
     if (!title) return json({ error: 'empty_message' }, 400);
     try {
-      const taskId = await startAgentTask({ agent, nick, dept, title, detail, by: uid, caller: { type: 'staff', id: uid }, activity: `${me.name} memberi tugas ke ${nick}: ${title}` });
+      const taskId = await startAgentTask(admin, { agent, nick, dept, title, detail, by: uid, caller: { type: 'staff', id: uid }, activity: `${me.name} memberi tugas ke ${nick}: ${title}` });
       return json({ task_id: taskId });
     } catch {
       return json({ error: 'db_error' }, 500);
@@ -331,6 +329,10 @@ Deno.serve(async (req) => {
   let message = String(body?.message ?? '').trim().slice(0, MAX_MESSAGE);
   if (!message && files.length) message = 'Tolong pelajari lampiran ini.';
   if (!message) return json({ error: 'empty_message' }, 400);
+
+  const q = await quota(sb, me.role);
+  if (q.limit > 0 && q.used >= q.limit) return json({ error: 'daily_limit', ...q }, 429);
+  const quotaAfter = { used: q.used + 1, limit: q.limit };
 
   // percakapan: lanjutkan milik sendiri, atau buat baru
   let threadId = typeof body?.thread_id === 'string' ? body.thread_id : '';
@@ -373,36 +375,24 @@ Deno.serve(async (req) => {
   const engine = body?.engine === 'grokbot' ? 'grokbot' : 'claude';
   const useGrok = GROK_AGENTS.includes(agent) || (agent === 'ceo' && engine === 'grokbot');
   if (useGrok) {
-    const key = agent.toUpperCase();
-    const url = Deno.env.get(`GROKBOT_URL_${key}`);
-    const token = Deno.env.get(`GROKBOT_KEY_${key}`);
     try {
-      if (!url || !token) throw new Error('grokbot_not_configured');
       const attachments = files.length ? await readFiles(files) : '';
       const full = attachments ? `${message}\n\nLAMPIRAN dari ${me.name} (isi file yang dikirim):\n${attachments}` : message;
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          thread_id: threadId,
-          agent_id: agent,
-          message: full,
-          user_name: me.name,
-          message_id: userMsg?.id ?? null,
-          history, // 10 pesan terakhir sebelum pesan ini: [{ role: 'user' | 'agent', content }]
-          persona,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!r.ok) throw new Error(`grokbot_http_${r.status}`);
+      // Queen Bea: data koloni + tim agent + cara mendelegasikan lewat blok [[DELEGATE]]
+      let context = '';
+      if (agent === 'ceo') {
+        const { data: meFull } = await sb.from('hc_profiles').select('name, role, primary_dept').eq('id', uid).maybeSingle();
+        context = [await colonyData(sb, meFull || { ...me, primary_dept: '-' }, admin), teamBlock(await loadAgents(admin)), me.role === 'viewer' ? 'Pengguna ini viewer: jangan mendelegasikan tugas.' : GROK_DELEGATE_GUIDE].join('\n\n');
+      }
+      await dispatchGrok({ agent, threadId, message: full, userName: me.name, messageId: userMsg?.id ?? null, history, persona, context });
       await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
-      return json({ thread_id: threadId, reply: '', status: 'pending', meta: { engine: 'grokbot' } });
+      return json({ thread_id: threadId, reply: '', status: 'pending', meta: { engine: 'grokbot' }, quota: quotaAfter });
     } catch (e) {
       const errMeta = { engine: 'grokbot', error: String((e as Error)?.message || e).slice(0, 200) };
       const errReply = `${nick} (Grok Bot) tidak bisa dihubungi. Coba lagi nanti.`;
       await admin.from('hc_agent_messages').insert({ thread_id: threadId, role: 'system', content: errReply, meta: errMeta });
       await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
-      return json({ thread_id: threadId, reply: errReply, status: 'error', meta: errMeta });
+      return json({ thread_id: threadId, reply: errReply, status: 'error', meta: errMeta, quota: quotaAfter });
     }
   }
 
@@ -430,7 +420,7 @@ Deno.serve(async (req) => {
         (convo ? `Riwayat percakapan sebelumnya dengan ${me.name}:\n${convo}\n\n` : '') +
         `Pesan terbaru dari ${me.name} (staff Hive Colony). Jawab langsung sebagai ${nick}:\n${message}` +
         (attachments ? `\n\nLAMPIRAN dari ${me.name} (isi file yang dikirim):\n${attachments}` : '');
-      const r = await callWorker({ agent, message: prompt, caller: { type: 'staff', id: uid } }, 110000);
+      const r = await callWorker(admin, { agent, message: prompt, caller: { type: 'staff', id: uid } }, 110000);
       const d = await r.json().catch(() => null);
       if (r.status === 202 && d?.status === 'pending_approval') {
         status = 'pending_approval';
@@ -458,5 +448,5 @@ Deno.serve(async (req) => {
 
   await admin.from('hc_agent_messages').insert({ thread_id: threadId, role, content: reply.slice(0, 20000), meta });
   await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
-  return json({ thread_id: threadId, reply, status, meta });
+  return json({ thread_id: threadId, reply, status, meta, quota: quotaAfter });
 });

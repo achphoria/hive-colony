@@ -6,6 +6,8 @@ import { HallView } from './ui/HallView';
 import { TvOverlay } from './ui/TvOverlay';
 import { AgentWorkspace } from './ui/AgentWorkspace';
 import { AccessPage } from './ui/AccessPage';
+import { StatsPage } from './ui/StatsPage';
+import { useSaver } from './sim/saver';
 import { startAgentWatch, stopAgentWatch } from './hall/agentApi';
 import { AvatarCreator } from './ui/AvatarCreator';
 import { LoginPage, JoinPage, InvitePage } from './ui/AuthPages';
@@ -25,11 +27,12 @@ const MAX_DPR = Math.min(1.5, window.devicePixelRatio || 1);
 
 function Tower({ tv = false }) {
   const [dpr, setDpr] = useState(MAX_DPR);
+  const saver = useSaver((s) => s.on);
   return (
     <div className="app">
       <Canvas
-        shadows
-        dpr={dpr}
+        shadows={!saver}
+        dpr={saver ? Math.min(1, dpr) : dpr}
         gl={{ powerPreference: 'high-performance', antialias: false, stencil: false }}
         camera={{ position: [40, 34, 48], fov: 35, near: 0.1, far: 500 }}
         onPointerMissed={() => useHive.getState().clearSelection()}
@@ -115,6 +118,7 @@ export function App() {
   if (route === '/tv') return <Tower tv />;
   if (route === '/agent' || route.startsWith('/agent/')) return <AgentWorkspace agentId={route.split('/')[2] || 'ceo'} />;
   if (route === '/akses') return <AccessPage />;
+  if (route === '/statistik') return <StatsPage />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;

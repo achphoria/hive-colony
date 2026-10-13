@@ -11,7 +11,8 @@ import { sound } from '../audio/sound';
 import { useAi, checkAi } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
-import { useAgentNet, useAgentScores, checkHealth } from '../hall/agentApi';
+import { useAgentNet, useAgentScores, checkHealth, GROK_AGENTS } from '../hall/agentApi';
+import { useSaver } from '../sim/saver';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -52,7 +53,9 @@ function presenceOf(id, st, real, ai, inMeeting, prompts, netOnline) {
       if (ai.status !== 'on') return 'offline';
       return ai.busy > 0 || inMeeting ? 'work' : 'online';
     }
-    // server agent (n8n di PC kantor) mati -> semua agent offline
+    // Nimbus, Loop, Ping dijawab Grok Bot: tidak bergantung server PC kantor
+    if (GROK_AGENTS.includes(id)) return st?.missionId ? 'work' : 'online';
+    // server agent (n8n di PC kantor) mati -> agent n8n offline
     if (!prompts.includes(id) || netOnline === false) return 'offline';
     return st?.missionId ? 'work' : 'online';
   }
@@ -233,6 +236,7 @@ export function ServerStatusDetail() {
         net.online === null ? 'Memeriksa…' : `${net.online ? 'Online, 20 agent siap kerja' : 'Offline, tugas agent tertunda'}${net.checkedAt ? ` · dicek ${hm(net.checkedAt)} WIB` : ''}`,
       )}
       {row(ai === 'unknown' ? null : ai === 'on', 'Queen Bea (Claude Haiku 5.5)', ai === 'on' ? 'Tersambung' : ai === 'unknown' ? 'Memeriksa…' : 'Belum tersambung')}
+      {row(null, 'Grok Bot (Nimbus, Loop, Ping, Queen opsi)', 'Bot eksternal, tidak dipantau otomatis. Kalau tidak bisa dihubungi, chat akan memberi tahu.')}
       <p className="muted small srv-note">
         Sisa saldo token Claude tidak bisa dibaca dari API.
         {owner ? (
@@ -674,6 +678,8 @@ function PrimaryActions({ className = 'primary-actions', onPick }) {
 // alat tambahan, dipisah dari tombol utama
 function ToolRail({ className = 'panel tool-rail', onPick }) {
   const hasProfile = useHive((s) => !!s.profile);
+  const saver = useSaver((s) => s.on);
+  const owner = useAuth((s) => s.account?.role === 'owner');
   const tool = (icon, label, fn, title) => (
     <button
       className="tool"
@@ -691,6 +697,17 @@ function ToolRail({ className = 'panel tool-rail', onPick }) {
   return (
     <div className={className}>
       {tool('🎯', 'Reset kamera', () => useHive.getState().resetView())}
+      <button
+        className={`tool${saver ? ' on' : ''}`}
+        onClick={() => useSaver.getState().toggle()}
+        title="Mode hemat: tanpa efek cahaya & bayangan, untuk laptop/TV yang berat"
+        aria-pressed={saver}
+        aria-label="Mode hemat"
+      >
+        <span aria-hidden="true">⚡</span>
+        <em>{saver ? 'Hemat aktif' : 'Mode hemat'}</em>
+      </button>
+      {owner && tool('📊', 'Statistik', () => go('/statistik'))}
       {tool('📺', 'Mode TV', () => go('/tv'), 'Mode spectator untuk layar besar')}
       {tool('🧑', hasProfile ? 'Avatar saya' : 'Buat avatar', () => go('/avatar'))}
       {hasProfile && <DanceMenu onPick={onPick} />}
