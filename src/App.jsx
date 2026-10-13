@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { Scene } from './scene/Scene';
 import { HUD, useAutoSound } from './ui/HUD';
 import { HallView } from './ui/HallView';
+import { TvOverlay } from './ui/TvOverlay';
 import { AvatarCreator } from './ui/AvatarCreator';
 import { LoginPage, JoinPage, InvitePage } from './ui/AuthPages';
 import { useRoute } from './ui/nav';
@@ -16,7 +17,7 @@ import { startPresence, stopPresence } from './sim/presence';
 import { startHallSync, stopHallSync } from './sim/hallSync';
 import { DEMO_STAFF, loadProfile } from './data/staff';
 
-function Tower() {
+function Tower({ tv = false }) {
   return (
     <div className="app">
       <Canvas
@@ -26,10 +27,10 @@ function Tower() {
         onPointerMissed={() => useHive.getState().clearSelection()}
       >
         <Suspense fallback={null}>
-          <Scene />
+          <Scene tv={tv} />
         </Suspense>
       </Canvas>
-      <HUD />
+      {tv ? <TvOverlay /> : <HUD />}
     </div>
   );
 }
@@ -79,6 +80,7 @@ export function App() {
         <QueenPreview />
       </Suspense>
     );
+  if (route === '/tv') return <Tower tv />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;

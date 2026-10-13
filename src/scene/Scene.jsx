@@ -4,8 +4,10 @@ import { Room } from './Room';
 import { Agents, Island, Lift, Effects, CameraRig } from './World';
 import { OutdoorStaff } from './StaffAvatar';
 import { DayNight, BuzzBridge } from './DayNight';
+import { TvDirector } from './TvDirector';
 
-export function Scene() {
+// tv: mode spectator untuk layar besar (kamera dikendalikan TvDirector)
+export function Scene({ tv = false }) {
   return (
     <>
       <fog attach="fog" args={['#FFF1D0', 95, 200]} />
@@ -28,7 +30,7 @@ export function Scene() {
         maxPolarAngle={1.4}
         target={[0, 7, 0]}
       />
-      <CameraRig />
+      {tv ? <TvDirector /> : <CameraRig />}
     </>
   );
 }

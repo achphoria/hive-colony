@@ -506,6 +506,7 @@ function Controls({ className = 'panel controls', onPick }) {
       <button onClick={resetView}>Reset kamera</button>
       <span className="ctl-sep" />
       <button onClick={() => go('/hall')}>Hive Hall</button>
+      <button onClick={() => go('/tv')} title="Mode spectator untuk layar besar">📺 Mode TV</button>
       <button onClick={() => go('/avatar')}>{hasProfile ? 'Avatar saya' : 'Buat avatar'}</button>
       {hasProfile && <DanceMenu onPick={onPick} />}
     </div>

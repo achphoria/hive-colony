@@ -79,6 +79,15 @@ Untuk staff yang login, Queen Bea dijawab **Claude Haiku 5.5** lewat Edge Functi
 
 Model khusus ratu (`src/scene/QueenBea.jsx`): lebih tinggi, wajah humanoid dengan mata besar dan bulu mata lentik, rambut emas bersanggul, mahkota emas bermutiara dan permata madu, gaun bergaris lebah, jubah beludru berbulu putih, kalung, tongkat kerajaan, dan empat sayap. Saat pengembangan, `#/queen` membuka pratinjau dari dekat (tidak ikut build publik).
 
+### Mode TV (spectator untuk layar besar)
+
+Buka **`#/tv`** (https://achphoria.github.io/hive-colony/#/tv) atau tombol **📺 Mode TV** di koloni. Panel disembunyikan dan kamera dikendalikan "sutradara" otomatis:
+
+- Bergantian: orbit menara, tur per lantai, close-up agent (prioritas yang sedang misi/rapat/istirahat dan Queen Bea), dan close-up staff di taman (staff online diutamakan).
+- Garis pandang ke wajah dicek dengan raycast di lima titik; kalau terhalang (layar hologram, perabot, ruangan lain, pohon) sudut lain dicoba. Lantai di atas target disembunyikan. Agent di meja diambil dari sudut 3/4.
+- Overlay: jam & tanggal WIB, badge LIVE, jumlah staff online & agent AI, caption ala siaran TV, dan ticker aktivitas.
+- Gerakkan mouse untuk kontrol (shot berikutnya, layar penuh, keluar). Keyboard: `N`/→ shot berikutnya, `F` layar penuh.
+
 ## Mode real vs mode demo
 
 - **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.

@@ -181,13 +181,13 @@ export function Room({ room }) {
         };
         if (room.kind === 'lobby' && i === 1) {
           return (
-            <group key={i} {...transform}>
+            <group key={i} {...transform} userData={{ cutaway: true }}>
               <DoorWall wallH={wallH} len={sideLen} />
             </group>
           );
         }
         return (
-          <group key={i} ref={(el) => (walls.current[i] = el)} {...transform}>
+          <group key={i} ref={(el) => (walls.current[i] = el)} {...transform} userData={{ cutaway: true }}>
             <mesh position={[0, wallH / 2, 0]} material={isGarden ? M.wood : wallMat} castShadow receiveShadow>
               <boxGeometry args={[sideLen, wallH, 0.18]} />
             </mesh>
