@@ -116,6 +116,17 @@ Tempat staff chat langsung dengan agent, seperti ngobrol dengan asisten AI:
 
 Semua pesan lewat Edge Function `agent-chat`, yang memeriksa login dan akses, menyimpan riwayat (`hc_agent_threads`, `hc_agent_messages`), lalu memanggil n8n dengan secret dari Vault. Browser tidak pernah memegang secret n8n.
 
+### Latih agent (tab Skill di Ruang Kerja)
+
+- **👍/👎 di setiap jawaban agent.** 👎 bisa diberi koreksi ("apa yang seharusnya"). Semua staff yang punya akses bisa menilai (`hc_agent_feedback`).
+- **Skor skill nyata** per agent dari penilaian 30 hari terakhir: (👍+1)/(total+2), jadi agent baru mulai dari 50. Tampil di kepala chat, tab Skill, dan kartu agent di koloni 3D.
+- **Kartu skill & pelajaran** (`hc_agent_skills`), diatur owner atau Pelatih agent itu. Koreksi staff muncul di "Masukan staff"; klik 🎓 Jadikan pelajaran untuk mengajarkannya ke agent.
+- **Persona dasar** bisa diubah owner/Pelatih. Prompt yang dibaca n8n (`hc_agent_prompts.system_prompt`) dirakit otomatis dari persona + skill aktif + pelajaran aktif (fungsi `hc_agent_compile`). Jadi ubah persona lewat Ruang Kerja atau kolom `persona`, jangan langsung di `system_prompt`: perubahan langsung akan tertimpa saat skill berubah.
+
+### Tugas rutin (tab Rutin di Ruang Kerja)
+
+Owner atau Pelatih bisa membuat jadwal per agent: setiap hari, Senin–Jumat, mingguan, atau bulanan, pada jam WIB tertentu (`hc_agent_routines`, jadwal berikutnya dihitung `hc_routine_next`). Workflow n8n **Hive - Routine Tick** (`n8n/workflows/hive-routine-tick.json`) memanggil `agent-chat` tiap 5 menit. Tugas yang jatuh tempo masuk papan rencana dan dikerjakan agent. Hasilnya muncul di panel Tugas. Ada juga tombol ▶ Jalankan sekarang. Kalau PC kantor mati saat jadwal tiba, tugas itu dijalankan sekali begitu n8n hidup lagi.
+
 ### Akses agent (`#/akses`, khusus owner)
 
 Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak punya akses sampai diatur. Klik chip agent untuk berganti: Tanpa akses → **Pakai** (chat & perintah) → **Pelatih** (juga melihat & nanti mengubah skill agent). Ada tombol cepat "Pakai semua" / "Kosongkan" per divisi. Dijaga RLS (`hc_agent_access`, `hc_agent_level()`) dan dicek ulang di server.

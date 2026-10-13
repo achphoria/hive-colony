@@ -843,3 +843,215 @@
     display: none;
   }
 }
+
+/* ---------- Tahap 4 & 5: tab, skor, skill, masukan, tugas rutin ---------- */
+.aw-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 4px;
+  border-radius: 12px;
+  background: #f5edd8;
+}
+.aw-tabs button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8a7a55;
+}
+.aw-tabs button.on {
+  background: #fff;
+  color: #633806;
+  box-shadow: 0 1px 3px rgba(120, 80, 0, 0.12);
+}
+.aw-score {
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fdf3d9;
+  color: #8a5a00;
+  white-space: nowrap;
+}
+.aw-score.good {
+  background: #e3f1d4;
+  color: #3f6b1c;
+}
+.aw-score.low {
+  background: #fde2dc;
+  color: #a32d2d;
+}
+.aw-score.none {
+  background: #f1efe8;
+  color: #8a8371;
+  font-weight: 600;
+}
+.aw-scorecard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1.5px solid #f1e3c2;
+  font-size: 13px;
+}
+.aw-scorecard b {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 30px;
+  color: #c98a00;
+  min-width: 44px;
+  text-align: center;
+}
+.aw-skill {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1.5px solid #f1e3c2;
+  font-size: 13px;
+}
+.aw-skill.off {
+  opacity: 0.55;
+}
+.aw-skill b {
+  display: block;
+}
+.aw-skill p {
+  margin: 3px 0;
+  line-height: 1.45;
+  color: #4a4335;
+  white-space: pre-wrap;
+}
+.aw-when {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a5a00;
+}
+.aw-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e05a47;
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+}
+.aw-fb {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1.5px solid #f6d3cb;
+  font-size: 13px;
+}
+.aw-fb-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aw-fb-q {
+  margin: 4px 0;
+  font-style: italic;
+  color: #6b6658;
+}
+.aw-fb-note {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+.aw-fb details p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: #6b6658;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.aw-rate {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fffaf0;
+  border: 1.5px solid #f3d27a;
+}
+.aw-rate label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b6658;
+}
+.aw-rate textarea,
+.aw-taskform textarea,
+.aw-taskform select {
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1.5px solid #eadfc6;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 400;
+  resize: vertical;
+  background: #fff;
+}
+.aw-acts button.on {
+  background: #e3f1d4;
+  color: #3f6b1c;
+}
+.aw-acts button.on.bad {
+  background: #fde2dc;
+  color: #a32d2d;
+}
+.aw-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.aw-row label {
+  flex: 1;
+  min-width: 90px;
+}
+.aw-notice.inline {
+  margin: 6px 0;
+}
+.aw-role.clamp {
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 12.5px;
+}
+
+/* skor skill di kartu agent koloni */
+.card-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fffdf7;
+  border: 1.5px solid #f1e3c2;
+  font-size: 12px;
+}
+.card-score span {
+  color: #8a8371;
+}
+.card-score b {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 18px;
+  color: #c98a00;
+}
+.card-score small {
+  margin-left: auto;
+  color: #8a8371;
+}

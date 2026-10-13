@@ -6,7 +6,9 @@
 //   POST { action: 'health' }                                     -> { online, checked_at }
 //   POST { action: 'send', agent, message, thread_id?, files? }   -> { thread_id, reply, status, meta }
 //   POST { action: 'task', agent, title, detail }                 -> { task_id }   (Jadikan tugas untuk agent)
+//   POST { action: 'routine_run', routine_id }                    -> { task_id }   (Jalankan sekarang, owner/Pelatih)
 //   POST { action: 'resume', approval_id, status } + x-hive-secret -> 202          (dari trigger hc_approvals)
+//   POST { action: 'routines' } + x-hive-secret                   -> { ran }       (dari n8n "Hive - Routine Tick")
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -127,6 +129,65 @@ async function resume(approvalId: string, status: string) {
   await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', origin.thread_id);
 }
 
+// ---------- tugas agent: kartu papan rencana + dikerjakan worker n8n di latar belakang ----------
+async function startAgentTask(o: { agent: string; nick: string; dept: string | null; title: string; detail: string; by: string | null; caller: Record<string, unknown>; activity: string }) {
+  const { data: t, error } = await admin
+    .from('hc_plan_tasks')
+    .insert({ title: `${o.nick}: ${o.title}`.slice(0, 200), who: o.agent, kind: 'ai', col: 'todo', updated_by: o.by })
+    .select('id')
+    .single();
+  if (error || !t) throw new Error('db_error');
+  await admin.from('hc_activity').insert({ kind: 'task', dept: o.dept, text: o.activity.slice(0, 280) });
+  background(
+    callWorker({ agent: o.agent, title: o.title, detail: o.detail, task_id: t.id, caller: o.caller }, 110000)
+      .then((r) => r.json())
+      .then((d) => (d?.reply ? admin.from('hc_plan_tasks').update({ result: String(d.reply).slice(0, 20000), result_at: new Date().toISOString() }).eq('id', t.id) : null))
+      .catch((e) => console.error('task call', String(e))),
+  );
+  return t.id as string;
+}
+
+// ---------- tugas rutin: dipanggil workflow n8n "Hive - Routine Tick" tiap 5 menit ----------
+type Routine = { id: string; agent_id: string; title: string; instruction: string; next_run_at: string | null };
+async function runRoutine(r: Routine, by: string | null, manual: boolean) {
+  const { nick, dept } = await nickOf(r.agent_id);
+  const taskId = await startAgentTask({
+    agent: r.agent_id,
+    nick,
+    dept,
+    title: r.title,
+    detail: `Tugas rutin${manual ? ' (dijalankan manual)' : ''}: ${r.title}\n\n${r.instruction}`,
+    by,
+    caller: { type: 'routine', id: r.id },
+    activity: `Tugas rutin ${nick}${manual ? ' (manual)' : ''}: ${r.title}`,
+  });
+  await admin.from('hc_agent_routines').update({ last_task_id: taskId, ...(manual ? {} : { last_run_at: new Date().toISOString() }) }).eq('id', r.id);
+  return taskId;
+}
+async function runDueRoutines() {
+  const nowIso = new Date().toISOString();
+  const { data: due } = await admin
+    .from('hc_agent_routines')
+    .select('id, agent_id, title, instruction, next_run_at')
+    .eq('active', true)
+    .lte('next_run_at', nowIso)
+    .order('next_run_at')
+    .limit(10);
+  let ran = 0;
+  for (const r of (due ?? []) as Routine[]) {
+    // klaim dulu (jadwal berikutnya dihitung ulang trigger), supaya tick yang bersamaan tidak menjalankan dua kali
+    const { data: claimed } = await admin.from('hc_agent_routines').update({ last_run_at: nowIso }).eq('id', r.id).eq('next_run_at', r.next_run_at).select('id').maybeSingle();
+    if (!claimed) continue;
+    try {
+      await runRoutine(r, null, false);
+      ran++;
+    } catch (e) {
+      console.error('routine', r.id, String(e));
+    }
+  }
+  return ran;
+}
+
 // ---------- lampiran: teks dibaca langsung, gambar & PDF dibaca Claude ----------
 function base64(buf: Uint8Array) {
   let s = '';
@@ -190,6 +251,7 @@ Deno.serve(async (req) => {
     const { secret } = await n8n().catch(() => ({ secret: '' }));
     if (!secret || hook !== secret) return json({ error: 'forbidden' }, 403);
     const b = await req.json().catch(() => ({}));
+    if (b?.action === 'routines') return json({ ok: true, ran: await runDueRoutines() });
     const id = String(b?.approval_id ?? '');
     if (b?.action !== 'resume' || !/^[0-9a-f-]{36}$/i.test(id) || !['approved', 'rejected'].includes(b?.status)) return json({ error: 'bad_request' }, 400);
     background(resume(id, b.status).catch((e) => console.error('resume', String(e))));
@@ -210,6 +272,19 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   if (body?.action === 'health') return json(await health());
+  // Jalankan sekarang (owner / Pelatih agent itu), jadwal rutin tidak berubah
+  if (body?.action === 'routine_run') {
+    const rid = String(body?.routine_id ?? '');
+    const { data: r } = await sb.from('hc_agent_routines').select('id, agent_id, title, instruction, next_run_at').eq('id', rid).maybeSingle();
+    if (!r) return json({ error: 'not_found' }, 404);
+    const { data: lv } = await sb.rpc('hc_agent_level', { p_agent: r.agent_id });
+    if (lv !== 'owner' && lv !== 'train') return json({ error: 'no_access' }, 403);
+    try {
+      return json({ task_id: await runRoutine(r as Routine, uid, true) });
+    } catch {
+      return json({ error: 'db_error' }, 500);
+    }
+  }
   if (body?.action !== 'send' && body?.action !== 'task') return json({ error: 'bad_action' }, 400);
 
   const agent = String(body?.agent ?? '');
@@ -233,20 +308,12 @@ Deno.serve(async (req) => {
     const title = String(body?.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
     const detail = String(body?.detail ?? '').trim().slice(0, 6000);
     if (!title) return json({ error: 'empty_message' }, 400);
-    const { data: t, error } = await admin
-      .from('hc_plan_tasks')
-      .insert({ title: `${nick}: ${title}`.slice(0, 200), who: agent, kind: 'ai', col: 'todo', updated_by: uid })
-      .select('id')
-      .single();
-    if (error || !t) return json({ error: 'db_error' }, 500);
-    await admin.from('hc_activity').insert({ kind: 'task', dept, text: `${me.name} memberi tugas ke ${nick}: ${title}` });
-    background(
-      callWorker({ agent, title, detail, task_id: t.id, caller: { type: 'staff', id: uid } }, 110000)
-        .then((r) => r.json())
-        .then((d) => (d?.reply ? admin.from('hc_plan_tasks').update({ result: String(d.reply).slice(0, 20000), result_at: new Date().toISOString() }).eq('id', t.id) : null))
-        .catch((e) => console.error('task call', String(e))),
-    );
-    return json({ task_id: t.id });
+    try {
+      const taskId = await startAgentTask({ agent, nick, dept, title, detail, by: uid, caller: { type: 'staff', id: uid }, activity: `${me.name} memberi tugas ke ${nick}: ${title}` });
+      return json({ task_id: taskId });
+    } catch {
+      return json({ error: 'db_error' }, 500);
+    }
   }
 
   // ---------- kirim pesan ----------

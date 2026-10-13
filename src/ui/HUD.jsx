@@ -11,7 +11,7 @@ import { sound } from '../audio/sound';
 import { useAi } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
-import { useAgentNet } from '../hall/agentApi';
+import { useAgentNet, useAgentScores } from '../hall/agentApi';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -566,6 +566,7 @@ function AgentCard() {
   const st = useHive((s) => (id ? s.agentStates[id] : null));
   const missions = useHive((s) => s.missions);
   const real = useAuth((s) => !!s.account);
+  const score = useAgentScores((s) => (id ? s[id] : null));
   if (!id) return null;
   const a = AGENT_BY_ID[id];
   const dept = DEPTS[a.dept];
@@ -593,6 +594,13 @@ function AgentCard() {
       <div className="status">
         <Dot st={st} /> {statusText(st)}
       </div>
+      {real && (
+        <div className="card-score" title="Dari penilaian 👍/👎 staff, 30 hari terakhir">
+          <span>Skor skill</span>
+          <b>{score ? score.score : '–'}</b>
+          <small>{score ? `${score.up} 👍 · ${score.down} 👎` : 'belum dinilai'}</small>
+        </div>
+      )}
       {mission && (
         <div className="card-mission">
           <span>Misi aktif</span>

@@ -1,0 +1,73 @@
+{
+  "name": "Hive - Routine Tick",
+  "nodes": [
+    {
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "5c0f5d4e-8a51-4c2e-9f2b-1d7a3e6b9c01"
+    },
+    {
+      "name": "Run Due Routines",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [260, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://ccbyqgisgclqlqatxwbk.supabase.co/functions/v1/agent-chat",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: 'routines' }) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tcVY2EJbqHcERiSJ",
+          "name": "Hive Webhook Secret"
+        }
+      },
+      "id": "7e2a9b13-4c6d-4f8e-a1b2-3c4d5e6f7a82"
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Run Due Routines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

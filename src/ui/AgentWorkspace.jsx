@@ -27,7 +27,9 @@ import {
   saveResult,
   deleteResult,
   watchThread,
+  loadMyFeedback,
 } from '../hall/agentApi';
+import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraining';
 import { go } from './nav';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -247,6 +249,8 @@ export function AgentWorkspace({ agentId }) {
   const [speaking, setSpeaking] = useState(null);
   const [voiceOn, setVoiceOn] = useState(loadVoicePref);
   const [listening, setListening] = useState(false);
+  const [myFb, setMyFb] = useState({});
+  const [tab, setTab] = useState('info');
   const listRef = useRef(null);
   const fileRef = useRef(null);
   const recRef = useRef(null);
@@ -274,13 +278,14 @@ export function AgentWorkspace({ agentId }) {
   }, [agent, account]);
 
   // owner melihat percakapan staff lain: tampilkan nama pemiliknya
+  const trainsAny = access.owner || Object.values(access.levels).includes('train');
   useEffect(() => {
-    if (!access.owner) return;
+    if (!trainsAny) return;
     supabase
       .from('hc_profiles')
       .select('id, name')
       .then(({ data }) => setNames(Object.fromEntries((data || []).map((p) => [p.id, p.name]))));
-  }, [access.owner]);
+  }, [trainsAny]);
 
   // muat pesan + dengarkan pesan baru (mis. jawaban agent setelah approval disetujui owner)
   useEffect(() => {
@@ -303,6 +308,12 @@ export function AgentWorkspace({ agentId }) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [msgs.length, busy]);
 
+  // penilaian saya untuk pesan di percakapan ini
+  useEffect(() => {
+    if (!threadId || !msgs.length) return;
+    loadMyFeedback(msgs.map((m) => m.id)).then(setMyFb);
+  }, [threadId, msgs.length]);
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 6000);
@@ -323,6 +334,7 @@ export function AgentWorkspace({ agentId }) {
   const thread = threads.find((t) => t.id === threadId);
   const readOnly = thread && thread.user_id !== uid; // owner membaca percakapan staff lain
   const canTask = account && account.role !== 'viewer';
+  const canTrain = level === 'owner' || level === 'train';
 
   const addFiles = (list) => {
     const arr = [...list];
@@ -557,6 +569,7 @@ export function AgentWorkspace({ agentId }) {
             </div>
             <span className={`pres pres-${pres}`}>{PRES_LABEL[pres]}</span>
             <span className="aw-model">{model}</span>
+            {level && <ScoreBadge agent={agent} />}
             {level && (
               <button className={`aw-voice${voiceOn ? ' on' : ''}`} onClick={toggleVoice} title="Bacakan jawaban otomatis" aria-pressed={voiceOn}>
                 {voiceOn ? '🔊' : '🔈'}
@@ -617,6 +630,9 @@ export function AgentWorkspace({ agentId }) {
                           <div className="aw-acts">
                             <button onClick={() => copy(m.content)}>📋 Salin</button>
                             <button onClick={() => toggleSpeak(m)}>{speaking === m.id ? '⏹ Stop' : '🔊 Dengar'}</button>
+                            {canWrite && typeof m.id === 'number' && (
+                              <RateButtons agent={agent} message={m} mine={myFb[m.id]} onRated={(v) => setMyFb((x) => ({ ...x, [m.id]: v }))} />
+                            )}
                             {canWrite && <button onClick={() => keep(m)}>📌 Simpan</button>}
                             {canWrite && canTask && <button onClick={() => setTaskFor(taskFor === m.id ? null : m.id)}>✅ Jadikan tugas</button>}
                           </div>
@@ -711,6 +727,23 @@ export function AgentWorkspace({ agentId }) {
         </section>
 
         <aside className="aw-right">
+          {level && (
+            <div className="aw-tabs" role="tablist">
+              {[
+                ['info', 'Info'],
+                ['skill', 'Skill'],
+                ['rutin', 'Rutin'],
+              ].map(([k, l]) => (
+                <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          {level && tab === 'skill' && <SkillPanel agent={agent} nick={def.nick} canTrain={canTrain} names={names} />}
+          {level && tab === 'rutin' && <RoutinePanel agent={agent} nick={def.nick} canTrain={canTrain} />}
+          {(!level || tab === 'info') && (
+          <>
           <p className="aw-label">Akses kamu</p>
           <p className="aw-chip">{level ? LEVEL_LABEL[level] : 'Belum ada akses'}</p>
 
@@ -785,9 +818,11 @@ export function AgentWorkspace({ agentId }) {
           <p className="aw-role">{agent === 'ceo' ? 'Chief Executive: memimpin 20 agent, menjawab dengan data koloni, riset web, dan mendelegasikan tugas.' : prompt.split(`Kamu adalah ${def.nick}. `)[1] || def.role}</p>
           {(level === 'owner' || level === 'train') && agent !== 'ceo' && prompt && (
             <details className="aw-prompt">
-              <summary>Persona lengkap (untuk pelatih)</summary>
+              <summary>Prompt lengkap yang dipakai agent</summary>
               <p>{prompt}</p>
             </details>
+          )}
+          </>
           )}
         </aside>
       </div>

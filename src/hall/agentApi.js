@@ -38,6 +38,7 @@ export function startAgentWatch() {
   stopAgentWatch();
   checkHealth();
   loadAccess();
+  loadScores();
   healthTimer = setInterval(checkHealth, HEALTH_MS);
   document.addEventListener('visibilitychange', checkHealth);
 }
@@ -48,6 +49,7 @@ export function stopAgentWatch() {
   document.removeEventListener('visibilitychange', checkHealth);
   useAgentNet.setState({ online: null, checkedAt: null });
   useAgentAccess.setState({ loaded: false, owner: false, levels: {} });
+  useAgentScores.setState({}, true);
 }
 
 // tingkat akses saya: 'owner' | 'train' | 'use' | null
@@ -138,6 +140,98 @@ export async function saveResult({ agent, messageId, title, content }) {
 }
 export async function deleteResult(id) {
   await supabase.from('hc_agent_results').delete().eq('id', id);
+}
+
+// ---------- latih agent: penilaian, skill & pelajaran, persona, skor ----------
+// skor skill nyata per agent (30 hari): { [agent_id]: { up, down, score } }
+export const useAgentScores = create(() => ({}));
+export async function loadScores() {
+  const { data } = await supabase.rpc('hc_agent_scores');
+  useAgentScores.setState(Object.fromEntries((data || []).map((r) => [r.agent_id, { up: r.up, down: r.down, score: r.score }])), true);
+}
+
+// penilaian saya untuk pesan-pesan di satu percakapan: { [message_id]: { rating, note } }
+export async function loadMyFeedback(messageIds) {
+  const uid = useAuth.getState().session?.user?.id;
+  const ids = messageIds.filter((x) => typeof x === 'number');
+  if (!ids.length || !uid) return {};
+  const { data } = await supabase.from('hc_agent_feedback').select('message_id, rating, note').eq('user_id', uid).in('message_id', ids);
+  return Object.fromEntries((data || []).map((r) => [r.message_id, { rating: r.rating, note: r.note }]));
+}
+export async function rateMessage({ agent, messageId, rating, note }) {
+  const uid = useAuth.getState().session?.user?.id;
+  const { error } = await supabase
+    .from('hc_agent_feedback')
+    .upsert({ message_id: messageId, agent_id: agent, user_id: uid, rating, note: note?.trim() ? note.trim().slice(0, 1000) : null, status: 'open' }, { onConflict: 'message_id,user_id' });
+  if (error) throw new Error('Penilaian gagal disimpan.');
+  loadScores();
+}
+// masukan staff untuk Pelatih/owner: 👎 atau yang punya catatan, belum diproses
+export async function loadFeedbackQueue(agent) {
+  const { data } = await supabase
+    .from('hc_agent_feedback')
+    .select('id, user_id, rating, note, ask_excerpt, reply_excerpt, created_at')
+    .eq('agent_id', agent)
+    .eq('status', 'open')
+    .or('rating.eq.-1,note.not.is.null')
+    .order('created_at', { ascending: false })
+    .limit(30);
+  return data || [];
+}
+export async function setFeedbackStatus(id, status) {
+  await supabase.from('hc_agent_feedback').update({ status }).eq('id', id);
+}
+
+export async function loadSkills(agent) {
+  const { data } = await supabase.from('hc_agent_skills').select('id, kind, name, instruction, active, created_at').eq('agent_id', agent).order('created_at');
+  return data || [];
+}
+export async function saveSkill(agent, s) {
+  const row = { kind: s.kind || 'skill', name: s.name.trim().slice(0, 80), instruction: s.instruction.trim().slice(0, 1500), active: s.active ?? true };
+  const q = s.id ? supabase.from('hc_agent_skills').update(row).eq('id', s.id) : supabase.from('hc_agent_skills').insert({ ...row, agent_id: agent, source_feedback: s.source_feedback || null });
+  const { error } = await q;
+  if (error) throw new Error(error.message.includes('row-level') ? 'Hanya owner atau Pelatih agent ini yang bisa mengubah skill.' : 'Skill gagal disimpan.');
+}
+export async function deleteSkill(id) {
+  await supabase.from('hc_agent_skills').delete().eq('id', id);
+}
+export async function loadPersona(agent) {
+  const { data } = await supabase.from('hc_agent_prompts').select('persona, system_prompt').eq('agent_id', agent).maybeSingle();
+  return data?.persona || data?.system_prompt || '';
+}
+export async function savePersona(agent, text) {
+  const { error } = await supabase.rpc('hc_agent_set_persona', { p_agent: agent, p_persona: text });
+  if (error) throw new Error(error.message.includes('persona_length') ? 'Persona minimal 50 karakter.' : 'Persona gagal disimpan.');
+}
+
+// ---------- tugas rutin ----------
+export async function loadRoutines(agent) {
+  const { data } = await supabase
+    .from('hc_agent_routines')
+    .select('id, title, instruction, kind, dow, dom, at_time, active, last_run_at, next_run_at, last_task_id')
+    .eq('agent_id', agent)
+    .order('created_at');
+  return data || [];
+}
+export async function saveRoutine(agent, r) {
+  const row = {
+    title: r.title.trim().slice(0, 120),
+    instruction: r.instruction.trim().slice(0, 3000),
+    kind: r.kind,
+    dow: r.kind === 'weekly' ? Number(r.dow) : null,
+    dom: r.kind === 'monthly' ? Number(r.dom) : null,
+    at_time: r.at_time,
+    active: r.active ?? true,
+  };
+  const q = r.id ? supabase.from('hc_agent_routines').update(row).eq('id', r.id) : supabase.from('hc_agent_routines').insert({ ...row, agent_id: agent });
+  const { error } = await q;
+  if (error) throw new Error(error.message.includes('row-level') ? 'Hanya owner atau Pelatih agent ini yang bisa mengatur tugas rutin.' : 'Tugas rutin gagal disimpan.');
+}
+export async function deleteRoutine(id) {
+  await supabase.from('hc_agent_routines').delete().eq('id', id);
+}
+export function runRoutineNow(id) {
+  return invoke({ action: 'routine_run', routine_id: id }, 'Tugas rutin gagal dijalankan.');
 }
 
 // pesan baru di percakapan (mis. jawaban agent setelah approval disetujui)

@@ -26,6 +26,7 @@ Prompt agent disimpan di tabel `hc_agent_prompts`. Edit tabel itu kalau mau meng
 |---|---|---|
 | `POST /webhook/hive/agent-task` | Hive - Agent Task Worker | `{agent, message\|title, detail?, task_id?, caller?}` → 200 `{ok, agent, nick, reply, task_id, activity_id}`, 202 `{status:'pending_approval', approval_id}`, 404 `unknown_agent`, 500 `llm_failed` |
 | `POST /webhook/hive/approval-resume` | Hive - Approval Resume | `{approval_id, status}` (dikirim Edge Function agent-chat setelah trigger DB) → `{ok, worker: {reply, ...}}` |
+| (Schedule, tiap 5 menit) | Hive - Routine Tick | memanggil Edge Function `agent-chat` `{action:'routines'}` dengan header `x-hive-secret`; tugas rutin yang jatuh tempo dikirim ke worker |
 
 Kedua webhook wajib memakai header `x-hive-secret`. Tanpa header itu, permintaan ditolak 403.
 Instance saat ini ada di `https://sliceable-mousiness-exorcist.ngrok-free.dev` (ngrok gratis). **URL ini publik**, jadi keamanannya bergantung pada secret di header.
@@ -42,7 +43,7 @@ Secret yang sama juga disimpan di Supabase Vault dengan nama `hive_webhook_secre
 2. Simpan secret ke Vault: `select vault.create_secret('<secret>', 'hive_webhook_secret');`
 3. Di n8n, buat ketiga credential di atas.
 4. Import `n8n/workflows/*.json` (menu Workflows → Import from File), lalu pilih ulang credential di setiap node Supabase, HTTP Request, dan Webhook. Id credential di file JSON hanya berlaku untuk instance asal.
-5. Aktifkan kedua workflow.
+5. Aktifkan ketiga workflow. **Hive - Routine Tick** cukup memakai credential "Hive Webhook Secret" di node "Run Due Routines".
 6. Kalau URL n8n berubah (misalnya ngrok ganti alamat), cukup ganti di satu tempat, yaitu Vault:
    `select vault.update_secret((select id from vault.secrets where name = 'hive_n8n_url'), 'https://alamat-baru.ngrok-free.dev');`
    Trigger approval, Queen Bea, dan Edge Function `agent-chat` membaca alamat dasar ini lewat `hive_n8n_url()`. Ganti juga URL di node "Call Task Worker" di n8n. Secret lama `N8N_AGENT_TASK_URL` di Edge Function queen-bea, kalau masih ada, tetap dipakai dan menimpa Vault. Hapus saja supaya alamatnya hanya di satu tempat.
