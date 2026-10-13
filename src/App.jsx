@@ -4,6 +4,9 @@ import { Scene } from './scene/Scene';
 import { HUD, useAutoSound } from './ui/HUD';
 import { HallView } from './ui/HallView';
 import { TvOverlay } from './ui/TvOverlay';
+import { AgentWorkspace } from './ui/AgentWorkspace';
+import { AccessPage } from './ui/AccessPage';
+import { startAgentWatch, stopAgentWatch } from './hall/agentApi';
 import { AvatarCreator } from './ui/AvatarCreator';
 import { LoginPage, JoinPage, InvitePage } from './ui/AuthPages';
 import { useRoute } from './ui/nav';
@@ -56,6 +59,9 @@ function useColonyMode() {
       else removeWalker('me');
     }
     checkAi();
+    // status server agent (n8n) & akses saya ke agent
+    if (account && uid) startAgentWatch();
+    else stopAgentWatch();
     useHive.getState().bumpOutdoor();
     // profil avatar dikirim ulang lewat presence saat akun diperbarui
   }, [account, uid]);
@@ -81,6 +87,8 @@ export function App() {
       </Suspense>
     );
   if (route === '/tv') return <Tower tv />;
+  if (route === '/agent' || route.startsWith('/agent/')) return <AgentWorkspace agentId={route.split('/')[2] || 'ceo'} />;
+  if (route === '/akses') return <AccessPage />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;

@@ -97,6 +97,25 @@ Tampilan koloni dan Hive Hall mengikuti konsep visual atasan (diorama pulau mela
 - **Koloni**: kubah langit gradasi + lautan awan, pulau rumput berbunga dengan semak, pinus, batu, lampu taman berpendar, sarang lebah kayu; lift kaca sarang madu; lantai kayu/marmer per ruangan, karpet, tanaman pot emas, lampu dinding. Siang-malam tetap mengikuti WIB.
 - **Hive Hall**: dinding sel kaca madu berpendar, madu menetes, panel kaca amber di balik layar, papan nama emas bercahaya, lantai marmer bergaris heksagon menyala, podium madu, lentera, pot emas berbunga; layar dinding & kartu aksi bergaya kaca dengan ikon.
 
+### Koloni hidup (kerja agent sungguhan)
+
+Saat login, tugas AI di papan Hive Hall (`hc_plan_tasks`, dikerjakan agent lewat n8n) menjadi misi 3D: Queen menurunkan tugas, lebah agent bekerja di mejanya, dan ada efek selesai saat tugas masuk kolom Selesai. Status agent nyata: **Online** (tersambung n8n), **Kerja** (sedang mengerjakan tugas), **Offline** (belum tersambung, atau server agent di PC kantor mati). Kesehatan n8n dicek lewat Edge Function `agent-chat` dan disimpan sementara 2 menit di `hc_system_status`, supaya kuota ngrok tidak habis.
+
+### Ruang Kerja Agent (`#/agent/<id>`)
+
+Tempat staff chat langsung dengan agent, seperti ngobrol dengan asisten AI:
+
+- Kiri: daftar agent per divisi (🔒 kalau belum punya akses) dan riwayat percakapan.
+- Tengah: chat. Pesan ke Queen Bea diteruskan ke Edge Function `queen-bea` (bisa riset web dan mendelegasikan). Pesan ke agent lain dikirim ke worker n8n (Claude). Kalau tugas butuh persetujuan owner, chat memberi tahu dan persetujuan berjalan lewat alur approval yang sudah ada.
+- Kanan: tingkat akses kamu, tugas dari Queen beserta hasil lengkapnya (`hc_plan_tasks.result`), peran agent, dan persona lengkap (khusus owner & Pelatih).
+- Pintu masuk: tombol 💬 di Daftar agent, "Buka ruang kerja" di kartu agent, dan tombol "Ruang kerja" di kontrol koloni.
+
+Semua pesan lewat Edge Function `agent-chat`, yang memeriksa login dan akses, menyimpan riwayat (`hc_agent_threads`, `hc_agent_messages`), lalu memanggil n8n dengan secret dari Vault. Browser tidak pernah memegang secret n8n.
+
+### Akses agent (`#/akses`, khusus owner)
+
+Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak punya akses sampai diatur. Klik chip agent untuk berganti: Tanpa akses → **Pakai** (chat & perintah) → **Pelatih** (juga melihat & nanti mengubah skill agent). Ada tombol cepat "Pakai semua" / "Kosongkan" per divisi. Dijaga RLS (`hc_agent_access`, `hc_agent_level()`) dan dicek ulang di server.
+
 ## Mode real vs mode demo
 
 - **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.

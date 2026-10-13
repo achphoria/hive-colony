@@ -78,7 +78,14 @@ const wib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3600e3).toIS
 
 type Sb = ReturnType<typeof createClient>;
 
-const N8N_AGENT_TASK_URL = Deno.env.get('N8N_AGENT_TASK_URL') || 'https://sliceable-mousiness-exorcist.ngrok-free.dev/webhook/hive/agent-task';
+// alamat n8n: secret N8N_AGENT_TASK_URL kalau ada, selain itu dari Vault (hive_n8n_url) supaya cukup diubah di satu tempat
+let cachedTaskUrl: string | null = Deno.env.get('N8N_AGENT_TASK_URL') || null;
+async function taskUrl(a: any): Promise<string> {
+  if (cachedTaskUrl) return cachedTaskUrl;
+  const { data } = await a.rpc('hive_n8n_url');
+  const base = typeof data === 'string' && data ? data : 'https://sliceable-mousiness-exorcist.ngrok-free.dev';
+  return (cachedTaskUrl = `${base.replace(/\/+$/, '')}/webhook/hive/agent-task`);
+}
 const MAX_DELEGATE = 3;
 type Agent = { agent_id: string; nick: string; dept: string; system_prompt: string };
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -120,6 +127,7 @@ function parseDelegation(text: string, agents: Agent[]) {
 async function delegate(a: any, items: { agent: Agent; title: string; detail: string }[], by: string) {
   const out: { agent: string; nick: string; title: string; task_id: string | null }[] = [];
   const secret = await hiveSecret(a);
+  const url = await taskUrl(a);
   const calls: Promise<unknown>[] = [];
   for (const it of items) {
     const { data, error } = await a.from('hc_plan_tasks').insert({ title: `${it.agent.nick}: ${it.title}`.slice(0, 200), who: it.agent.agent_id, kind: 'ai', col: 'todo' }).select('id').single();
@@ -127,12 +135,16 @@ async function delegate(a: any, items: { agent: Agent; title: string; detail: st
     out.push({ agent: it.agent.agent_id, nick: it.agent.nick, title: it.title, task_id: String(data.id) });
     if (!secret) continue;
     calls.push(
-      fetch(N8N_AGENT_TASK_URL, {
+      fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1', 'x-hive-secret': secret },
         body: JSON.stringify({ agent: it.agent.agent_id, title: it.title, detail: it.detail, task_id: data.id, caller: { type: 'queen-bea', id: by } }),
         signal: AbortSignal.timeout(110000),
-      }).then((r) => r.text()).catch((e) => console.error('delegate call', String(e))),
+      })
+        .then((r) => r.json())
+        // simpan jawaban lengkap agent ke kartu tugas (log aktivitas hanya 280 karakter)
+        .then((d) => (d?.reply ? a.from('hc_plan_tasks').update({ result: String(d.reply).slice(0, 20000), result_at: new Date().toISOString() }).eq('id', data.id) : null))
+        .catch((e) => console.error('delegate call', String(e))),
     );
   }
   if (calls.length) {

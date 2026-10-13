@@ -42,4 +42,6 @@ Secret yang sama juga disimpan di Supabase Vault dengan nama `hive_webhook_secre
 3. Di n8n, buat ketiga credential di atas.
 4. Import `n8n/workflows/*.json` (menu Workflows → Import from File), lalu pilih ulang credential di setiap node Supabase, HTTP Request, dan Webhook. Id credential di file JSON hanya berlaku untuk instance asal.
 5. Aktifkan kedua workflow.
-6. Kalau URL n8n berubah, ganti URL di fungsi `hc_approvals_notify_n8n()`, di node "Call Task Worker", dan di `N8N_AGENT_TASK_URL` (secret Edge Function queen-bea).
+6. Kalau URL n8n berubah (misalnya ngrok ganti alamat), cukup ganti di satu tempat, yaitu Vault:
+   `select vault.update_secret((select id from vault.secrets where name = 'hive_n8n_url'), 'https://alamat-baru.ngrok-free.dev');`
+   Trigger approval, Queen Bea, dan Edge Function `agent-chat` membaca alamat dasar ini lewat `hive_n8n_url()`. Ganti juga URL di node "Call Task Worker" di n8n. Secret lama `N8N_AGENT_TASK_URL` di Edge Function queen-bea, kalau masih ada, tetap dipakai dan menimpa Vault. Hapus saja supaya alamatnya hanya di satu tempat.

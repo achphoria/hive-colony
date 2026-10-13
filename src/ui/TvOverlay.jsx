@@ -7,6 +7,7 @@ import { useAuth } from '../sim/auth';
 import { outdoor } from '../sim/outdoor';
 import { useTv } from '../sim/tv';
 import { useAi } from '../hall/queenBea';
+import { useAgentNet } from '../hall/agentApi';
 import { feedText } from './hallData';
 import { go } from './nav';
 
@@ -48,12 +49,14 @@ function useCaptionStatus(c) {
   const real = useAuth((s) => !!s.account);
   const ai = useAi((s) => s.status);
   const prompts = useHive((s) => s.agentPrompts);
+  const net = useAgentNet((s) => s.online);
   if (!c) return '';
   if (c.type === 'agent') {
     const base = statusText(st);
     if (!real) return base;
     if (c.id === 'ceo') return ai === 'on' ? `Online · tersambung Claude AI · ${base}` : base;
     if (!prompts.includes(c.id)) return `Offline (belum tersambung AI) · ${base}`;
+    if (net === false) return `Offline (server agent mati) · ${base}`;
     return st?.missionId ? `Mengerjakan tugas sungguhan · Claude via n8n` : `Online · Claude via n8n · ${base}`;
   }
   if (c.type === 'staff') {

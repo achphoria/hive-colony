@@ -11,6 +11,7 @@ import { sound } from '../audio/sound';
 import { useAi } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
+import { useAgentNet } from '../hall/agentApi';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -45,13 +46,14 @@ function Dot({ st }) {
 // Mode real: Queen online kalau Claude tersambung; 20 agent lain online kalau aktif di
 // hc_agent_prompts (n8n), "Kerja" saat sedang mengerjakan tugas sungguhan. Mode demo mengikuti simulasi.
 const PRESENCE_LABEL = { work: 'Kerja', online: 'Online', offline: 'Offline' };
-function presenceOf(id, st, real, ai, inMeeting, prompts) {
+function presenceOf(id, st, real, ai, inMeeting, prompts, netOnline) {
   if (real) {
     if (id === 'ceo') {
       if (ai.status !== 'on') return 'offline';
       return ai.busy > 0 || inMeeting ? 'work' : 'online';
     }
-    if (!prompts.includes(id)) return 'offline';
+    // server agent (n8n di PC kantor) mati -> semua agent offline
+    if (!prompts.includes(id) || netOnline === false) return 'offline';
     return st?.missionId ? 'work' : 'online';
   }
   if (st?.missionId) return 'work';
@@ -383,7 +385,8 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
   const inMeeting = useMeeting((s) => s.live && s.active);
   const counts = { work: 0, online: 0, offline: 0 };
   const prompts = useHive((s) => s.agentPrompts);
-  const pres = Object.fromEntries(AGENTS.map((a) => [a.id, presenceOf(a.id, agentStates[a.id], real, ai, inMeeting, prompts)]));
+  const netOnline = useAgentNet((s) => s.online);
+  const pres = Object.fromEntries(AGENTS.map((a) => [a.id, presenceOf(a.id, agentStates[a.id], real, ai, inMeeting, prompts, netOnline)]));
   Object.values(pres).forEach((p) => counts[p]++);
   return (
     <div className="directory">
@@ -406,20 +409,26 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
                 {DEPTS[d].short}
               </div>
               {AGENTS.filter((a) => a.dept === d).map((a) => (
-                <button
-                  key={a.id}
-                  className={`dir-agent${selected === a.id ? ' on' : ''}`}
-                  onClick={() => {
-                    focusAgent(a.id);
-                    onPick?.();
-                  }}
-                  title={a.role}
-                >
-                  <span className={`dot pdot-${pres[a.id]}`} />
-                  <b>{a.nick}</b>
-                  <span>{a.role}</span>
-                  <em className={`pres pres-${pres[a.id]}`}>{PRESENCE_LABEL[pres[a.id]]}</em>
-                </button>
+                <div key={a.id} className="dir-row">
+                  <button
+                    className={`dir-agent${selected === a.id ? ' on' : ''}`}
+                    onClick={() => {
+                      focusAgent(a.id);
+                      onPick?.();
+                    }}
+                    title={a.role}
+                  >
+                    <span className={`dot pdot-${pres[a.id]}`} />
+                    <b>{a.nick}</b>
+                    <span>{a.role}</span>
+                    <em className={`pres pres-${pres[a.id]}`}>{PRESENCE_LABEL[pres[a.id]]}</em>
+                  </button>
+                  {real && (
+                    <button className="dir-chat" onClick={() => go(`/agent/${a.id}`)} aria-label={`Buka ruang kerja ${a.nick}`} title="Buka ruang kerja">
+                      💬
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           ))}
@@ -496,6 +505,7 @@ function Controls({ className = 'panel controls', onPick }) {
   const speed = useHive((s) => s.speed);
   const paused = useHive((s) => s.paused);
   const hasProfile = useHive((s) => !!s.profile);
+  const real = useAuth((s) => !!s.account);
   const { setSpeed, togglePause } = useHive.getState();
   const resetView = () => {
     useHive.getState().resetView();
@@ -514,6 +524,7 @@ function Controls({ className = 'panel controls', onPick }) {
       <button onClick={resetView}>Reset kamera</button>
       <span className="ctl-sep" />
       <button onClick={() => go('/hall')}>Hive Hall</button>
+      {real && <button onClick={() => go('/agent')}>💬 Ruang kerja</button>}
       <button onClick={() => go('/tv')} title="Mode spectator untuk layar besar">📺 Mode TV</button>
       <button onClick={() => go('/avatar')}>{hasProfile ? 'Avatar saya' : 'Buat avatar'}</button>
       {hasProfile && <DanceMenu onPick={onPick} />}
@@ -554,6 +565,7 @@ function AgentCard() {
   const id = useHive((s) => s.selectedAgent);
   const st = useHive((s) => (id ? s.agentStates[id] : null));
   const missions = useHive((s) => s.missions);
+  const real = useAuth((s) => !!s.account);
   if (!id) return null;
   const a = AGENT_BY_ID[id];
   const dept = DEPTS[a.dept];
@@ -593,6 +605,11 @@ function AgentCard() {
       <button className="link" onClick={() => focusAgent(id)}>
         Fokus kamera ke {a.nick}
       </button>
+      {real && (
+        <button className="link" onClick={() => go(`/agent/${id}`)}>
+          💬 Buka ruang kerja {a.nick}
+        </button>
+      )}
     </div>
   );
 }

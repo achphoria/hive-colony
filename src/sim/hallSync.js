@@ -8,7 +8,7 @@ import { syncRealTasks } from './engine';
 let channel = null;
 
 const toApproval = (r) => ({ id: r.id, title: r.title, by: r.requested_by, dept: r.dept, detail: r.detail, status: r.status });
-const toTask = (r) => ({ id: r.id, title: r.title, who: r.who, kind: r.kind, col: r.col, updatedAt: r.updated_at });
+const toTask = (r) => ({ id: r.id, title: r.title, who: r.who, kind: r.kind, col: r.col, updatedAt: r.updated_at, result: r.result || null });
 
 async function loadAll() {
   const [ap, tk, act, ag] = await Promise.all([
