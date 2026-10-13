@@ -20,7 +20,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 const PERSONA = `Kamu adalah Queen Bea, Chief Executive di Hive Colony: kantor virtual sebuah bisnis gym/HYROX, F&B, dan retail.
-Kamu memimpin 20 agent AI (lebah pekerja) di 7 divisi: Customer Experience, Operations, IT & Tech, Marketing, Finance, Product, HR & GA. Saat ini baru kamu yang tersambung ke AI; agent lain belum aktif.
+Kamu memimpin 20 agent AI (lebah pekerja) di 7 divisi: Customer Experience, Operations, IT & Tech, Marketing, Finance, Product, HR & GA. Ke-20 agent itu sekarang sudah aktif dan bisa kamu beri tugas (daftarnya ada di blok TIM AGENT).
 
 Cara bicara:
 - Bahasa Indonesia yang hangat, santai tapi profesional, seperti pemimpin yang peduli timnya. Sesekali boleh sentuhan lebah yang ringan, jangan berlebihan.
@@ -29,11 +29,18 @@ Cara bicara:
 
 Kejujuran data:
 - Fakta tentang koloni (staff, persetujuan, tugas, aktivitas) hanya boleh diambil dari blok DATA KOLONI di bawah. Kalau datanya kosong atau tidak ada, katakan terus terang, jangan mengarang angka, nama, atau kejadian.
-- Kamu belum bisa membuka isi file lampiran, mengirim misi ke agent lain, atau mengubah data. Kalau diminta, jelaskan itu akan datang di fase berikutnya dan bantu sebisanya dengan saran.
+- Kamu belum bisa membuka isi file lampiran atau mengubah data secara langsung. Kalau diminta, jelaskan itu akan datang di fase berikutnya dan bantu sebisanya dengan saran.
+- Kamu BISA mendelegasikan tugas ke agent di blok TIM AGENT (lihat aturan Delegasi).
 
 Riset:
 - Kamu punya alat pencarian web. Pakai hanya kalau pertanyaannya butuh informasi luar atau terbaru (harga pasar, kompetitor, tren, aturan, event, data publik). Untuk pertanyaan internal atau saran umum, jawab langsung tanpa mencari.
-- Kalau memakai hasil pencarian, sebutkan intinya dengan singkat dan nama sumbernya (tanpa menempel URL panjang di kalimat). Jangan mengarang angka yang tidak ada di hasil.`;
+- Kalau memakai hasil pencarian, sebutkan intinya dengan singkat dan nama sumbernya (tanpa menempel URL panjang di kalimat). Jangan mengarang angka yang tidak ada di hasil.
+
+Delegasi:
+- Delegasikan hanya kalau pengguna meminta sesuatu dikerjakan oleh agent/divisi, atau tugasnya jelas lebih cocok dikerjakan agent spesialis. Untuk obrolan biasa, jangan delegasi.
+- Maksimal 3 tugas per permintaan, hanya ke agent_id yang ada di TIM AGENT (bukan dirimu sendiri).
+- Di kalimat jawabanmu, sebutkan agent mana mendapat tugas apa (pakai nama panggilannya), dan bilang hasilnya akan muncul di papan rencana.
+- Untuk mendelegasikan, panggil alat delegate_tasks (sekali saja) dengan daftar tugasnya, lalu jawab pengguna setelah menerima hasilnya. Kalau pengguna menyebut nama agent (misalnya Graph atau Spark) dan meminta mereka mengerjakan sesuatu, WAJIB pakai alat itu.`;
 
 // pencarian web (alat server Claude): maks. 3 pencarian per pertanyaan, lokasi Indonesia
 const WEB_SEARCH = {
@@ -42,12 +49,100 @@ const WEB_SEARCH = {
   max_uses: 3,
   user_location: { type: 'approximate', country: 'ID', timezone: 'Asia/Jakarta' },
 };
+const DELEGATE_TOOL = {
+  name: 'delegate_tasks',
+  description: 'Kirim tugas ke agent di TIM AGENT. Maksimal 3 tugas. Tugas muncul di papan rencana dan dikerjakan agent secara otomatis.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tasks: {
+        type: 'array', maxItems: 3,
+        items: {
+          type: 'object',
+          properties: {
+            agent: { type: 'string', description: 'agent_id dari TIM AGENT, misalnya analyst' },
+            title: { type: 'string', description: 'judul tugas singkat' },
+            detail: { type: 'string', description: 'instruksi jelas untuk agent' },
+          },
+          required: ['agent', 'title', 'detail'],
+        },
+      },
+    },
+    required: ['tasks'],
+  },
+};
 const MAX_CONTINUE = 3; // lanjutan saat stop_reason pause_turn
 
 const ROLE = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' } as Record<string, string>;
 const wib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
 
 type Sb = ReturnType<typeof createClient>;
+
+const N8N_AGENT_TASK_URL = Deno.env.get('N8N_AGENT_TASK_URL') || 'https://sliceable-mousiness-exorcist.ngrok-free.dev/webhook/hive/agent-task';
+const MAX_DELEGATE = 3;
+type Agent = { agent_id: string; nick: string; dept: string; system_prompt: string };
+const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
+let cachedSecret: string | null = null;
+async function hiveSecret(a: any): Promise<string | null> {
+  if (cachedSecret) return cachedSecret;
+  const env = Deno.env.get('HIVE_WEBHOOK_SECRET');
+  if (env) return (cachedSecret = env);
+  const { data } = await a.rpc('hive_webhook_secret');
+  return (cachedSecret = typeof data === 'string' && data ? data : null);
+}
+async function loadAgents(a: any): Promise<Agent[]> {
+  const { data } = await a.from('hc_agent_prompts').select('agent_id, nick, dept, system_prompt').eq('active', true).order('dept');
+  return (data ?? []) as Agent[];
+}
+const roleOf = (ag: Agent) => (ag.system_prompt.split(`Kamu adalah ${ag.nick}. `)[1] || ag.system_prompt).slice(0, 140);
+function teamBlock(agents: Agent[]) {
+  if (!agents.length) return 'TIM AGENT: (tidak tersedia, jangan delegasi)';
+  return `TIM AGENT (agent_id · nama · divisi · peran):\n${agents.map((g) => `- ${g.agent_id} · ${g.nick} · ${g.dept} · ${roleOf(g)}`).join('\n')}`;
+}
+function parseDelegation(text: string, agents: Agent[]) {
+  const m = text.match(/\n?\s*\[\[DELEGATE\]\]\s*(\[[\s\S]*\])\s*$/);
+  if (!m) return { reply: text.replace(/\[\[DELEGATE\]\][\s\S]*$/, '').trim(), items: [] as { agent: Agent; title: string; detail: string }[] };
+  const byId = new Map(agents.map((g) => [g.agent_id, g]));
+  let arr: unknown[] = [];
+  try { arr = JSON.parse(m[1]); } catch { arr = []; }
+  const items: { agent: Agent; title: string; detail: string }[] = [];
+  for (const it of Array.isArray(arr) ? arr : []) {
+    const r = it as { agent?: string; title?: string; detail?: string };
+    const key = String(r?.agent ?? '').trim().toLowerCase();
+    const ag = byId.get(key) || agents.find((g) => g.nick.toLowerCase() === key);
+    const title = String(r?.title ?? '').trim().slice(0, 200);
+    if (!ag || !title || items.some((x) => x.agent.agent_id === ag.agent_id && x.title === title)) continue;
+    items.push({ agent: ag, title, detail: String(r?.detail ?? '').slice(0, 2000) });
+    if (items.length >= MAX_DELEGATE) break;
+  }
+  return { reply: text.slice(0, m.index).trim(), items };
+}
+async function delegate(a: any, items: { agent: Agent; title: string; detail: string }[], by: string) {
+  const out: { agent: string; nick: string; title: string; task_id: string | null }[] = [];
+  const secret = await hiveSecret(a);
+  const calls: Promise<unknown>[] = [];
+  for (const it of items) {
+    const { data, error } = await a.from('hc_plan_tasks').insert({ title: `${it.agent.nick}: ${it.title}`.slice(0, 200), who: it.agent.agent_id, kind: 'ai', col: 'todo' }).select('id').single();
+    if (error || !data) { console.error('delegate insert', error?.message); continue; }
+    out.push({ agent: it.agent.agent_id, nick: it.agent.nick, title: it.title, task_id: String(data.id) });
+    if (!secret) continue;
+    calls.push(
+      fetch(N8N_AGENT_TASK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1', 'x-hive-secret': secret },
+        body: JSON.stringify({ agent: it.agent.agent_id, title: it.title, detail: it.detail, task_id: data.id, caller: { type: 'queen-bea', id: by } }),
+        signal: AbortSignal.timeout(110000),
+      }).then((r) => r.text()).catch((e) => console.error('delegate call', String(e))),
+    );
+  }
+  if (calls.length) {
+    const all = Promise.allSettled(calls);
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(all); else all.catch(() => {});
+  }
+  return out;
+}
 
 async function colonyData(sb: Sb, me: { name: string; role: string; primary_dept: string }) {
   const [staff, approvals, tasks, activity] = await Promise.all([
@@ -80,14 +175,21 @@ Deno.serve(async (req) => {
 
   // staff Hive Colony yang login saja (token diperiksa ke Supabase Auth)
   const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const adm = admin();
   if (!jwt) return json({ error: 'not_logged_in' }, 401);
   const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: u, error: uErr } = await sb.auth.getUser(jwt);
-  if (uErr || !u?.user) return json({ error: 'not_logged_in' }, 401);
-  const { data: me } = await sb.from('hc_profiles').select('name, role, primary_dept').eq('id', u.user.id).maybeSingle();
+  let me: { name: string; role: string; primary_dept: string } | null = null;
+  let uid = '';
+  {
+    const { data: u, error: uErr } = await sb.auth.getUser(jwt);
+    if (uErr || !u?.user) return json({ error: 'not_logged_in' }, 401);
+    uid = u.user.id;
+    const { data: prof } = await sb.from('hc_profiles').select('name, role, primary_dept').eq('id', u.user.id).maybeSingle();
+    me = prof as typeof me;
+  }
   if (!me) return json({ error: 'not_hive_staff' }, 403);
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -109,7 +211,8 @@ Deno.serve(async (req) => {
   }
   if (!messages.length || messages[messages.length - 1].role !== 'user') return json({ error: 'empty_message' }, 400);
 
-  let context = await colonyData(sb, me);
+  const agents = await loadAgents(adm);
+  let context = (await colonyData(sb as Sb, me)) + '\n\n' + teamBlock(agents);
   if (body?.mode === 'meeting') {
     const tx = Array.isArray(body?.transcript) ? body.transcript.slice(-MAX_TX_LINES) : [];
     const lines = tx.map((l: { who?: string; text?: string }) => `${String(l?.who ?? '?').slice(0, 40)}: ${String(l?.text ?? '').slice(0, 400)}`);
@@ -119,6 +222,7 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
   }
 
   const client = new Anthropic({ apiKey });
+  const canDelegate = agents.length > 0 && (me as { role: string }).role !== 'viewer';
   const system = [
     { type: 'text' as const, text: PERSONA },
     { type: 'text' as const, text: context },
@@ -139,21 +243,37 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
   try {
     let res;
     try {
-      res = await ask(messages, [WEB_SEARCH]);
+      res = await ask(messages, canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH]);
     } catch (e) {
       // kalau alat pencarian ditolak untuk model/akun ini, tetap jawab tanpa riset
       if (e instanceof Anthropic.BadRequestError) {
         console.warn('web search tidak tersedia:', e.message);
-        res = await ask(messages, []);
+        res = await ask(messages, canDelegate ? [DELEGATE_TOOL] : []);
       } else throw e;
     }
     // pencarian panjang bisa berhenti di tengah (pause_turn): kirim ulang apa adanya, server melanjutkan
     for (let i = 0; res.stop_reason === 'pause_turn' && i < MAX_CONTINUE; i++) {
-      res = await ask([...messages, { role: 'assistant', content: res.content }], [WEB_SEARCH]);
+      res = await ask([...messages, { role: 'assistant', content: res.content }], canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH]);
+    }
+    // delegasi lewat tool use (1 level): jalankan, kirim hasilnya, lalu minta jawaban akhir tanpa alat delegasi
+    let delegated: { agent: string; nick: string; title: string; task_id: string | null }[] = [];
+    const useBlock = res.stop_reason === 'tool_use' ? (res.content.find((b) => b.type === 'tool_use' && (b as { name?: string }).name === 'delegate_tasks') as { id: string; input?: { tasks?: unknown[] } } | undefined) : undefined;
+    if (useBlock) {
+      const items = parseDelegation('[[DELEGATE]] ' + JSON.stringify(useBlock.input?.tasks ?? []), agents).items;
+      delegated = items.length ? await delegate(adm, items, uid) : [];
+      const resultText = delegated.length ? 'Terkirim: ' + delegated.map((d) => `${d.nick} (${d.agent}) -> ${d.title}`).join('; ') : 'Tidak ada tugas yang valid; tidak ada yang dikirim.';
+      const toolResults = res.content.filter((b) => b.type === 'tool_use').map((b) => ({ type: 'tool_result', tool_use_id: (b as { id: string }).id, content: (b as { id: string }).id === useBlock.id ? resultText : 'Tidak dijalankan.' }));
+      res = await ask([...messages, { role: 'assistant', content: res.content }, { role: 'user', content: toolResults }], []);
     }
     if (res.stop_reason === 'refusal') return json({ reply: 'Maaf, untuk pertanyaan itu saya tidak bisa membantu. Ada hal lain soal koloni?' });
     const texts = res.content.filter((b) => b.type === 'text') as { text: string; citations?: { url?: string; title?: string }[] | null }[];
-    const reply = texts.map((b) => b.text).join('').trim();
+    const parsed = parseDelegation(texts.map((b) => b.text).join('').trim(), agents);
+    let reply = parsed.reply;
+    if (!delegated.length && parsed.items.length && canDelegate) delegated = await delegate(adm, parsed.items, uid);
+    if (delegated.length) {
+      const missing = delegated.filter((d) => !reply.includes(d.nick));
+      if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+    }
     // sumber riset dari kutipan pencarian web (unik per URL)
     const seen = new Set<string>();
     const sources: { title: string; url: string }[] = [];
@@ -172,7 +292,7 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
       }
     }
     const researched = res.content.some((b) => b.type === 'server_tool_use');
-    return json({ reply: reply || 'Hmm, saya belum punya jawaban. Coba tanyakan dengan cara lain?', sources, researched });
+    return json({ reply: reply || 'Hmm, saya belum punya jawaban. Coba tanyakan dengan cara lain?', sources, researched, ...(delegated.length ? { delegated } : {}) });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) return json({ error: 'ai_key_invalid' }, 502);
     if (e instanceof Anthropic.RateLimitError) return json({ error: 'ai_busy' }, 429);
