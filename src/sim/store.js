@@ -37,6 +37,7 @@ export const useHive = create((set) => ({
   approvals: APPROVALS,
   onlineStaff: [], // staff lain yang sedang online (Realtime Presence)
   dbActivity: [], // log aktivitas manusia dari Supabase
+  agentPrompts: [], // id agent yang aktif tersambung AI lewat n8n (hc_agent_prompts)
 
   focusOn: (target, dist, dir = null) => set((s) => ({ focus: { target, dist, dir, key: s.focus.key + 1 } })),
   setFloor: (floor) =>

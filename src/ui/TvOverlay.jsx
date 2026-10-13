@@ -47,12 +47,14 @@ function useCaptionStatus(c) {
   const st = useHive((s) => (c?.type === 'agent' ? s.agentStates[c.id] : null));
   const real = useAuth((s) => !!s.account);
   const ai = useAi((s) => s.status);
+  const prompts = useHive((s) => s.agentPrompts);
   if (!c) return '';
   if (c.type === 'agent') {
     const base = statusText(st);
     if (!real) return base;
     if (c.id === 'ceo') return ai === 'on' ? `Online · tersambung Claude AI · ${base}` : base;
-    return `Offline (belum tersambung AI) · ${base}`;
+    if (!prompts.includes(c.id)) return `Offline (belum tersambung AI) · ${base}`;
+    return st?.missionId ? `Mengerjakan tugas sungguhan · Claude via n8n` : `Online · Claude via n8n · ${base}`;
   }
   if (c.type === 'staff') {
     const w = outdoor.byId[c.id] || outdoor.walkers.find((x) => x.id === c.id);
@@ -90,6 +92,7 @@ export function TvOverlay() {
   const online = useHive((s) => s.onlineStaff.length);
   const real = useAuth((s) => !!s.account);
   const ai = useAi((s) => s.status);
+  const prompts = useHive((s) => s.agentPrompts);
   const [ctrl, setCtrl] = useState(false);
   const hideTimer = useRef(null);
 
@@ -143,7 +146,7 @@ export function TvOverlay() {
           <span className="tv-live-badge">● LIVE</span>
           {real && (
             <span>
-              {online + 1} staff online · {ai === 'on' ? 1 : 0}/21 agent AI
+              {online + 1} staff online · {(ai === 'on' ? 1 : 0) + prompts.filter((id) => id !== 'ceo').length}/21 agent AI
             </span>
           )}
         </div>

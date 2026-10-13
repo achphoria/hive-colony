@@ -59,9 +59,9 @@ function PlanBoard() {
             .filter((t) => t.col === c.id)
             .map((t) => (
               <button key={t.id} className={`kcard ${t.kind}`} onClick={() => run(() => advanceTask(t))} title="Klik untuk pindah kolom">
-                <span className={`who ${t.kind}`}>{t.who}</span>
+                <span className={`who ${t.kind}`}>{AGENT_BY_ID[t.who]?.nick || t.who}</span>
                 <p>{t.title}</p>
-                <small>Klik untuk pindah kolom</small>
+                <small>{t.kind === 'ai' ? 'Dikerjakan agent AI otomatis' : 'Klik untuk pindah kolom'}</small>
               </button>
             ))}
           {c.id === 'doing' &&

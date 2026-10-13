@@ -3,23 +3,29 @@
 import { supabase } from '../lib/supabase';
 import { useHive } from './store';
 import { useAuth } from './auth';
+import { syncRealTasks } from './engine';
 
 let channel = null;
 
 const toApproval = (r) => ({ id: r.id, title: r.title, by: r.requested_by, dept: r.dept, detail: r.detail, status: r.status });
-const toTask = (r) => ({ id: r.id, title: r.title, who: r.who, kind: r.kind, col: r.col });
+const toTask = (r) => ({ id: r.id, title: r.title, who: r.who, kind: r.kind, col: r.col, updatedAt: r.updated_at });
 
 async function loadAll() {
-  const [ap, tk, act] = await Promise.all([
+  const [ap, tk, act, ag] = await Promise.all([
     supabase.from('hc_approvals').select('*').order('created_at', { ascending: false }).limit(30),
     supabase.from('hc_plan_tasks').select('*').order('sort', { ascending: true }),
     supabase.from('hc_activity').select('*').order('created_at', { ascending: false }).limit(20),
+    // 20 agent yang tersambung AI lewat n8n (persona di hc_agent_prompts)
+    supabase.from('hc_agent_prompts').select('agent_id, nick, dept, active'),
   ]);
   const patch = {};
   if (!ap.error) patch.approvals = ap.data.map(toApproval);
   if (!tk.error) patch.planTasks = tk.data.map(toTask);
   if (!act.error) patch.dbActivity = act.data;
+  if (!ag.error) patch.agentPrompts = ag.data.filter((a) => a.active).map((a) => a.agent_id);
   useHive.setState(patch);
+  // tugas agent yang sedang dikerjakan -> lebah bekerja di koloni 3D
+  if (patch.planTasks) syncRealTasks(patch.planTasks);
 }
 
 export async function startHallSync() {
@@ -36,7 +42,7 @@ export async function startHallSync() {
 export function stopHallSync() {
   if (channel) supabase.removeChannel(channel);
   channel = null;
-  useHive.setState({ dbActivity: [] });
+  useHive.setState({ dbActivity: [], agentPrompts: [] });
 }
 
 const online = () => !!useAuth.getState().account;

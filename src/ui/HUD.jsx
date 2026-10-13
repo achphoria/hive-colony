@@ -42,12 +42,17 @@ function Dot({ st }) {
 }
 
 // Status kehadiran agent di daftar: work (sedang mengerjakan), online, offline.
-// Mode real: hanya agent yang tersambung AI yang bisa online; mode demo mengikuti simulasi.
+// Mode real: Queen online kalau Claude tersambung; 20 agent lain online kalau aktif di
+// hc_agent_prompts (n8n), "Kerja" saat sedang mengerjakan tugas sungguhan. Mode demo mengikuti simulasi.
 const PRESENCE_LABEL = { work: 'Kerja', online: 'Online', offline: 'Offline' };
-function presenceOf(id, st, real, ai, inMeeting) {
+function presenceOf(id, st, real, ai, inMeeting, prompts) {
   if (real) {
-    if (id !== 'ceo' || ai.status !== 'on') return 'offline';
-    return ai.busy > 0 || inMeeting ? 'work' : 'online';
+    if (id === 'ceo') {
+      if (ai.status !== 'on') return 'offline';
+      return ai.busy > 0 || inMeeting ? 'work' : 'online';
+    }
+    if (!prompts.includes(id)) return 'offline';
+    return st?.missionId ? 'work' : 'online';
   }
   if (st?.missionId) return 'work';
   if (st?.state === 'sleep') return 'offline';
@@ -156,6 +161,8 @@ function RealStats() {
   const online = useHive((s) => s.onlineStaff.length) + 1;
   const dbActivity = useHive((s) => s.dbActivity);
   const ai = useAi((s) => s.status);
+  const prompts = useHive((s) => s.agentPrompts);
+  const connected = (ai === 'on' ? 1 : 0) + prompts.filter((id) => id !== 'ceo').length;
   const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
   const todayCount = dbActivity.filter((a) => new Date(new Date(a.created_at).getTime() + 7 * 3600e3).toISOString().slice(0, 10) === today).length;
   return (
@@ -165,7 +172,7 @@ function RealStats() {
         <span>staff online</span>
       </div>
       <div>
-        <b>{ai === 'on' ? 1 : 0}/21</b>
+        <b>{connected}/21</b>
         <span>agent tersambung AI</span>
       </div>
       <div>
@@ -375,7 +382,8 @@ function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
   const ai = useAi();
   const inMeeting = useMeeting((s) => s.live && s.active);
   const counts = { work: 0, online: 0, offline: 0 };
-  const pres = Object.fromEntries(AGENTS.map((a) => [a.id, presenceOf(a.id, agentStates[a.id], real, ai, inMeeting)]));
+  const prompts = useHive((s) => s.agentPrompts);
+  const pres = Object.fromEntries(AGENTS.map((a) => [a.id, presenceOf(a.id, agentStates[a.id], real, ai, inMeeting, prompts)]));
   Object.values(pres).forEach((p) => counts[p]++);
   return (
     <div className="directory">
@@ -442,7 +450,7 @@ function MissionBoard({ className = 'panel board', onPick }) {
       {tab === 'active' ? (
         <div className="list">
           {missions.length === 0 && (
-            <p className="empty">{real ? 'Belum ada misi. Agent sedang bebas; misi datang dari agent AI yang sudah tersambung.' : 'Queen Bea sedang menyiapkan misi berikutnya…'}</p>
+            <p className="empty">{real ? 'Belum ada tugas yang sedang dikerjakan. Minta Queen Bea mendelegasikan tugas ke agent, nanti lebahnya bekerja di sini.' : 'Queen Bea sedang menyiapkan misi berikutnya…'}</p>
           )}
           {missions.map((m) => (
             <button

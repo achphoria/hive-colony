@@ -555,11 +555,10 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
             <div key={a.id} className="ws-row person">
               <i style={{ background: a.on ? '#8DBF5A' : '#C0C5CE' }} />
               <span>{a.nick}</span>
-              <small className={a.on ? 'here' : ''}>{a.on ? 'online' : 'off'}</small>
+              <small className={a.on ? 'here' : ''}>{a.status}</small>
             </div>
           ))}
-          <div className="ws-trend">{data.aiAgents[0].model}</div>
-          <div className="ws-empty">20 agent lain belum tersambung</div>
+          <div className="ws-trend">{data.aiNote}</div>
         </div>
       </Screen>
       ) : (

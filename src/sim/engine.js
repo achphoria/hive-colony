@@ -380,8 +380,81 @@ function completeMission(m) {
   log('done', `${AGENT_BY_ID[m.leadId].nick} menyelesaikan "${m.title}" (+${m.reward} madu)`, m.dept);
 }
 
+// Mode real: progres tugas sungguhan hanya animasi (perkiraan); selesai saat n8n menandai "done"
+function realMissions(dt) {
+  for (const m of world.missions) {
+    if (!m.real) continue;
+    m.t += dt;
+    const lead = world.byId[m.leadId];
+    if (lead && lead.missionId !== m.id) lead.missionId = m.id;
+    if (lead && lead.state !== 'desk' && lead.state !== 'fly') goHome(lead);
+    if (lead && lead.state === 'desk') m.progress = Math.min(0.92, m.progress + (0.92 - m.progress) * dt * 0.05);
+  }
+}
+
+// Sinkron tugas agent sungguhan (hc_plan_tasks kind "ai") ke misi 3D
+export function syncRealTasks(tasks) {
+  if (!world.real) return;
+  const doing = tasks.filter((t) => t.kind === 'ai' && t.col === 'doing' && world.byId[t.who] && !world.byId[t.who].guest);
+  const ids = new Set(doing.map((t) => String(t.id)));
+  for (const m of world.missions.filter((x) => x.real && !ids.has(x.taskId))) {
+    const t = tasks.find((x) => String(x.id) === m.taskId);
+    finishReal(m, t?.col === 'done');
+  }
+  for (const t of doing) {
+    if (world.missions.some((m) => m.real && m.taskId === String(t.id))) continue;
+    const lead = world.byId[t.who];
+    if (lead.missionId) continue; // satu agent mengerjakan satu tugas dalam satu waktu
+    const m = {
+      id: world.seq++,
+      real: true,
+      taskId: String(t.id),
+      title: String(t.title || '').startsWith(`${lead.def.nick}: `) ? String(t.title).slice(lead.def.nick.length + 2) : String(t.title || ''),
+      dept: lead.def.dept,
+      leadId: lead.id,
+      collabId: null,
+      roomId: lead.seat.roomId,
+      phase: 'work',
+      t: 0,
+      progress: 0.05,
+    };
+    lead.missionId = m.id;
+    if (lead.state !== 'desk') goHome(lead);
+    const ceo = world.byId.ceo;
+    const room = ROOM_BY_ID[m.roomId];
+    ceo.cheer = 1;
+    world.effects.push({ type: 'drop', from: V(ceo.pos.x, ceo.pos.y + 2.4, ceo.pos.z), to: V(room.x, room.y + 3.4, room.z), t: 0, dur: 2.2 });
+    world.missions.push(m);
+    emit('dispatch');
+  }
+  syncUI();
+}
+
+function finishReal(m, done) {
+  world.missions = world.missions.filter((x) => x !== m);
+  const lead = world.byId[m.leadId];
+  if (lead && lead.missionId === m.id) lead.missionId = null;
+  if (!done) return;
+  if (lead) lead.cheer = 1;
+  world.done++;
+  world.doneBy[m.leadId] = (world.doneBy[m.leadId] || 0) + 1;
+  world.glow[m.roomId] = 1;
+  const room = ROOM_BY_ID[m.roomId];
+  world.effects.push({
+    type: 'burst',
+    at: V(room.x, room.y + 1.6, room.z),
+    dirs: Array.from({ length: 14 }, () => V(rand(-1, 1), rand(0.6, 1.6), rand(-1, 1))),
+    t: 0,
+    dur: 1.4,
+  });
+  emit('complete');
+}
+
 function missions(dt) {
-  if (world.real) return; // misi sungguhan datang dari agent AI yang tersambung, bukan simulasi
+  if (world.real) {
+    realMissions(dt); // misi sungguhan datang dari agent AI (n8n), bukan simulasi
+    return;
+  }
   world.nextMission -= dt;
   const active = world.missions.filter((m) => m.phase !== 'done');
   if (world.nextMission <= 0) {
@@ -472,6 +545,7 @@ function syncUI() {
       roomId: m.roomId,
       phase: m.phase,
       progress: m.progress,
+      real: !!m.real,
     })),
     agentStates: Object.fromEntries(
       world.agents.map((a) => [

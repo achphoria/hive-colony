@@ -100,7 +100,7 @@ export function useHallData(me) {
   const openTasks = planTasks.filter((t) => t.col !== 'done');
   const open = [
     ...pending.map((a) => ({ title: a.title, sub: `${a.by} · tunggu Anda`, color: '#E24B4A' })),
-    ...(real ? openTasks.map((t) => ({ title: t.title, sub: `${t.who} · ${t.col === 'doing' ? 'jalan' : 'belum'}`, color: t.col === 'doing' ? '#F5B700' : '#C0C5CE' })) : []),
+    ...(real ? openTasks.map((t) => ({ title: t.title, sub: `${AGENT_BY_ID[t.who]?.nick || t.who} · ${t.col === 'doing' ? 'jalan' : 'belum'}`, color: t.col === 'doing' ? '#F5B700' : '#C0C5CE' })) : []),
     ...[...(real ? [] : missions)]
       .sort((a, b) => a.progress - b.progress)
       .map((m) => ({
@@ -117,7 +117,8 @@ export function useHallData(me) {
   const events = real ? [] : demoEvents().filter((e) => e.ts >= wStart && e.ts < wStart + 7 * 864e5);
 
   const awake = Object.values(agentStates).filter((a) => a.state !== 'sleep').length;
-  const aiOn = ai.status === 'on' ? 1 : 0;
+  const prompts = useHive((s) => s.agentPrompts).filter((id) => id !== 'ceo');
+  const aiOn = (ai.status === 'on' ? 1 : 0) + prompts.length;
   const ticker = real
     ? [
         `${hhmm(stats.clock)} WIB`,
@@ -157,9 +158,18 @@ export function useHallData(me) {
   const skills = skillScores();
   const mover = [...skills].sort((a, b) => b.done - a.done)[0];
   // mode real: panel "Agent AI" menggantikan skor skill simulasi
+  // urutan: Queen, agent yang sedang mengerjakan tugas, lalu agent online lainnya
+  const working = prompts.filter((id) => agentStates[id]?.missionId);
+  const idle = prompts.filter((id) => !agentStates[id]?.missionId);
   const aiAgents = [
-    { id: 'ceo', nick: 'Queen Bea', on: ai.status === 'on', model: ai.status === 'on' ? modelLabel(ai.model) : ai.status === 'unknown' ? 'memeriksa…' : 'belum tersambung' },
+    { id: 'ceo', nick: 'Queen Bea', on: ai.status === 'on', status: ai.status === 'on' ? 'online' : 'off' },
+    ...[...working, ...idle].slice(0, 4).map((id) => ({ id, nick: AGENT_BY_ID[id]?.nick || id, on: true, status: agentStates[id]?.missionId ? 'kerja' : 'online' })),
   ];
+  const aiNote = prompts.length
+    ? `${working.length} sedang kerja · ${prompts.length} agent Claude via n8n`
+    : ai.status === 'on'
+      ? `${modelLabel(ai.model)} · 20 agent lain belum tersambung`
+      : 'belum tersambung';
 
-  return { real, feed, open, week, dow, events, ticker, online, skills: skills.slice(0, 5), mover, aiAgents, aiOn, pending: pending.length };
+  return { real, feed, open, week, dow, events, ticker, online, skills: skills.slice(0, 5), mover, aiAgents, aiOn, aiNote, pending: pending.length };
 }
