@@ -4,6 +4,12 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 13 Oktober 2026
 
+### Grok Bot untuk Nimbus, Loop, Ping & Queen Bea (opsional)
+- Nimbus (`cloud`), Loop (`workflow`), dan Ping (`network`) sekarang dijawab Grok Bot; Queen Bea bisa dipilih Claude atau Grok Bot di kepala chat (default Claude, tersimpan di browser).
+- Edge Function `agent-chat` meneruskan pesan + isi lampiran ke bot (secret `GROKBOT_URL_<AGENT>` / `GROKBOT_KEY_<AGENT>`, batas 15 detik) dan menjawab `pending`; bot yang menulis balasan ke percakapan.
+- Ruang Kerja menampilkan "… sedang mengetik…", menunggu balasan lewat Realtime + polling 5 detik, maksimal 3 menit.
+- Jalur Claude/n8n untuk agent lain tidak berubah.
+
 ### Perapian koloni: wajib login, lebih ringan, tombol dirapikan (`a745d9a`)
 - **Wajib login.** Mode demo dihapus; semua halaman (koloni, Hive Hall, Ruang Kerja, Mode TV) menampilkan form masuk kalau belum login. Sesi berakhir otomatis setiap jam 00:00 WIB.
 - **Performa.** Furnitur statis digabung per material, bayangan diperbarui 5x per detik, lampu malam satu per lantai (17 → 4 lampu titik), tanpa AO, resolusi render menyesuaikan perangkat, dan panel hanya digambar ulang saat datanya berubah. Di laptop Intel UHD: draw call ±3.750 → ±1.560 per frame, fps ±10 → ±20–24 (mode pengembangan).

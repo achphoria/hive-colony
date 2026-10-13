@@ -82,8 +82,12 @@ async function invoke(body, fallback) {
 }
 
 // kirim pesan (+ lampiran yang sudah diunggah); hasil: { thread_id, reply, status, meta }
-export function sendToAgent({ agent, message, threadId, files }) {
-  return invoke({ action: 'send', agent, message, thread_id: threadId || undefined, files: files?.length ? files : undefined }, 'Pesan gagal dikirim. Coba lagi.');
+// engine ('claude' | 'grokbot') hanya dipakai untuk Queen Bea; status 'pending' = balasan Grok Bot menyusul
+export function sendToAgent({ agent, message, threadId, files, engine }) {
+  return invoke(
+    { action: 'send', agent, message, thread_id: threadId || undefined, files: files?.length ? files : undefined, engine: agent === 'ceo' ? engine : undefined },
+    'Pesan gagal dikirim. Coba lagi.',
+  );
 }
 
 // Jadikan tugas untuk agent: kartu papan rencana yang langsung dikerjakan agent lewat n8n

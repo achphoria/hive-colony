@@ -37,6 +37,24 @@ const LEVEL_LABEL = { owner: 'Owner · akses penuh', train: 'Pelatih', use: 'Pak
 const COL_LABEL = { todo: 'Belum', doing: 'Jalan', done: 'Selesai' };
 const SpeechRec = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 const VOICE_KEY = 'hc-aw-voice';
+const ENGINE_KEY = 'hc-aw-engine';
+// agent yang selalu dijawab Grok Bot (Queen Bea bisa dipilih di kepala chat)
+const GROK_AGENTS = ['cloud', 'workflow', 'network'];
+const WAIT_POLL_MS = 5000;
+const WAIT_MAX_MS = 3 * 60 * 1000;
+function loadEngine() {
+  try {
+    return localStorage.getItem(ENGINE_KEY) === 'grokbot' ? 'grokbot' : 'claude';
+  } catch {
+    return 'claude';
+  }
+}
+// sudah ada balasan (agent/sistem) setelah pesan user terakhir?
+const answered = (list) => {
+  let lastUser = -1;
+  list.forEach((m, i) => m.role === 'user' && (lastUser = i));
+  return lastUser >= 0 && list.slice(lastUser + 1).some((m) => m.role === 'agent' || m.role === 'system');
+};
 const initials = (n) => n.slice(0, 2).toUpperCase();
 const timeLabel = (iso) => {
   const d = new Date(new Date(iso).getTime() + 7 * 3600e3);
@@ -250,6 +268,8 @@ export function AgentWorkspace({ agentId }) {
   const [voiceOn, setVoiceOn] = useState(loadVoicePref);
   const [listening, setListening] = useState(false);
   const [myFb, setMyFb] = useState({});
+  const [engine, setEngine] = useState(loadEngine);
+  const [waiting, setWaiting] = useState(null); // { threadId, since } saat menunggu balasan Grok Bot
   const [tab, setTab] = useState('info');
   const listRef = useRef(null);
   const fileRef = useRef(null);
@@ -262,6 +282,7 @@ export function AgentWorkspace({ agentId }) {
     if (!account) return;
     setThreadId(null);
     setMsgs([]);
+    setWaiting(null);
     setError('');
     setTaskFor(null);
     setFiles([]);
@@ -304,9 +325,36 @@ export function AgentWorkspace({ agentId }) {
     };
   }, [threadId]);
 
+  // menunggu balasan Grok Bot: Realtime (efek di atas) + cadangan polling tiap 5 detik, maks. 3 menit
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const poll = setInterval(() => {
+      if (!busyRef.current) loadMessages(waiting.threadId).then(setMsgs);
+    }, WAIT_POLL_MS);
+    const stop = setTimeout(() => {
+      setWaiting(null);
+      setError('Belum ada balasan, coba lagi.');
+    }, Math.max(0, waiting.since + WAIT_MAX_MS - Date.now()));
+    return () => {
+      clearInterval(poll);
+      clearTimeout(stop);
+    };
+  }, [waiting]);
+
+  // balasan masuk: hilangkan indikator (dan bacakan kalau mode suara aktif)
+  useEffect(() => {
+    if (!waiting || waiting.threadId !== threadId || !answered(msgs)) return;
+    setWaiting(null);
+    const last = msgs[msgs.length - 1];
+    if (voiceOn && last?.role === 'agent') {
+      setSpeaking(last.id);
+      speak(plain(last.content), () => setSpeaking((s) => (s === last.id ? null : s)));
+    }
+  }, [msgs, waiting, threadId]);
+
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [msgs.length, busy]);
+  }, [msgs.length, busy, waiting]);
 
   // penilaian saya untuk pesan di percakapan ini
   useEffect(() => {
@@ -401,7 +449,7 @@ export function AgentWorkspace({ agentId }) {
 
   const send = async () => {
     const m = text.trim();
-    if ((!m && !files.length) || busy) return;
+    if ((!m && !files.length) || busy || waiting) return;
     recRef.current?.stop();
     const pending = files;
     setText('');
@@ -414,7 +462,8 @@ export function AgentWorkspace({ agentId }) {
     ]);
     try {
       const refs = pending.length ? await uploadFiles(pending) : [];
-      const r = await sendToAgent({ agent, message: m, threadId, files: refs });
+      const r = await sendToAgent({ agent, message: m, threadId, files: refs, engine });
+      if (r.status === 'pending') setWaiting({ threadId: r.thread_id, since: Date.now() });
       if (voiceOn && r.status === 'ok' && r.reply) {
         setSpeaking('last');
         speak(plain(r.reply), () => setSpeaking((s) => (s === 'last' ? null : s)));
@@ -474,7 +523,7 @@ export function AgentWorkspace({ agentId }) {
     );
   }
 
-  const model = agent === 'ceo' ? (ai.status === 'on' ? 'Claude Haiku 5.5' : 'belum tersambung') : 'Claude · n8n';
+  const model = GROK_AGENTS.includes(agent) ? 'Grok Bot' : agent === 'ceo' ? (ai.status === 'on' ? 'Claude Haiku 5.5' : 'belum tersambung') : 'Claude · n8n';
   const canWrite = level && !readOnly;
   const avatar = (sm) => (
     <div className={`aw-av${sm ? ' sm' : ''}`} style={{ '--c': DEPTS[def.dept].color }}>
@@ -568,7 +617,34 @@ export function AgentWorkspace({ agentId }) {
               </span>
             </div>
             <span className={`pres pres-${pres}`}>{PRES_LABEL[pres]}</span>
-            <span className="aw-model">{model}</span>
+            {agent === 'ceo' && level ? (
+              <div className="aw-engine" role="radiogroup" aria-label="Mesin AI Queen Bea">
+                {[
+                  ['claude', 'Claude'],
+                  ['grokbot', 'Grok Bot'],
+                ].map(([k, l]) => (
+                  <button
+                    key={k}
+                    role="radio"
+                    aria-checked={engine === k}
+                    className={engine === k ? 'on' : ''}
+                    disabled={busy || !!waiting}
+                    onClick={() => {
+                      setEngine(k);
+                      try {
+                        localStorage.setItem(ENGINE_KEY, k);
+                      } catch {
+                        /* penyimpanan browser tidak tersedia */
+                      }
+                    }}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="aw-model">{model}</span>
+            )}
             {level && <ScoreBadge agent={agent} />}
             {level && (
               <button className={`aw-voice${voiceOn ? ' on' : ''}`} onClick={toggleVoice} title="Bacakan jawaban otomatis" aria-pressed={voiceOn}>
@@ -654,7 +730,7 @@ export function AgentWorkspace({ agentId }) {
                     </div>
                   ),
                 )}
-                {busy && (
+                {(busy || (waiting && waiting.threadId === threadId)) && (
                   <div className="aw-msg agent">
                     {avatar(true)}
                     <div className="aw-bub typing">
@@ -662,6 +738,7 @@ export function AgentWorkspace({ agentId }) {
                       <i />
                       <i />
                     </div>
+                    {waiting && <span className="aw-typing-label">{def.nick} sedang mengetik…</span>}
                   </div>
                 )}
               </div>
@@ -715,7 +792,7 @@ export function AgentWorkspace({ agentId }) {
                     <button className={`aw-tool${listening ? ' on' : ''}`} onClick={toggleMic} disabled={busy} aria-label={listening ? 'Berhenti dikte' : 'Dikte dengan suara'} title="Dikte dengan suara">
                       {listening ? '⏺' : '🎤'}
                     </button>
-                    <button className="aw-send" onClick={send} disabled={busy || (!text.trim() && !files.length)} aria-label="Kirim">
+                    <button className="aw-send" onClick={send} disabled={busy || !!waiting || (!text.trim() && !files.length)} aria-label="Kirim">
                       ➤
                     </button>
                   </div>

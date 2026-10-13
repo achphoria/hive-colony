@@ -127,6 +127,12 @@ Semua pesan lewat Edge Function `agent-chat`, yang memeriksa login dan akses, me
 
 Owner atau Pelatih bisa membuat jadwal per agent: setiap hari, Senin–Jumat, mingguan, atau bulanan, pada jam WIB tertentu (`hc_agent_routines`, jadwal berikutnya dihitung `hc_routine_next`). Workflow n8n **Hive - Routine Tick** (`n8n/workflows/hive-routine-tick.json`) memanggil `agent-chat` tiap 5 menit. Tugas yang jatuh tempo masuk papan rencana dan dikerjakan agent. Hasilnya muncul di panel Tugas. Ada juga tombol ▶ Jalankan sekarang. Kalau PC kantor mati saat jadwal tiba, tugas itu dijalankan sekali begitu n8n hidup lagi.
 
+### Grok Bot (Nimbus, Loop, Ping, dan Queen Bea opsional)
+
+Agent `cloud` (Nimbus), `workflow` (Loop), dan `network` (Ping) selalu dijawab **Grok Bot**. Queen Bea memakai Claude secara default; di kepala chat Queen ada pilihan **Claude / Grok Bot** (tersimpan di browser). Untuk jalur Grok Bot, Edge Function `agent-chat` meneruskan pesan (+ isi lampiran) ke bot dan langsung menjawab `status: 'pending'`; bot sendiri yang menulis balasan ke `hc_agent_messages` (`role: 'agent'`, `meta.engine: 'grokbot'`). Ruang Kerja menampilkan "… sedang mengetik…", menunggu lewat Realtime + polling 5 detik, dan menyerah setelah 3 menit ("Belum ada balasan, coba lagi").
+
+Alamat & kunci bot disimpan di Supabase Edge Function Secrets, satu pasang per agent: `GROKBOT_URL_CLOUD` / `GROKBOT_KEY_CLOUD`, `GROKBOT_URL_WORKFLOW` / `GROKBOT_KEY_WORKFLOW`, `GROKBOT_URL_NETWORK` / `GROKBOT_KEY_NETWORK`, `GROKBOT_URL_CEO` / `GROKBOT_KEY_CEO`. Kalau belum diisi atau bot tidak menjawab dalam 15 detik, chat menampilkan "<nama> (Grok Bot) tidak bisa dihubungi". Bot menerima `POST {thread_id, agent_id, message, user_name, message_id}` dengan header `Authorization: Bearer <kunci>`.
+
 ### Akses agent (`#/akses`, khusus owner)
 
 Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak punya akses sampai diatur. Klik chip agent untuk berganti: Tanpa akses → **Pakai** (chat & perintah) → **Pelatih** (juga melihat & nanti mengubah skill agent). Ada tombol cepat "Pakai semua" / "Kosongkan" per divisi. Dijaga RLS (`hc_agent_access`, `hc_agent_level()`) dan dicek ulang di server.

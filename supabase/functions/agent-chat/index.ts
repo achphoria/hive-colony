@@ -4,7 +4,8 @@
 //   - 20 agent  -> webhook n8n "Hive - Agent Task Worker" (Claude, persona di hc_agent_prompts)
 //   - Queen Bea -> Edge Function queen-bea (supaya delegasi ke agent tetap jalan)
 //   POST { action: 'health' }                                     -> { online, checked_at }
-//   POST { action: 'send', agent, message, thread_id?, files? }   -> { thread_id, reply, status, meta }
+//   POST { action: 'send', agent, message, thread_id?, files?, engine? } -> { thread_id, reply, status, meta }
+//        status 'pending' = diteruskan ke Grok Bot; balasan masuk belakangan lewat Realtime
 //   POST { action: 'task', agent, title, detail }                 -> { task_id }   (Jadikan tugas untuk agent)
 //   POST { action: 'routine_run', routine_id }                    -> { task_id }   (Jalankan sekarang, owner/Pelatih)
 //   POST { action: 'resume', approval_id, status } + x-hive-secret -> 202          (dari trigger hc_approvals)
@@ -18,6 +19,9 @@ const MAX_FILES = 3;
 const MAX_FILE_TEXT = 30000; // karakter isi per lampiran
 const BUCKET = 'hc-agent-files';
 const MODEL = 'claude-haiku-5-5';
+// agent yang selalu dijawab Grok Bot (Queen Bea hanya kalau engine = 'grokbot'); URL & kunci di
+// Edge Function Secrets GROKBOT_URL_<AGENT> dan GROKBOT_KEY_<AGENT>, misalnya GROKBOT_URL_CLOUD
+const GROK_AGENTS = ['cloud', 'workflow', 'network'];
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -351,12 +355,45 @@ Deno.serve(async (req) => {
     role: m.role,
     content: m.content + (Array.isArray(m.meta?.files) && m.meta.files.length ? `\n[lampiran: ${m.meta.files.map((f: FileRef) => f.name).join(', ')}]` : ''),
   }));
-  await admin.from('hc_agent_messages').insert({
-    thread_id: threadId,
-    role: 'user',
-    content: message,
-    meta: { by: uid, name: me.name, ...(files.length ? { files } : {}) },
-  });
+  const { data: userMsg } = await admin
+    .from('hc_agent_messages')
+    .insert({
+      thread_id: threadId,
+      role: 'user',
+      content: message,
+      meta: { by: uid, name: me.name, ...(files.length ? { files } : {}) },
+    })
+    .select('id')
+    .single();
+
+  // Grok Bot: diteruskan ke bot, balasannya ditulis bot sendiri ke hc_agent_messages (meta.engine = 'grokbot')
+  const engine = body?.engine === 'grokbot' ? 'grokbot' : 'claude';
+  const useGrok = GROK_AGENTS.includes(agent) || (agent === 'ceo' && engine === 'grokbot');
+  if (useGrok) {
+    const key = agent.toUpperCase();
+    const url = Deno.env.get(`GROKBOT_URL_${key}`);
+    const token = Deno.env.get(`GROKBOT_KEY_${key}`);
+    try {
+      if (!url || !token) throw new Error('grokbot_not_configured');
+      const attachments = files.length ? await readFiles(files) : '';
+      const full = attachments ? `${message}\n\nLAMPIRAN dari ${me.name} (isi file yang dikirim):\n${attachments}` : message;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_id: threadId, agent_id: agent, message: full, user_name: me.name, message_id: userMsg?.id ?? null }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) throw new Error(`grokbot_http_${r.status}`);
+      await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
+      return json({ thread_id: threadId, reply: '', status: 'pending', meta: { engine: 'grokbot' } });
+    } catch (e) {
+      const errMeta = { engine: 'grokbot', error: String((e as Error)?.message || e).slice(0, 200) };
+      const errReply = `${nick} (Grok Bot) tidak bisa dihubungi. Coba lagi nanti.`;
+      await admin.from('hc_agent_messages').insert({ thread_id: threadId, role: 'system', content: errReply, meta: errMeta });
+      await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
+      return json({ thread_id: threadId, reply: errReply, status: 'error', meta: errMeta });
+    }
+  }
 
   let reply = '';
   let role: 'agent' | 'system' = 'agent';
