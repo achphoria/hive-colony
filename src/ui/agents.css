@@ -1088,3 +1088,26 @@
   color: #8a7a55;
   font-style: italic;
 }
+/* titik "berpikir…" yang beranimasi */
+.aw-dots::after {
+  content: '';
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: aw-think 1.2s steps(4, end) infinite;
+}
+@keyframes aw-think {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75%,
+  100% {
+    content: '...';
+  }
+}

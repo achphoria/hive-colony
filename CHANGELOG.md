@@ -2,6 +2,13 @@
 
 Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bisa diklik di GitHub untuk melihat detail perubahannya.
 
+## 14 Oktober 2026
+
+### Grok Bot: riwayat & persona ikut terkirim
+- Payload ke Grok Bot sekarang membawa `history` (10 pesan terakhir thread) dan `persona` (prompt lengkap agent dari `hc_agent_prompts`, atau persona Queen Bea yang sama dengan Claude).
+- Persona Queen Bea dipindah ke `supabase/functions/_shared/queenPersona.ts`, dipakai bersama `queen-bea` dan `agent-chat`.
+- Saat menunggu balasan bot, Ruang Kerja menampilkan "… sedang berpikir" dengan titik beranimasi.
+
 ## 13 Oktober 2026
 
 ### Grok Bot untuk Nimbus, Loop, Ping & Queen Bea (opsional)

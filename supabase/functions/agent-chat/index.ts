@@ -12,6 +12,7 @@
 //   POST { action: 'routines' } + x-hive-secret                   -> { ran }       (dari n8n "Hive - Routine Tick")
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
 const MAX_MESSAGE = 4000;
@@ -298,10 +299,12 @@ Deno.serve(async (req) => {
   if (!level) return json({ error: 'no_access' }, 403);
   let nick = 'Queen Bea';
   let dept: string | null = 'ceo';
+  let persona = QUEEN_PERSONA; // prompt lengkap agent (persona + skill + pelajaran) untuk Grok Bot
   if (agent !== 'ceo') {
-    const { data: ag } = await admin.from('hc_agent_prompts').select('nick, dept, active').eq('agent_id', agent).maybeSingle();
+    const { data: ag } = await admin.from('hc_agent_prompts').select('nick, dept, active, system_prompt').eq('agent_id', agent).maybeSingle();
     if (!ag || !ag.active) return json({ error: 'unknown_agent' }, 404);
     nick = ag.nick;
+    persona = ag.system_prompt || '';
     dept = ag.dept;
   }
 
@@ -380,7 +383,15 @@ Deno.serve(async (req) => {
       const r = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thread_id: threadId, agent_id: agent, message: full, user_name: me.name, message_id: userMsg?.id ?? null }),
+        body: JSON.stringify({
+          thread_id: threadId,
+          agent_id: agent,
+          message: full,
+          user_name: me.name,
+          message_id: userMsg?.id ?? null,
+          history, // 10 pesan terakhir sebelum pesan ini: [{ role: 'user' | 'agent', content }]
+          persona,
+        }),
         signal: AbortSignal.timeout(15000),
       });
       if (!r.ok) throw new Error(`grokbot_http_${r.status}`);

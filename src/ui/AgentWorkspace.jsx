@@ -738,7 +738,12 @@ export function AgentWorkspace({ agentId }) {
                       <i />
                       <i />
                     </div>
-                    {waiting && <span className="aw-typing-label">{def.nick} sedang mengetik…</span>}
+                    {waiting && (
+                      <span className="aw-typing-label">
+                        {def.nick} sedang berpikir
+                        <span className="aw-dots" aria-hidden="true" />
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
