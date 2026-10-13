@@ -499,19 +499,19 @@ export function HallScene({ data, me, dina, mates = [], call, view, setView, mob
   return (
     <Canvas
       shadows
-      dpr={[1, 2]}
+      dpr={[1, 1.5]}
       camera={{ position: (mobile ? DEFAULT_VIEW_MOBILE : DEFAULT_VIEW).pos, fov: mobile ? 52 : 38, near: 0.1, far: 200 }}
     >
       <color attach="background" args={['#3A2206']} />
       <WarmEnvironment intensity={0.55} />
-      <LookFX quality={mobile ? 'low' : 'high'} bloom={0.55} threshold={0.86} aoRadius={1.2} />
+      <LookFX quality={mobile ? 'low' : 'high'} bloom={0.55} threshold={0.86} ao={false} />
       <hemisphereLight args={['#FFF1D6', '#B0680A', 0.35]} />
       <directionalLight
         position={[6, 12, 8]}
         intensity={1.6}
         color="#FFE6B0"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-14}
         shadow-camera-right={14}
         shadow-camera-top={14}

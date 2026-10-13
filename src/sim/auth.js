@@ -6,6 +6,26 @@ import { useHive } from './store';
 import { upsertWalker } from './outdoor';
 
 const PENDING_KEY = 'hive.pendingInvite';
+const DAY_KEY = 'hive.loginDay';
+
+// Sesi berakhir otomatis setiap pergantian hari WIB (jam 00:00), jadi paling lama 24 jam.
+const wibDay = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+function readDay() {
+  try {
+    return localStorage.getItem(DAY_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeDay(v) {
+  try {
+    if (v) localStorage.setItem(DAY_KEY, v);
+    else localStorage.removeItem(DAY_KEY);
+  } catch {
+    /* abaikan */
+  }
+}
+let expiryTimer = null;
 
 // Profil database -> bentuk profil avatar yang dipakai scene
 export function toAvatarProfile(row) {
@@ -50,8 +70,11 @@ export const useAuth = create((set, get) => ({
   init: async () => {
     const { data } = await supabase.auth.getSession();
     set({ session: data.session });
-    if (data.session) await get().loadAccount();
+    if (data.session && (await get().checkExpiry())) await get().loadAccount();
     set({ ready: true });
+    clearInterval(expiryTimer);
+    expiryTimer = setInterval(() => get().checkExpiry(), 60 * 1000);
+    document.addEventListener('visibilitychange', () => document.hidden || get().checkExpiry());
     supabase.auth.onAuthStateChange((_event, session) => {
       const had = get().session?.user?.id;
       set({ session });
@@ -61,6 +84,19 @@ export const useAuth = create((set, get) => ({
       }
       if (session.user.id !== had) get().loadAccount();
     });
+  },
+
+  // true = sesi masih berlaku hari ini; false = sudah lewat 00:00 WIB, otomatis keluar
+  checkExpiry: async () => {
+    if (!get().session) return false;
+    const day = readDay();
+    if (!day) {
+      writeDay(wibDay()); // sesi lama (sebelum aturan ini): berlaku sampai 00:00 nanti
+      return true;
+    }
+    if (day === wibDay()) return true;
+    await get().signOut();
+    return false;
   },
 
   loadAccount: async () => {
@@ -98,6 +134,7 @@ export const useAuth = create((set, get) => ({
   signIn: async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(errText(error));
+    writeDay(wibDay());
     return get().loadAccount();
   },
 
@@ -113,6 +150,7 @@ export const useAuth = create((set, get) => ({
       return { existing: true };
     }
     if (!data.session) return { confirmEmail: true };
+    writeDay(wibDay());
     set({ session: data.session });
     const prof = await get().loadAccount();
     if (!prof) throw new Error(get().inviteError || 'Kode undangan tidak valid atau sudah dipakai.');
@@ -142,6 +180,7 @@ export const useAuth = create((set, get) => ({
   },
 
   signOut: async () => {
+    writeDay(null);
     await supabase.auth.signOut();
     set({ session: null, account: null, needsInvite: false, inviteError: '' });
   },

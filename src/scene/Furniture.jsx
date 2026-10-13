@@ -119,7 +119,7 @@ function SpinBubble() {
     ref.current.position.y = 1.35 + Math.sin(st.clock.elapsedTime * 1.6) * 0.08;
   });
   return (
-    <group ref={ref} position={[0, 1.35, 0]}>
+    <group ref={ref} position={[0, 1.35, 0]} userData={{ dynamic: true }}>
       <Sph rad={0.32} sc={[1.3, 1, 0.6]} m={M.cream} />
       <Cone p={[-0.18, -0.3, 0]} a={[0.1, 0.22, 4]} r={[0, 0, 0.5]} m={M.cream} />
       {[-0.15, 0, 0.15].map((x) => (
@@ -412,6 +412,7 @@ export function ServerSet() {
               <mesh
                 key={y}
                 ref={(el) => (leds.current[k++] = el)}
+                userData={{ dynamic: true }}
                 position={[-0.2 + ((y * 10) % 3) * 0.15, y, 0.31]}
                 material={(y * 10) % 2 > 1 ? M.ledGreen : M.led}
               >
@@ -473,7 +474,7 @@ export function MissionSet() {
     <group>
       <Hex p={[0, 0.45, 0]} rad={1.1} h={0.9} m={M.graphite} />
       <Hex p={[0, 0.92, 0]} rad={1.2} h={0.06} m={M.gold} />
-      <group ref={ref} position={[0, 1.1, 0]}>
+      <group ref={ref} position={[0, 1.1, 0]} userData={{ dynamic: true }}>
         {[
           [0, 0, 0.3],
           [0.45, 0.26, 0.15],

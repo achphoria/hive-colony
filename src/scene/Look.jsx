@@ -50,7 +50,7 @@ export function LookFX({ quality = 'high', bloom = 0.65, threshold = 0.82, ao = 
     <Vignette key="vig" offset={0.32} darkness={0.42} />,
   ].filter(Boolean);
   return (
-    <EffectComposer multisampling={high ? 4 : 0} disableNormalPass>
+    <EffectComposer multisampling={high ? 2 : 0} disableNormalPass>
       {effects}
     </EffectComposer>
   );

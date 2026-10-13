@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Sparkles } from '@react-three/drei';
-import { ROOM_LIST, sunElevation, tierOf } from '../data/hive';
+import { ROOM_LIST, sunElevation, tierY } from '../data/hive';
 import { world } from '../sim/engine';
 import { useHive } from '../sim/store';
 import { sound } from '../audio/sound';
@@ -82,7 +82,7 @@ export function DayNight() {
     hemi.current.intensity = 0.25 + 0.22 * d;
     hemi.current.color.copy(HEMI_SKY.day).lerp(HEMI_SKY.night, n);
     hemi.current.groundColor.copy(HEMI_GROUND.day).lerp(HEMI_GROUND.night, n);
-    amb.current.intensity = 0.04 + 0.16 * n;
+    amb.current.intensity = 0.04 + 0.3 * n;
 
     // material yang menyala lebih terang saat malam
     M.led.emissiveIntensity = 1.4 + 2.2 * n;
@@ -93,11 +93,12 @@ export function DayNight() {
     M.holo.emissiveIntensity = 0.7 + 0.9 * n;
 
     const floor = useHive.getState().floor;
-    lights.current.forEach((l, i) => {
+    // satu lampu hangat per lantai (bukan per ruangan): 17 lampu titik terlalu berat untuk GPU laptop
+    lights.current.forEach((l, t) => {
       if (!l) return;
-      const r = ROOM_LIST[i];
-      const shown = floor === 'all' || r.tier <= floor;
-      l.intensity = shown ? n * 14 + (world.glow[r.id] || 0) * 10 : 0;
+      const shown = floor === 'all' || t <= floor;
+      const glow = ROOM_LIST.reduce((sum, r) => (r.tier === t ? sum + (world.glow[r.id] || 0) : sum), 0);
+      l.intensity = shown ? n * 20 + glow * 10 : 0;
     });
     if (lampLight.current) lampLight.current.intensity = n * 30;
 
@@ -122,7 +123,7 @@ export function DayNight() {
         intensity={1.7}
         color="#FFE6B0"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-32}
         shadow-camera-right={32}
         shadow-camera-top={32}
@@ -131,17 +132,9 @@ export function DayNight() {
         shadow-camera-far={140}
         shadow-bias={-0.0006}
       />
-      {/* lampu tiap ruangan, selalu terpasang supaya shader tidak dikompilasi ulang */}
-      {ROOM_LIST.map((r, i) => (
-        <pointLight
-          key={r.id}
-          ref={(el) => (lights.current[i] = el)}
-          position={[r.x, r.y + 1.7, r.z]}
-          color="#FFC266"
-          intensity={0}
-          distance={9}
-          decay={2}
-        />
+      {/* lampu tiap lantai, selalu terpasang supaya shader tidak dikompilasi ulang */}
+      {[0, 1, 2].map((t) => (
+        <pointLight key={t} ref={(el) => (lights.current[t] = el)} position={[0, tierY(t) + 2.2, 0]} color="#FFC266" intensity={0} distance={30} decay={1} />
       ))}
       <pointLight ref={lampLight} position={[0, 0.5, 18]} color="#FFC266" intensity={0} distance={14} decay={2} />
       <points geometry={starGeo}>
@@ -161,22 +154,3 @@ export function DayNight() {
   );
 }
 
-// Dengung lebah: makin keras kalau banyak agent terbang dekat kamera.
-export function BuzzBridge() {
-  const { camera } = useThree();
-  useFrame(() => {
-    if (!sound.enabled) return;
-    const floor = useHive.getState().floor;
-    let count = 0;
-    let nearest = Infinity;
-    for (const a of world.agents) {
-      if (a.state !== 'fly') continue;
-      if (floor !== 'all' && tierOf(a.pos.y) > floor) continue;
-      count++;
-      nearest = Math.min(nearest, camera.position.distanceTo(a.pos));
-    }
-    const proximity = clamp(1 - (nearest - 8) / 60, 0, 1);
-    sound.setBuzz(Math.min(1, count / 3) * proximity * 0.05);
-  });
-  return null;
-}

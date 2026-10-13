@@ -8,6 +8,7 @@ import { world } from '../sim/engine';
 import { M, std, Box, Cyl, Hex, Sph, Cone, HEX_START } from './materials';
 import { grassTexture, honeyGlassTexture } from './textures';
 import { HiveWorker } from './HiveWorker';
+import { StaticMerge } from './StaticMerge';
 
 export function Agents() {
   return [...AGENTS, ...GUESTS].map((def) => <HiveWorker key={def.id} def={def} />);
@@ -175,7 +176,7 @@ export function Island() {
     trees.push(<Tree key={i} p={[r * Math.cos(a), -2.2, r * Math.sin(a)]} s={0.75 + rnd() * 0.65} />);
   }
   return (
-    <group>
+    <StaticMerge>
       <mesh position={[0, -2.35, 0]} material={grassMat} receiveShadow>
         <cylinderGeometry args={[27, 27, 0.3, 6, 1, false, HEX_START]} />
       </mesh>
@@ -213,7 +214,7 @@ export function Island() {
       ))}
       {trees}
       <Garden />
-    </group>
+    </StaticMerge>
   );
 }
 

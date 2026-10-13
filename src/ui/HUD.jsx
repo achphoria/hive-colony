@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AGENTS, AGENT_BY_ID, DEPTS, ROOM_BY_ID, SEATS_BY_ROOM, TIERS, statusText, dayPhase, isNightHour } from '../data/hive';
 import { useHive } from '../sim/store';
 import { focusAgent } from '../sim/engine';
@@ -8,10 +8,10 @@ import { go } from './nav';
 import { useAuth } from '../sim/auth';
 import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
-import { useAi } from '../hall/queenBea';
+import { useAi, checkAi } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
-import { useAgentNet, useAgentScores } from '../hall/agentApi';
+import { useAgentNet, useAgentScores, checkHealth } from '../hall/agentApi';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
@@ -158,6 +158,130 @@ function AccountChip() {
   );
 }
 
+const PAGE_LABEL = (p = '/') =>
+  p.startsWith('/hall') ? 'Hive Hall' : p.startsWith('/agent') ? 'Ruang kerja' : p.startsWith('/tv') ? 'Mode TV' : p.startsWith('/akses') ? 'Akses agent' : p.startsWith('/avatar') ? 'Ubah avatar' : 'Koloni';
+
+// siapa saja staff yang sedang online (Realtime Presence) dan sedang di halaman mana
+export function OnlineStaffList() {
+  const me = useAuth((s) => s.account);
+  const profile = useHive((s) => s.profile);
+  const others = useHive((s) => s.onlineStaff);
+  const list = [
+    { id: 'me', name: me?.name, dept: me?.primary_dept, outfitColor: profile?.outfitColor, page: (window.location.hash.replace(/^#/, '') || '/').split('?')[0], me: true },
+    ...others,
+  ];
+  return (
+    <div className="online-list">
+      {list.map((o) => (
+        <div key={o.id} className="online-row">
+          <span className="online-av" style={{ '--c': o.outfitColor || '#FFB020' }}>
+            {initialsOf(o.name || '?')}
+          </span>
+          <div>
+            <b>
+              {o.name || 'Staff'}
+              {o.me && <em> (kamu)</em>}
+            </b>
+            <span>
+              {DEPTS[o.dept]?.short || '-'} · {PAGE_LABEL(o.page)}
+            </span>
+          </div>
+          {o.dancing && <i aria-label="Sedang joget">💃</i>}
+        </div>
+      ))}
+      {others.length === 0 && <p className="muted small">Belum ada rekan lain yang online.</p>}
+    </div>
+  );
+}
+
+const hm = (iso) => {
+  if (!iso) return '';
+  const d = new Date(new Date(iso).getTime() + 7 * 3600e3);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+};
+
+// status sambungan: server agent (n8n di PC kantor) dan Queen Bea (Claude)
+export function useServerLevel() {
+  const net = useAgentNet((s) => s.online);
+  const ai = useAi((s) => s.status);
+  if (net === null || ai === 'unknown') return 'check';
+  if (net && ai === 'on') return 'ok';
+  if (net || ai === 'on') return 'warn';
+  return 'down';
+}
+const SERVER_LABEL = { ok: 'Semua tersambung', warn: 'Sebagian terputus', down: 'Terputus', check: 'Memeriksa…' };
+
+export function ServerStatusDetail() {
+  const net = useAgentNet();
+  const ai = useAi((s) => s.status);
+  const owner = useAuth((s) => s.account?.role === 'owner');
+  const [busy, setBusy] = useState(false);
+  const row = (ok, name, desc) => (
+    <div className="srv-row">
+      <span className={`srv-dot ${ok === null ? 'check' : ok ? 'ok' : 'down'}`} />
+      <div>
+        <b>{name}</b>
+        <span>{desc}</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="srv-list">
+      {row(
+        net.online,
+        'Server agent (n8n · PC kantor)',
+        net.online === null ? 'Memeriksa…' : `${net.online ? 'Online, 20 agent siap kerja' : 'Offline, tugas agent tertunda'}${net.checkedAt ? ` · dicek ${hm(net.checkedAt)} WIB` : ''}`,
+      )}
+      {row(ai === 'unknown' ? null : ai === 'on', 'Queen Bea (Claude Haiku 5.5)', ai === 'on' ? 'Tersambung' : ai === 'unknown' ? 'Memeriksa…' : 'Belum tersambung')}
+      <p className="muted small srv-note">
+        Sisa saldo token Claude tidak bisa dibaca dari API.
+        {owner ? (
+          <>
+            {' '}
+            Cek di{' '}
+            <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer">
+              Claude Console → Billing
+            </a>
+            .
+          </>
+        ) : (
+          ' Owner bisa mengeceknya di Claude Console.'
+        )}
+      </p>
+      <button
+        className="acct-btn ghost"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          await Promise.all([checkHealth(), checkAi()]);
+          setBusy(false);
+        }}
+      >
+        {busy ? 'Memeriksa…' : 'Cek ulang'}
+      </button>
+    </div>
+  );
+}
+
+// popover kecil di bawah tombol; tutup saat klik di luar
+function Pop({ open, onClose, className = '', children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => {
+      if (ref.current && !ref.current.parentElement.contains(e.target)) onClose();
+    };
+    document.addEventListener('pointerdown', off);
+    return () => document.removeEventListener('pointerdown', off);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div ref={ref} className={`pop ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 // angka header saat mode real: hanya data sungguhan
 function RealStats() {
   const online = useHive((s) => s.onlineStaff.length) + 1;
@@ -167,19 +291,37 @@ function RealStats() {
   const connected = (ai === 'on' ? 1 : 0) + prompts.filter((id) => id !== 'ceo').length;
   const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
   const todayCount = dbActivity.filter((a) => new Date(new Date(a.created_at).getTime() + 7 * 3600e3).toISOString().slice(0, 10) === today).length;
+  const [pop, setPop] = useState(null);
+  const level = useServerLevel();
+  const close = () => setPop(null);
   return (
     <div className="stats">
-      <div>
-        <b>{online}</b>
-        <span>staff online</span>
+      <div className="stat-pop">
+        <button className={`stat-btn${pop === 'staff' ? ' on' : ''}`} onClick={() => setPop(pop === 'staff' ? null : 'staff')} aria-expanded={pop === 'staff'}>
+          <b>{online}</b>
+          <span>online ▾</span>
+        </button>
+        <Pop open={pop === 'staff'} onClose={close}>
+          <p className="pop-title">Staff online</p>
+          <OnlineStaffList />
+        </Pop>
       </div>
-      <div>
-        <b>{connected}/21</b>
-        <span>agent tersambung AI</span>
+      <div className="stat-pop">
+        <button className={`stat-btn${pop === 'server' ? ' on' : ''}`} onClick={() => setPop(pop === 'server' ? null : 'server')} aria-expanded={pop === 'server'} title={`Server: ${SERVER_LABEL[level]}`}>
+          <b>
+            <i className={`srv-dot ${level}`} />
+            {connected}/21
+          </b>
+          <span>server ▾</span>
+        </button>
+        <Pop open={pop === 'server'} onClose={close}>
+          <p className="pop-title">Status server</p>
+          <ServerStatusDetail />
+        </Pop>
       </div>
       <div>
         <b>{todayCount}</b>
-        <span>aktivitas hari ini</span>
+        <span>aktivitas</span>
       </div>
     </div>
   );
@@ -267,10 +409,16 @@ function initialsOf(name) {
 }
 
 function MobileBrand({ onAvatar }) {
+  const level = useServerLevel();
+  const online = useHive((s) => s.onlineStaff.length) + 1;
   return (
     <header className="panel brand mobile-brand">
       <Logo />
       <h1>Hive Colony</h1>
+      <button className="m-status" onClick={onAvatar} aria-label={`${online} staff online, server ${SERVER_LABEL[level]}`}>
+        <i className={`srv-dot ${level}`} />
+        {online}
+      </button>
       <ClockCompact />
       <AvatarButton onClick={onAvatar} />
     </header>
@@ -376,7 +524,7 @@ function FloorSwitch({ onPick }) {
   );
 }
 
-function Directory({ defaultOpen = window.innerWidth > 900, onPick }) {
+function Directory({ defaultOpen = false, onPick }) {
   const [open, setOpen] = useState(defaultOpen);
   const agentStates = useHive((s) => s.agentStates);
   const selected = useHive((s) => s.selectedAgent);
@@ -501,32 +649,50 @@ function MissionBoard({ className = 'panel board', onPick }) {
   );
 }
 
-function Controls({ className = 'panel controls', onPick }) {
-  const speed = useHive((s) => s.speed);
-  const paused = useHive((s) => s.paused);
-  const hasProfile = useHive((s) => !!s.profile);
-  const real = useAuth((s) => !!s.account);
-  const { setSpeed, togglePause } = useHive.getState();
-  const resetView = () => {
-    useHive.getState().resetView();
+// dua pintu utama, dibuat mencolok
+function PrimaryActions({ className = 'primary-actions', onPick }) {
+  const nav = (path) => {
     onPick?.();
+    go(path);
   };
   return (
     <div className={className}>
-      <button onClick={togglePause} aria-label={paused ? 'Lanjutkan simulasi' : 'Jeda simulasi'}>
-        {paused ? '▶' : '❚❚'}
+      <button className="pa-btn hall" onClick={() => nav('/hall')}>
+        <span aria-hidden="true">🏛</span>
+        <b>Hive Hall</b>
+        <small>Rapat & Queen Bea</small>
       </button>
-      {[1, 2, 4].map((v) => (
-        <button key={v} className={!paused && speed === v ? 'on' : ''} onClick={() => setSpeed(v)}>
-          {v}×
-        </button>
-      ))}
-      <button onClick={resetView}>Reset kamera</button>
-      <span className="ctl-sep" />
-      <button onClick={() => go('/hall')}>Hive Hall</button>
-      {real && <button onClick={() => go('/agent')}>💬 Ruang kerja</button>}
-      <button onClick={() => go('/tv')} title="Mode spectator untuk layar besar">📺 Mode TV</button>
-      <button onClick={() => go('/avatar')}>{hasProfile ? 'Avatar saya' : 'Buat avatar'}</button>
+      <button className="pa-btn work" onClick={() => nav('/agent')}>
+        <span aria-hidden="true">💬</span>
+        <b>Ruang Kerja</b>
+        <small>Chat & tugas agent</small>
+      </button>
+    </div>
+  );
+}
+
+// alat tambahan, dipisah dari tombol utama
+function ToolRail({ className = 'panel tool-rail', onPick }) {
+  const hasProfile = useHive((s) => !!s.profile);
+  const tool = (icon, label, fn, title) => (
+    <button
+      className="tool"
+      onClick={() => {
+        fn();
+        onPick?.();
+      }}
+      title={title || label}
+      aria-label={label}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <em>{label}</em>
+    </button>
+  );
+  return (
+    <div className={className}>
+      {tool('🎯', 'Reset kamera', () => useHive.getState().resetView())}
+      {tool('📺', 'Mode TV', () => go('/tv'), 'Mode spectator untuk layar besar')}
+      {tool('🧑', hasProfile ? 'Avatar saya' : 'Buat avatar', () => go('/avatar'))}
       {hasProfile && <DanceMenu onPick={onPick} />}
     </div>
   );
@@ -544,8 +710,9 @@ function DanceMenu({ onPick }) {
   };
   return (
     <div className="dance-menu">
-      <button className={open ? 'on' : ''} onClick={() => setOpen(!open)} aria-expanded={open}>
-        Joget ▾
+      <button className={`tool${open ? ' on' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Joget" title="Joget">
+        <span aria-hidden="true">💃</span>
+        <em>Joget</em>
       </button>
       {open && (
         <div className="dance-pop">
@@ -722,6 +889,7 @@ function MobileHUD() {
     <div className={`hud is-mobile${plaza ? ' has-plaza' : ''}`}>
       <MobileBrand onAvatar={() => setDrawer('akun')} />
       <PlazaBar />
+      <PrimaryActions className="primary-actions is-dock" />
       <button className="edge-tab edge-menu" onClick={() => setDrawer('menu')} aria-label="Buka menu lantai dan agent">
         <LayersIcon />
         <span>Menu</span>
@@ -740,8 +908,8 @@ function MobileHUD() {
           </button>
         </div>
         <FloorSwitch onPick={close} />
-        <Controls className="controls controls-inline" onPick={close} />
-        <Directory defaultOpen onPick={close} />
+        <ToolRail className="tool-rail tool-rail-inline" onPick={close} />
+        <Directory onPick={close} />
       </aside>
       <aside className={`drawer drawer-missions${drawer === 'akun' ? ' open' : ''}`} aria-hidden={drawer !== 'akun'}>
         <div className="drawer-head">
@@ -751,6 +919,10 @@ function MobileHUD() {
           </button>
         </div>
         <AccountPanel onPick={close} />
+        <p className="aw-label drawer-label">Staff online</p>
+        <OnlineStaffList />
+        <p className="aw-label drawer-label">Status server</p>
+        <ServerStatusDetail />
       </aside>
       <aside className={`drawer drawer-missions${drawer === 'missions' ? ' open' : ''}`} aria-hidden={drawer !== 'missions'}>
         <div className="drawer-head">
@@ -780,7 +952,8 @@ export function HUD() {
         <Directory />
       </aside>
       <MissionBoard />
-      <Controls />
+      <PrimaryActions />
+      <ToolRail />
       <AgentCard />
       <RoomCard />
       <div className="hint">Seret untuk memutar · scroll untuk zoom · klik ruangan atau agent</div>

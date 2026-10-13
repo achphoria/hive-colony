@@ -1,8 +1,8 @@
 /* ---------- Ruang Kerja Agent & Akses agent ---------- */
 .aw-page {
-  max-width: 1360px;
+  max-width: 2200px;
   margin: 0 auto;
-  padding: 16px 20px 24px;
+  padding: 14px 18px 18px;
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -20,9 +20,9 @@
 }
 .aw-grid {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 270px;
+  grid-template-columns: 240px minmax(0, 1fr) 330px;
   gap: 14px;
-  height: calc(100vh - 92px);
+  height: calc(100vh - 84px);
   min-height: 520px;
 }
 .aw-left,
@@ -235,7 +235,7 @@
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  max-width: 82%;
+  max-width: min(88%, 980px);
 }
 .aw-msg.user {
   align-self: flex-end;

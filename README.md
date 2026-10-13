@@ -131,10 +131,20 @@ Owner atau Pelatih bisa membuat jadwal per agent: setiap hari, Senin–Jumat, mi
 
 Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak punya akses sampai diatur. Klik chip agent untuk berganti: Tanpa akses → **Pakai** (chat & perintah) → **Pelatih** (juga melihat & nanti mengubah skill agent). Ada tombol cepat "Pakai semua" / "Kosongkan" per divisi. Dijaga RLS (`hc_agent_access`, `hc_agent_level()`) dan dicek ulang di server.
 
-## Mode real vs mode demo
+## Wajib login (tanpa mode demo)
 
-- **Login (mode real)**: tidak ada misi, tamu, atau log simulasi. Agent yang menganggur tetap bebas berkeliaran, istirahat, dan tidur malam, tapi tidak dicatat sebagai aktivitas. Header, papan misi, log koloni, dan layar Hive Hall hanya menampilkan data asli; kalau sepi, ya kosong. Di Hive Hall hanya Queen Bea dan staff yang sedang membuka Hive Hall yang duduk di meja.
-- **Tanpa login (mode demo)**: simulasi lengkap 21 agent untuk pengunjung.
+Hive Colony hanya untuk staff. Tanpa login, semua alamat (koloni, Hive Hall, Ruang Kerja, Mode TV) menampilkan form masuk. Sesi berakhir otomatis setiap pergantian hari WIB (jam 00:00), jadi paling lama 24 jam; setelah itu staff perlu masuk lagi. Staff baru tetap bisa mendaftar lewat `#/join` dengan kode undangan.
+
+Di koloni, lebah yang menganggur kebanyakan diam di mejanya dan sesekali istirahat. Rapat simulasi tidak ada lagi; rapat sungguhan ada di Hive Hall.
+
+## Tampilan koloni
+
+- **Pintu utama**: tombol besar **Hive Hall** dan **Ruang Kerja** di kiri bawah (di HP jadi dock bawah).
+- **Rak alat** di kanan bawah: Reset kamera, Mode TV, Avatar saya, Joget.
+- **Header**: angka *online* membuka daftar staff yang sedang online (divisi & sedang di halaman mana); angka *server* membuka status sambungan (server agent n8n di PC kantor, Queen Bea/Claude, jam pengecekan terakhir, tombol Cek ulang). Sisa saldo token Claude tidak tersedia lewat API; owner mendapat tautan ke Claude Console → Billing.
+- **Daftar agent** tertutup secara default; buka dengan tombol +.
+- Dengung lebah saat kamera mendekat dihapus.
+- **Performa**: furnitur & dekorasi statis digabung per material (`src/scene/StaticMerge.jsx`), peta bayangan diperbarui 5x per detik, lampu malam satu per lantai (bukan per ruangan), tanpa AO, resolusi render menyesuaikan kemampuan perangkat (`PerformanceMonitor`), dan panel HUD hanya digambar ulang saat datanya berubah.
 
 ## Akun staff (Supabase)
 

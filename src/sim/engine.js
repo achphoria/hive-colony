@@ -224,7 +224,7 @@ function goBreak(a) {
   const roomId = roll < 0.34 ? 'lounge' : roll < 0.58 ? 'gym' : roll < 0.78 ? 'pods' : 'garden';
   const dest = claimSpot(roomId);
   if (!dest) return;
-  sendTo(a, dest, roomId === 'pods' ? 'charge' : 'break', rand(9, 16));
+  sendTo(a, dest, roomId === 'pods' ? 'charge' : 'break', world.real ? rand(40, 70) : rand(9, 16));
 }
 
 const sleeping = (a) => a.state === 'sleep' || (a.state === 'fly' && a.arriveState === 'sleep');
@@ -260,20 +260,22 @@ function behaviours(dt) {
     if (a.state !== 'desk' || a.missionId) continue;
     if (world.night && !NIGHT_SHIFT.has(a.id)) continue;
     if (a.id === 'ceo') {
-      if (Math.random() < dt / 55) {
+      if (Math.random() < dt / (world.real ? 600 : 55)) {
         const dest = claimSpot('mission');
         if (dest) sendTo(a, dest, 'break', rand(8, 12));
       }
       continue;
     }
-    if (away < 7 && Math.random() < dt / 38) {
+    // mode real: lebah yang menganggur kebanyakan diam di mejanya, sesekali istirahat (maks. 2 sekaligus)
+    if (away < (world.real ? 2 : 7) && Math.random() < dt / (world.real ? 420 : 38)) {
       goBreak(a);
       away++;
     }
   }
 
   world.nextMeeting -= dt;
-  if (world.nextMeeting <= 0 && !world.night) {
+  // rapat simulasi hanya di mode demo; di mode real rapat sungguhan ada di Hive Hall
+  if (world.nextMeeting <= 0 && !world.night && !world.real) {
     world.nextMeeting = rand(40, 60);
     const free = shuffle(world.agents.filter((a) => a.state === 'desk' && !a.missionId && a.id !== 'ceo'));
     const seen = new Set();
@@ -534,9 +536,12 @@ function effects(dt) {
   for (const k of Object.keys(world.glow)) world.glow[k] = Math.max(0, world.glow[k] - dt * 0.7);
 }
 
+// Kirim keadaan simulasi ke React hanya kalau ada yang berubah (bukan 4x per detik), supaya panel
+// tidak digambar ulang terus. Progres dibulatkan 1%, jam dibulatkan per menit.
+const lastUI = { missions: '', agents: '', stats: '' };
 function syncUI() {
-  useHive.setState({
-    missions: world.missions.map((m) => ({
+  const next = {};
+  const missions = world.missions.map((m) => ({
       id: m.id,
       title: m.title,
       dept: m.dept,
@@ -544,17 +549,29 @@ function syncUI() {
       collabId: m.collabId,
       roomId: m.roomId,
       phase: m.phase,
-      progress: m.progress,
+      progress: Math.round(m.progress * 100) / 100,
       real: !!m.real,
-    })),
-    agentStates: Object.fromEntries(
-      world.agents.map((a) => [
-        a.id,
-        { state: a.state, missionId: a.missionId, roomId: a.roomId, destRoom: a.dest ? a.dest.roomId : null },
-      ]),
-    ),
-    stats: { done: world.done, honey: world.honey, clock: world.clock, clockMode: world.clockMode },
-  });
+    }));
+  const ms = JSON.stringify(missions);
+  if (ms !== lastUI.missions) {
+    lastUI.missions = ms;
+    next.missions = missions;
+  }
+  const agentStates = Object.fromEntries(
+    world.agents.map((a) => [a.id, { state: a.state, missionId: a.missionId, roomId: a.roomId, destRoom: a.dest ? a.dest.roomId : null }]),
+  );
+  const as = JSON.stringify(agentStates);
+  if (as !== lastUI.agents) {
+    lastUI.agents = as;
+    next.agentStates = agentStates;
+  }
+  const stats = { done: world.done, honey: world.honey, clock: Math.floor(world.clock * 60) / 60, clockMode: world.clockMode };
+  const ss = JSON.stringify(stats);
+  if (ss !== lastUI.stats) {
+    lastUI.stats = ss;
+    next.stats = stats;
+  }
+  if (Object.keys(next).length) useHive.setState(next);
 }
 
 export function update(rawDt) {

@@ -12,7 +12,7 @@ export const useAgentNet = create(() => ({ online: null, checkedAt: null }));
 export const useAgentAccess = create(() => ({ loaded: false, owner: false, levels: {} }));
 
 let healthTimer = null;
-async function checkHealth() {
+export async function checkHealth() {
   if (!useAuth.getState().account || document.hidden) return;
   const { data, error } = await supabase.functions.invoke('agent-chat', { body: { action: 'health' } });
   if (error || !data) return;

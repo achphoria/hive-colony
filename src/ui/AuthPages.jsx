@@ -9,12 +9,15 @@ const ROLE_LABEL = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', view
 const queryParam = (k) => new URLSearchParams(window.location.hash.split('?')[1] || '').get(k) || '';
 
 function Shell({ title, sub, children }) {
+  const inside = useAuth((s) => !!s.account);
   return (
     <div className="page auth-page">
       <div className="auth-card">
-        <button className="back" onClick={() => go('/')}>
-          ← Koloni
-        </button>
+        {inside && (
+          <button className="back" onClick={() => go('/')}>
+            ← Koloni
+          </button>
+        )}
         <div className="auth-logo" aria-hidden="true">
           <svg viewBox="0 0 40 40" width="48" height="48">
             <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="#F5B700" stroke="#8A5A00" strokeWidth="2.5" />
@@ -73,7 +76,7 @@ export function LoginPage() {
   };
 
   return (
-    <Shell title="Masuk ke Hive Colony" sub="Pakai email dan password akun staff kamu.">
+    <Shell title="Masuk ke Hive Colony" sub="Khusus staff. Pakai email dan password akun kamu. Sesi berakhir otomatis setiap jam 00:00 WIB.">
       <form onSubmit={submit} className="auth-form">
         <label>
           Email

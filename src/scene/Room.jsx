@@ -6,6 +6,7 @@ import { useHive } from '../sim/store';
 import { world } from '../sim/engine';
 import { M, std, HEX_START, Cyl, Sph, Hex } from './materials';
 import { woodTexture, marbleTexture, grassTexture } from './textures';
+import { StaticMerge } from './StaticMerge';
 import {
   DESKS,
   DeptProp,
@@ -255,18 +256,21 @@ export function Room({ room }) {
         );
       })}
 
-      {SEATS_BY_ROOM[room.id]?.map((s) => {
-        const Desk = DESKS[s.type];
-        return (
-          <group key={s.agentId} position={s.deskLocal} rotation={[0, s.deskRot, 0]}>
-            <Desk />
-          </group>
-        );
-      })}
-      <RoomDecor room={room} />
-      {room.kind === 'dept' && <DeptProp dept={room.dept} />}
-      {room.kind === 'royal' && <RoyalDecor />}
-      {Set && <Set />}
+      {/* furnitur & dekorasi statis digabung per material (lihat StaticMerge) */}
+      <StaticMerge>
+        {SEATS_BY_ROOM[room.id]?.map((s) => {
+          const Desk = DESKS[s.type];
+          return (
+            <group key={s.agentId} position={s.deskLocal} rotation={[0, s.deskRot, 0]}>
+              <Desk />
+            </group>
+          );
+        })}
+        <RoomDecor room={room} />
+        {room.kind === 'dept' && <DeptProp dept={room.dept} />}
+        {room.kind === 'royal' && <RoyalDecor />}
+        {Set && <Set />}
+      </StaticMerge>
 
       <Gauge roomId={room.id} />
 
