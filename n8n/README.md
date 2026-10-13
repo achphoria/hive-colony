@@ -12,7 +12,8 @@ Queen Bea (Edge Function queen-bea, Claude)
                                                  4. task → done, log hc_activity (agent_reply)
                                                  5. kalau gagal: task → todo, log agent_error, respon 500
 hc_approvals.status → approved/rejected
-  └─ trigger DB hc_approvals_resume (pg_net) ──► POST /webhook/hive/approval-resume
+  └─ trigger DB hc_approvals_resume (pg_net) ──► Edge Function agent-chat {action:'resume'} ──► POST /webhook/hive/approval-resume
+                                                 (agent-chat menaruh jawaban worker ke percakapan Ruang Kerja asal & hasil tugas)
                                                  n8n "Hive - Approval Resume"
                                                  approved: jalankan ulang payload lewat worker (sekali saja)
                                                  rejected: hanya log approval_rejected
@@ -24,7 +25,7 @@ Prompt agent disimpan di tabel `hc_agent_prompts`. Edit tabel itu kalau mau meng
 | Path | Workflow | Body |
 |---|---|---|
 | `POST /webhook/hive/agent-task` | Hive - Agent Task Worker | `{agent, message\|title, detail?, task_id?, caller?}` → 200 `{ok, agent, nick, reply, task_id, activity_id}`, 202 `{status:'pending_approval', approval_id}`, 404 `unknown_agent`, 500 `llm_failed` |
-| `POST /webhook/hive/approval-resume` | Hive - Approval Resume | `{approval_id, status}` (dikirim trigger DB) |
+| `POST /webhook/hive/approval-resume` | Hive - Approval Resume | `{approval_id, status}` (dikirim Edge Function agent-chat setelah trigger DB) → `{ok, worker: {reply, ...}}` |
 
 Kedua webhook wajib memakai header `x-hive-secret`. Tanpa header itu, permintaan ditolak 403.
 Instance saat ini ada di `https://sliceable-mousiness-exorcist.ngrok-free.dev` (ngrok gratis). **URL ini publik**, jadi keamanannya bergantung pada secret di header.

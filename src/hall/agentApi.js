@@ -62,21 +62,91 @@ const ERR = {
   no_access: 'Kamu belum punya akses ke agent ini. Minta owner mengaturnya di halaman Akses agent.',
   unknown_agent: 'Agent ini belum aktif.',
   empty_message: 'Tulis pesan dulu.',
+  viewer: 'Akun viewer tidak bisa membuat tugas.',
 };
 
-// kirim pesan; hasil: { thread_id, reply, status, meta }
-export async function sendToAgent({ agent, message, threadId }) {
-  const { data, error } = await supabase.functions.invoke('agent-chat', { body: { action: 'send', agent, message, thread_id: threadId || undefined } });
+async function invoke(body, fallback) {
+  const { data, error } = await supabase.functions.invoke('agent-chat', { body });
   if (error) {
-    let body = {};
+    let res = {};
     try {
-      body = await error.context.json();
+      res = await error.context.json();
     } catch {
       /* bukan JSON */
     }
-    throw new Error(ERR[body.error] || 'Pesan gagal dikirim. Coba lagi.');
+    throw new Error(ERR[res.error] || fallback);
   }
   return data;
+}
+
+// kirim pesan (+ lampiran yang sudah diunggah); hasil: { thread_id, reply, status, meta }
+export function sendToAgent({ agent, message, threadId, files }) {
+  return invoke({ action: 'send', agent, message, thread_id: threadId || undefined, files: files?.length ? files : undefined }, 'Pesan gagal dikirim. Coba lagi.');
+}
+
+// Jadikan tugas untuk agent: kartu papan rencana yang langsung dikerjakan agent lewat n8n
+export function createAgentTask({ agent, title, detail }) {
+  return invoke({ action: 'task', agent, title, detail }, 'Tugas gagal dibuat. Coba lagi.');
+}
+
+// Jadikan tugas untuk diri sendiri (tugas manusia di papan rencana)
+export async function createHumanTask(title) {
+  const acc = useAuth.getState().account;
+  const uid = useAuth.getState().session?.user?.id;
+  const { error } = await supabase.from('hc_plan_tasks').insert({ title: title.slice(0, 200), who: acc.name, kind: 'human', col: 'todo', updated_by: uid });
+  if (error) throw new Error(error.message.includes('row-level') ? 'Akun viewer tidak bisa membuat tugas.' : 'Tugas gagal dibuat.');
+  await supabase.from('hc_activity').insert({ kind: 'task', dept: acc.primary_dept || null, text: `${acc.name} menambah tugas: ${title.slice(0, 120)}` });
+}
+
+// ---------- lampiran (bucket privat hc-agent-files, folder milik sendiri) ----------
+export const FILE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.pdf,.txt,.csv,.md,.json';
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv', md: 'text/markdown', json: 'application/json' };
+export const MAX_FILES = 3;
+export const MAX_FILE_MB = 10;
+export function fileProblem(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (!MIME[ext]) return `${f.name}: jenis file belum didukung (pakai gambar, PDF, TXT, CSV, MD, atau JSON).`;
+  if (f.size > MAX_FILE_MB * 1024 * 1024) return `${f.name}: lebih dari ${MAX_FILE_MB} MB.`;
+  return '';
+}
+export async function uploadFiles(list) {
+  const uid = useAuth.getState().session?.user?.id;
+  const out = [];
+  for (const f of list) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    const safe = f.name.replace(/[^\w.-]+/g, '_').slice(-80);
+    const path = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safe}`;
+    const { error } = await supabase.storage.from('hc-agent-files').upload(path, f, { contentType: MIME[ext], upsert: false });
+    if (error) throw new Error(`${f.name} gagal diunggah.`);
+    out.push({ path, name: f.name, type: MIME[ext], size: f.size });
+  }
+  return out;
+}
+export async function openFile(path) {
+  const { data } = await supabase.storage.from('hc-agent-files').createSignedUrl(path, 300);
+  if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
+}
+
+// ---------- hasil tersimpan ----------
+export async function loadResults(agentId) {
+  const { data } = await supabase.from('hc_agent_results').select('id, title, content, user_id, created_at').eq('agent_id', agentId).order('created_at', { ascending: false }).limit(30);
+  return data || [];
+}
+export async function saveResult({ agent, messageId, title, content }) {
+  const { error } = await supabase.from('hc_agent_results').insert({ agent_id: agent, message_id: typeof messageId === 'number' ? messageId : null, title: title.slice(0, 200), content: content.slice(0, 20000) });
+  if (error) throw new Error('Hasil gagal disimpan.');
+}
+export async function deleteResult(id) {
+  await supabase.from('hc_agent_results').delete().eq('id', id);
+}
+
+// pesan baru di percakapan (mis. jawaban agent setelah approval disetujui)
+export function watchThread(threadId, onChange) {
+  const ch = supabase
+    .channel(`aw-thread-${threadId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hc_agent_messages', filter: `thread_id=eq.${threadId}` }, onChange)
+    .subscribe();
+  return () => supabase.removeChannel(ch);
 }
 
 export async function loadThreads(agentId) {

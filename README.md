@@ -106,8 +106,12 @@ Saat login, tugas AI di papan Hive Hall (`hc_plan_tasks`, dikerjakan agent lewat
 Tempat staff chat langsung dengan agent, seperti ngobrol dengan asisten AI:
 
 - Kiri: daftar agent per divisi (🔒 kalau belum punya akses) dan riwayat percakapan.
-- Tengah: chat. Pesan ke Queen Bea diteruskan ke Edge Function `queen-bea` (bisa riset web dan mendelegasikan). Pesan ke agent lain dikirim ke worker n8n (Claude). Kalau tugas butuh persetujuan owner, chat memberi tahu dan persetujuan berjalan lewat alur approval yang sudah ada.
-- Kanan: tingkat akses kamu, tugas dari Queen beserta hasil lengkapnya (`hc_plan_tasks.result`), peran agent, dan persona lengkap (khusus owner & Pelatih).
+- Tengah: chat. Pesan ke Queen Bea diteruskan ke Edge Function `queen-bea` (bisa riset web dan mendelegasikan). Pesan ke agent lain dikirim ke worker n8n (Claude). Kalau tugas butuh persetujuan owner, chat memberi tahu; setelah owner menyetujui (atau menolak), jawaban agent otomatis muncul di percakapan yang sama.
+- **Lampiran** 📎 (atau seret/tempel file): gambar, PDF, TXT, CSV, MD, JSON; maks. 3 file × 10 MB. File disimpan privat di bucket `hc-agent-files` (folder milik staff sendiri). Isi file teks dibaca langsung; gambar & PDF dibaca Claude dulu, lalu isinya dikirim ke agent.
+- **Suara**: 🎤 dikte pesan (Chrome/Edge, bahasa Indonesia), 🔊 Dengar untuk membacakan satu jawaban, dan tombol Suara di kepala chat untuk membacakan setiap jawaban otomatis.
+- **Aksi di jawaban agent**: 📋 Salin, 🔊 Dengar, 📌 Simpan (ke Hasil tersimpan), ✅ Jadikan tugas (dikerjakan agent otomatis lewat n8n, atau tugas untuk diri sendiri di papan rencana).
+- Kanan: tingkat akses kamu, tugas agent beserta hasil lengkapnya (`hc_plan_tasks.result`, bisa disalin/diunduh .md), Hasil tersimpan (`hc_agent_results`), peran agent, dan persona lengkap (khusus owner & Pelatih).
+- Queen Bea tahu status server agent (online/offline dari pengecekan terakhir) dan bisa membaca lampiran.
 - Pintu masuk: tombol 💬 di Daftar agent, "Buka ruang kerja" di kartu agent, dan tombol "Ruang kerja" di kontrol koloni.
 
 Semua pesan lewat Edge Function `agent-chat`, yang memeriksa login dan akses, menyimpan riwayat (`hc_agent_threads`, `hc_agent_messages`), lalu memanggil n8n dengan secret dari Vault. Browser tidak pernah memegang secret n8n.

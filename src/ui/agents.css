@@ -326,12 +326,14 @@
   font-size: 12px;
   color: #6b4e00;
 }
+.aw-inputwrap {
+  margin: 0 14px 14px;
+}
 .aw-input {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  margin: 0 14px 14px;
-  padding: 8px 8px 8px 14px;
+  gap: 6px;
+  padding: 8px 8px 8px 8px;
   border: 1.5px solid #e2cfa4;
   border-radius: 18px;
   background: #fffdf7;
@@ -617,5 +619,227 @@
   }
   .acc-dept {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Tahap 3: lampiran, suara, aksi pesan, jadikan tugas ---------- */
+.aw-main {
+  position: relative;
+}
+.aw-main.drag {
+  border-color: #f5b700;
+}
+.aw-drop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(252, 231, 176, 0.88);
+  border: 2.5px dashed #e0a100;
+  font-weight: 800;
+  color: #633806;
+  pointer-events: none;
+}
+.aw-voice {
+  border: 1.5px solid #eadfc6;
+  background: #fffdf7;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b6658;
+  white-space: nowrap;
+}
+.aw-voice.on {
+  background: #fce7b0;
+  border-color: #f3d27a;
+  color: #633806;
+}
+.aw-input.rec {
+  border-color: #e05a47;
+  box-shadow: 0 0 0 3px rgba(224, 90, 71, 0.15);
+}
+.aw-tool {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 17px;
+}
+.aw-tool:hover:not(:disabled) {
+  background: #fdf3d9;
+}
+.aw-tool:disabled {
+  opacity: 0.4;
+}
+.aw-tool.on {
+  background: #fde2dc;
+  color: #b3261e;
+  animation: aw-pulse 1.2s infinite;
+}
+@keyframes aw-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(224, 90, 71, 0.18);
+  }
+}
+.aw-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.aw-inputwrap > .aw-files {
+  margin: 0 0 6px;
+}
+.aw-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1.5px solid #f1e3c2;
+  font-size: 12.5px;
+}
+.aw-file.link {
+  cursor: pointer;
+}
+.aw-file.link:hover {
+  border-color: #f3d27a;
+}
+.aw-file i {
+  flex: none;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 4px 5px;
+  border-radius: 6px;
+  background: #fce7b0;
+  color: #633806;
+}
+.aw-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-file small {
+  flex: none;
+  color: #8a8371;
+}
+.aw-file button {
+  border: 0;
+  background: transparent;
+  color: #a39b86;
+  font-size: 15px;
+  padding: 0 2px;
+}
+.aw-msg.user .aw-file {
+  background: #fff7e0;
+}
+.aw-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.aw-acts button {
+  border: 0;
+  background: #f7f2e4;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: #6b5a33;
+}
+.aw-acts button:hover {
+  background: #fce7b0;
+}
+.aw-src {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.aw-src a {
+  color: #8a5a00;
+}
+.aw-notice {
+  margin: 0 14px 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #e3f1d4;
+  color: #3f6b1c;
+  font-size: 13px;
+}
+.aw-taskform {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fffaf0;
+  border: 1.5px solid #f3d27a;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aw-taskform label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b6658;
+}
+.aw-taskform input {
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1.5px solid #eadfc6;
+  font: inherit;
+  font-size: 14px;
+}
+.aw-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aw-seg button {
+  border: 1.5px solid #eadfc6;
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+.aw-seg button.on {
+  background: #fce7b0;
+  border-color: #f3d27a;
+  color: #633806;
+  font-weight: 700;
+}
+.aw-formbtn {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.aw-formbtn button {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.aw-formbtn .save {
+  width: auto;
+  margin: 0;
+}
+.aw-task small {
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .aw-voice .lbl {
+    display: none;
   }
 }

@@ -2,7 +2,7 @@
 // Queen Bea (Chief Executive Hive Colony) dijawab oleh Claude. Hanya untuk staff yang login.
 // Kunci API dibaca dari Supabase Edge Function Secrets (ANTHROPIC_API_KEY), tidak pernah ke browser.
 //   POST { action: 'status' }                        -> { configured, model }
-//   POST { mode: 'chat' | 'meeting', messages, transcript? } -> { reply }
+//   POST { mode: 'chat' | 'meeting', messages, transcript?, attachments? } -> { reply }
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -10,6 +10,7 @@ const MODEL = 'claude-haiku-5-5';
 const MAX_TURNS = 12; // riwayat chat yang dikirim ke Claude
 const MAX_CHARS = 2000; // per pesan
 const MAX_TX_LINES = 40; // baris transkrip meeting
+const MAX_ATTACH = 60000; // karakter isi lampiran
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +21,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 const PERSONA = `Kamu adalah Queen Bea, Chief Executive di Hive Colony: kantor virtual sebuah bisnis gym/HYROX, F&B, dan retail.
-Kamu memimpin 20 agent AI (lebah pekerja) di 7 divisi: Customer Experience, Operations, IT & Tech, Marketing, Finance, Product, HR & GA. Ke-20 agent itu sekarang sudah aktif dan bisa kamu beri tugas (daftarnya ada di blok TIM AGENT).
+Kamu memimpin 20 agent AI (lebah pekerja) di 7 divisi: Customer Experience, Operations, IT & Tech, Marketing, Finance, Product, HR & GA. Daftar agentmu ada di blok TIM AGENT. Apakah mereka sedang bisa bekerja dilihat dari STATUS SERVER AGENT di DATA KOLONI: kalau OFFLINE, tugas baru tidak akan dikerjakan sampai server di PC kantor menyala lagi.
 
 Cara bicara:
 - Bahasa Indonesia yang hangat, santai tapi profesional, seperti pemimpin yang peduli timnya. Sesekali boleh sentuhan lebah yang ringan, jangan berlebihan.
@@ -29,7 +30,7 @@ Cara bicara:
 
 Kejujuran data:
 - Fakta tentang koloni (staff, persetujuan, tugas, aktivitas) hanya boleh diambil dari blok DATA KOLONI di bawah. Kalau datanya kosong atau tidak ada, katakan terus terang, jangan mengarang angka, nama, atau kejadian.
-- Kamu belum bisa membuka isi file lampiran atau mengubah data secara langsung. Kalau diminta, jelaskan itu akan datang di fase berikutnya dan bantu sebisanya dengan saran.
+- Kalau pengguna mengirim file, isinya sudah dibacakan untukmu di blok LAMPIRAN pada pesannya. Pakai isi itu; jangan bilang kamu tidak bisa membuka file. Kamu tidak bisa mengubah data secara langsung.
 - Kamu BISA mendelegasikan tugas ke agent di blok TIM AGENT (lihat aturan Delegasi).
 
 Riset:
@@ -156,17 +157,28 @@ async function delegate(a: any, items: { agent: Agent; title: string; detail: st
   return out;
 }
 
-async function colonyData(sb: Sb, me: { name: string; role: string; primary_dept: string }) {
-  const [staff, approvals, tasks, activity] = await Promise.all([
+// status server agent (n8n di PC kantor) dari pengecekan terakhir Edge Function agent-chat
+async function agentStatus(a: any) {
+  const { data } = await a.from('hc_system_status').select('value, checked_at').eq('key', 'n8n').maybeSingle();
+  if (!data) return 'STATUS SERVER AGENT: belum pernah dicek.';
+  const ageMin = Math.round((Date.now() - new Date(data.checked_at).getTime()) / 60000);
+  const state = data.value?.online ? 'ONLINE (20 agent bisa menerima tugas)' : 'OFFLINE (server agent di PC kantor tidak menjawab; tugas baru tertunda)';
+  return `STATUS SERVER AGENT: ${state}, dicek ${wib(data.checked_at)} WIB${ageMin > 10 ? ` (${ageMin} menit lalu, bisa sudah berubah)` : ''}.`;
+}
+
+async function colonyData(sb: Sb, me: { name: string; role: string; primary_dept: string }, a: any) {
+  const [staff, approvals, tasks, activity, status] = await Promise.all([
     sb.from('hc_profiles').select('name, role, primary_dept').order('created_at').limit(50),
     sb.from('hc_approvals').select('title, requested_by, status, created_at').eq('status', 'pending').limit(20),
     sb.from('hc_plan_tasks').select('title, who, col').neq('col', 'done').limit(30),
     sb.from('hc_activity').select('text, created_at').order('created_at', { ascending: false }).limit(15),
+    agentStatus(a),
   ]);
   const list = (rows: unknown[] | null, fmt: (r: any) => string) => (rows && rows.length ? rows.map((r) => `- ${fmt(r)}`).join('\n') : '- (kosong)');
   const now = wib(new Date().toISOString());
   return `DATA KOLONI (diambil dari database saat ini, ${now} WIB)
 Yang sedang bicara denganmu: ${me.name} (${ROLE[me.role] || me.role}, divisi ${me.primary_dept}).
+${status}
 
 Staff manusia terdaftar:
 ${list(staff.data, (r) => `${r.name} · ${ROLE[r.role] || r.role} · ${r.primary_dept}`)}
@@ -222,9 +234,12 @@ Deno.serve(async (req) => {
     else messages.push({ role, content: text });
   }
   if (!messages.length || messages[messages.length - 1].role !== 'user') return json({ error: 'empty_message' }, 400);
+  // isi lampiran (sudah dibaca agent-chat) menempel di pesan terakhir, tidak ikut batas MAX_CHARS
+  const attachments = typeof body?.attachments === 'string' ? body.attachments.slice(0, MAX_ATTACH) : '';
+  if (attachments) messages[messages.length - 1].content += `\n\nLAMPIRAN (isi file yang dikirim pengguna):\n${attachments}`;
 
   const agents = await loadAgents(adm);
-  let context = (await colonyData(sb as Sb, me)) + '\n\n' + teamBlock(agents);
+  let context = (await colonyData(sb as Sb, me, adm)) +'\n\n' + teamBlock(agents);
   if (body?.mode === 'meeting') {
     const tx = Array.isArray(body?.transcript) ? body.transcript.slice(-MAX_TX_LINES) : [];
     const lines = tx.map((l: { who?: string; text?: string }) => `${String(l?.who ?? '?').slice(0, 40)}: ${String(l?.text ?? '').slice(0, 400)}`);
