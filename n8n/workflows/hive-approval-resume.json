@@ -1,0 +1,585 @@
+{
+  "name": "Hive - Approval Resume",
+  "nodes": [
+    {
+      "name": "Webhook",
+      "webhookId": "hive-approval-resume",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hive/approval-resume",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tcVY2EJbqHcERiSJ",
+          "name": "Hive Webhook Secret"
+        }
+      },
+      "id": "196db6ef-3977-44dc-bd4b-de62487fb815"
+    },
+    {
+      "name": "Get Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "hc_approvals",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.approval_id }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      },
+      "id": "e07e1cbd-57fb-4608-a368-36c35f9af283"
+    },
+    {
+      "name": "Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Found?",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      },
+      "id": "d5d8990d-ab5d-49f5-a7e7-7d052944eabf"
+    },
+    {
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'unknown_approval' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "0baebb7c-7402-4ad1-905c-bf5949ca88fc"
+    },
+    {
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Approved?",
+              "leftValue": "={{ $json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "approved"
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      },
+      "id": "2a0480af-aef5-4639-a70c-24bb9c7a0890"
+    },
+    {
+      "name": "Respond Skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, skipped: true, status: $('Get Approval').first().json.status }) }}",
+        "options": {}
+      },
+      "id": "2700b3dc-607b-4d69-accc-76dab4dc0c68"
+    },
+    {
+      "name": "Has Payload?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Has Payload?",
+              "leftValue": "={{ $json.payload }}",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      },
+      "id": "2a520659-3913-4001-a59e-d59549888b60"
+    },
+    {
+      "name": "Respond No Payload",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'missing_payload', hint: 'Tambah kolom payload jsonb di hc_approvals dan simpan request asli saat Create Approval' }) }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "6f77d3d0-4cd0-4279-8f17-7b2c51a160f1"
+    },
+    {
+      "name": "Call Task Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://sliceable-mousiness-exorcist.ngrok-free.dev/webhook/hive/agent-task",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, typeof $('Get Approval').first().json.payload === 'string' ? JSON.parse($('Get Approval').first().json.payload) : ($('Get Approval').first().json.payload || {}), { resume_from_approval: $('Get Approval').first().json.id })) }}",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tcVY2EJbqHcERiSJ",
+          "name": "Hive Webhook Secret"
+        }
+      },
+      "id": "0aafee30-99ff-4e01-941b-3500dcd3b098"
+    },
+    {
+      "name": "Log Resume",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "tableId": "hc_activity",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "kind",
+              "fieldValue": "approval_resumed"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Get Approval').item.json.dept }}"
+            },
+            {
+              "fieldId": "text",
+              "fieldValue": "={{ 'Approval disetujui, dijalankan ulang [' + $('Get Approval').first().json.id + ']: ' + ($('Get Approval').first().json.title || '') }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      },
+      "id": "7da03e4c-8e9c-4bc9-a423-00b349e4549c"
+    },
+    {
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, approval_id: $('Get Approval').first().json.id, worker: $('Call Task Worker').first().json }) }}",
+        "options": {}
+      },
+      "id": "5cec1cbb-5d3a-4e37-a1f7-8d20cdd55bd8"
+    },
+    {
+      "name": "Check Resumed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "hc_activity",
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "={{ 'kind=eq.approval_resumed&text=like.*' + $('Get Approval').first().json.id + '*' }}"
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      },
+      "id": "33c55e16-0656-4013-a245-f6afac1f5193"
+    },
+    {
+      "name": "Already Resumed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Already Resumed?",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      },
+      "id": "2f7f71e5-a0a1-4539-818d-097239ddc19c"
+    },
+    {
+      "name": "Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Rejected?",
+              "leftValue": "={{ $('Get Approval').first().json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "rejected"
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      },
+      "id": "f9cc4d5a-500d-4607-b232-2e5b52a34994"
+    },
+    {
+      "name": "Log Rejected",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ],
+      "parameters": {
+        "tableId": "hc_activity",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "kind",
+              "fieldValue": "approval_rejected"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Get Approval').first().json.dept }}"
+            },
+            {
+              "fieldId": "text",
+              "fieldValue": "={{ 'Approval ditolak, tidak dijalankan [' + $('Get Approval').first().json.id + ']: ' + ($('Get Approval').first().json.title || '') }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      },
+      "id": "4caeb72b-7c5b-4d8b-8de8-d8445b552833"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approval": {
+      "main": [
+        [
+          {
+            "node": "Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found?": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Has Payload?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Payload?": {
+      "main": [
+        [
+          {
+            "node": "Check Resumed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Task Worker": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Resume": {
+      "main": [
+        [
+          {
+            "node": "Call Task Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Log Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resumed": {
+      "main": [
+        [
+          {
+            "node": "Already Resumed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Resumed?": {
+      "main": [
+        [
+          {
+            "node": "Respond Skip",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

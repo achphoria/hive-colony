@@ -1,0 +1,922 @@
+{
+  "name": "Hive - Agent Task Worker",
+  "nodes": [
+    {
+      "id": "5907686f-2de9-467b-b509-a509ef7c1816",
+      "name": "Webhook",
+      "webhookId": "hive-agent-task",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hive/agent-task",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tcVY2EJbqHcERiSJ",
+          "name": "Hive Webhook Secret"
+        }
+      }
+    },
+    {
+      "id": "a951d68c-9d70-4ec9-8ae5-3a4142ee556b",
+      "name": "Lookup Agent",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "hc_agent_prompts",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "agent_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.agent }}"
+            },
+            {
+              "keyName": "active",
+              "condition": "is",
+              "keyValue": "true"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "d9dff4dc-2712-4161-b212-f088929066e1",
+      "name": "Agent Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Agent Found?",
+              "leftValue": "={{ $json.agent_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "d03fdac2-c74e-40b4-a27b-b1e621627565",
+      "name": "Respond 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'unknown_agent' }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      }
+    },
+    {
+      "id": "86cbfc8a-16e6-4078-82f0-9e3aa42e0050",
+      "name": "Has Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Has Task?",
+              "leftValue": "={{ $('Webhook').item.json.body.task_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "cdccb65a-9f8f-41a7-aaee-c445d96ed987",
+      "name": "Task Doing",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "hc_plan_tasks",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.task_id }}"
+            }
+          ]
+        },
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "col",
+              "fieldValue": "doing"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "bd8d871d-23e1-4a39-be25-4c07f04db9c7",
+      "name": "Call Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput",
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: $('Lookup Agent').item.json.model, max_tokens: 1024, system: $('Lookup Agent').item.json.system_prompt, messages: [{ role: 'user', content: ($('Webhook').item.json.body.message || $('Webhook').item.json.body.title || '') + ($('Webhook').item.json.body.detail ? '\\n\\nDetail: ' + $('Webhook').item.json.body.detail : '') }] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "kFy6xuuDb1bW23WT",
+          "name": "Anthropic - Hive Agents"
+        }
+      }
+    },
+    {
+      "id": "d7151def-b62c-46c7-a95d-cad78ec0e088",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst reply = (r.content || []).filter(c => c.type === 'text').map(c => c.text).join('\\n').trim();\nconst a = $('Lookup Agent').first().json;\nconst b = $('Webhook').first().json.body || {};\nreturn [{ json: { reply, agent: a.agent_id, nick: a.nick, dept: a.dept, task_id: b.task_id || null } }];"
+      }
+    },
+    {
+      "id": "bee10230-1642-4b8e-8404-7f86638d5fd8",
+      "name": "Has Task (done)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Has Task (done)?",
+              "leftValue": "={{ $json.task_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "d6e2603d-b6ed-4c6f-b064-93e529053591",
+      "name": "Task Done",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "hc_plan_tasks",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.task_id }}"
+            }
+          ]
+        },
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "col",
+              "fieldValue": "done"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "6660bc76-74e8-44f3-a4f3-365689f11dc3",
+      "name": "Log Activity",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "tableId": "hc_activity",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "kind",
+              "fieldValue": "agent_reply"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Parse Reply').item.json.dept }}"
+            },
+            {
+              "fieldId": "text",
+              "fieldValue": "={{ $('Parse Reply').item.json.nick + ': ' + $('Parse Reply').item.json.reply.slice(0, 280) }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "dcac353f-0b47-4a60-ac4d-fc4573489da9",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, agent: $('Parse Reply').item.json.agent, nick: $('Parse Reply').item.json.nick, reply: $('Parse Reply').item.json.reply, task_id: $('Parse Reply').item.json.task_id, activity_id: $('Log Activity').first().json.id }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d7a4984b-3dc9-4271-b5a3-09f772a4372b",
+      "name": "Check Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const a = $('Lookup Agent').first().json;\nconst b = $('Webhook').first().json.body || {};\nconst ra = $('Get Resume Approval').first().json || {};\nconst bypass = !!(b.resume_from_approval && ra.id === b.resume_from_approval && ra.status === 'approved' && ra.requested_by === a.agent_id);\nconst text = [b.message, b.title, b.detail].filter(Boolean).join(' ').toLowerCase();\nconst kw = bypass ? [] : (a.needs_approval_for || []).filter(k => text.includes(String(k).toLowerCase()));\nconst src = Object.entries(b).find(([k]) => k === 'call' + 'er');\nconst payload = { agent: b.agent, message: b.message || b.title || null, detail: b.detail || null, task_id: b.task_id || null, ['call' + 'er']: src ? src[1] : null };\nreturn [{ json: { needs_approval: kw.length > 0, matched: kw, bypass, payload } }];"
+      }
+    },
+    {
+      "id": "e23273d4-8151-4e8b-892a-9c649550d035",
+      "name": "Needs Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Needs Approval?",
+              "leftValue": "={{ $json.needs_approval }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "117e3c73-c3fd-4b9e-b1d0-4a7792ee97a5",
+      "name": "Create Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ],
+      "parameters": {
+        "tableId": "hc_approvals",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ ($('Lookup Agent').first().json.nick + ': ' + ($('Webhook').first().json.body.title || $('Webhook').first().json.body.message || '')).slice(0, 200) }}"
+            },
+            {
+              "fieldId": "detail",
+              "fieldValue": "={{ [($('Webhook').first().json.body.message || ''), ($('Webhook').first().json.body.detail || ''), 'Kata kunci: ' + $('Check Approval').first().json.matched.join(', ')].filter(Boolean).join('\\n') }}"
+            },
+            {
+              "fieldId": "requested_by",
+              "fieldValue": "={{ $('Lookup Agent').first().json.agent_id }}"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Lookup Agent').first().json.dept }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldId": "payload",
+              "fieldValue": "={{ JSON.stringify($('Check Approval').first().json.payload) }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "4fc4b902-aed6-4816-bb1e-846a703c5649",
+      "name": "Log Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        450
+      ],
+      "parameters": {
+        "tableId": "hc_activity",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "kind",
+              "fieldValue": "approval_requested"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Lookup Agent').first().json.dept }}"
+            },
+            {
+              "fieldId": "text",
+              "fieldValue": "={{ $('Lookup Agent').first().json.nick + ' minta persetujuan: ' + $('Create Approval').first().json.title }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "71069a3c-93f6-4ded-a3f4-be2162cd08a6",
+      "name": "Respond 202",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, status: 'pending_approval', approval_id: $('Create Approval').first().json.id, agent: $('Lookup Agent').first().json.agent_id, activity_id: $('Log Approval').first().json.id }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    },
+    {
+      "id": "372e94ef-6304-4bce-88f9-d982734c22a9",
+      "name": "Has Task (err)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        650
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "Has Task (err)?",
+              "leftValue": "={{ $('Webhook').first().json.body.task_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true
+      }
+    },
+    {
+      "id": "30aa9df3-2c0b-42de-97c4-523989dc5525",
+      "name": "Task Todo",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        600
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "hc_plan_tasks",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.task_id }}"
+            }
+          ]
+        },
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "col",
+              "fieldValue": "todo"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "910287a2-9961-4ef3-89da-eb1694a0ef1f",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        700
+      ],
+      "parameters": {
+        "tableId": "hc_activity",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "kind",
+              "fieldValue": "agent_error"
+            },
+            {
+              "fieldId": "dept",
+              "fieldValue": "={{ $('Lookup Agent').first().json.dept }}"
+            },
+            {
+              "fieldId": "text",
+              "fieldValue": "={{ $('Lookup Agent').first().json.nick + ': gagal memanggil AI' }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    },
+    {
+      "id": "9e524721-c997-41ff-b02c-4276252b534e",
+      "name": "Respond 500",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        700
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'llm_failed' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      }
+    },
+    {
+      "id": "f486e6a4-f3a5-443c-bc97-55827cd2b4b0",
+      "name": "Get Resume Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "hc_approvals",
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ /^[0-9a-f-]{36}$/i.test(String($('Webhook').first().json.body.resume_from_approval || '')) ? $('Webhook').first().json.body.resume_from_approval : '00000000-0000-0000-0000-000000000000' }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZbVvCjvCLHBNrgXQ",
+          "name": "Supabase - General Table"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lookup Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Agent": {
+      "main": [
+        [
+          {
+            "node": "Agent Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Found?": {
+      "main": [
+        [
+          {
+            "node": "Get Resume Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 404",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Task?": {
+      "main": [
+        [
+          {
+            "node": "Task Doing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Doing": {
+      "main": [
+        [
+          {
+            "node": "Call Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Claude": {
+      "main": [
+        [
+          {
+            "node": "Parse Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Task (err)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reply": {
+      "main": [
+        [
+          {
+            "node": "Has Task (done)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Task (done)?": {
+      "main": [
+        [
+          {
+            "node": "Task Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Done": {
+      "main": [
+        [
+          {
+            "node": "Log Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval": {
+      "main": [
+        [
+          {
+            "node": "Needs Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Approval?": {
+      "main": [
+        [
+          {
+            "node": "Create Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Task?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Approval": {
+      "main": [
+        [
+          {
+            "node": "Log Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Approval": {
+      "main": [
+        [
+          {
+            "node": "Respond 202",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Task (err)?": {
+      "main": [
+        [
+          {
+            "node": "Task Todo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Todo": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Respond 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Resume Approval": {
+      "main": [
+        [
+          {
+            "node": "Check Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
