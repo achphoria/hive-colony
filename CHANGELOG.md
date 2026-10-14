@@ -4,7 +4,7 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
-### Queen Bea naik ke Claude Sonnet 5.5, lampiran bisa dibuka, poster otomatis
+### Queen Bea naik ke Claude Sonnet 5.5, lampiran bisa dibuka, poster otomatis (`477f690`)
 - **Queen Bea** sekarang memakai **Claude Sonnet 5.5** (berpikir adaptif): pembagian kerja & jawaban lebih matang. Mode rapat tetap cepat (effort rendah). Kalau Sonnet gagal, otomatis pindah ke Haiku 5.5 agar Queen tetap menjawab. Perkiraan biaya ±Rp300–500 per pesan.
 - **Penampil lampiran** di Ruang Kerja: klik lampiran .md/.txt/.csv/.json untuk membaca dengan format rapi, lalu **Cetak / PDF** atau unduh. Gambar tampil sebagai pratinjau kecil di pesan; klik untuk membesarkan dan **Unduh PNG**. PDF dibuka di tab baru.
 - **Poster otomatis**: kalau paket kerja Queen menyangkut visual (Pixel ikut, atau permintaan menyebut gambar/poster/desain/Instagram/konten), laporan akhir Queen menyertakan **2 desain poster 1080×1080** (SVG, bisa diunduh PNG). Rekap laporan juga ditulis Sonnet 5.5.
