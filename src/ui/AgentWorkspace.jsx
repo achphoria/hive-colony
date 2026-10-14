@@ -36,10 +36,12 @@ import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraini
 import { useConversation } from './useConversation';
 import { FileViewer, ImageThumbs } from './FileViewer';
 import { go } from './nav';
+import { imageUrlsIn, stripMachineBlocks } from '../../supabase/functions/_shared/taskProtocol.js';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const LEVEL_LABEL = { owner: 'Owner · akses penuh', train: 'Pelatih', use: 'Pakai' };
-const COL_LABEL = { todo: 'Belum', doing: 'Jalan', done: 'Selesai' };
+const COL_LABEL = { todo: 'Belum', doing: 'Jalan', done: 'Selesai', failed: 'Gagal' };
+const BUSY_MS = 30 * 60 * 1000;
 const SpeechRec = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 const VOICE_KEY = 'hc-aw-voice';
 const ENGINE_KEY = 'hc-aw-engine';
@@ -83,7 +85,7 @@ const timeLabel = (iso) => {
 const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
 const extOf = (name) => (name.split('.').pop() || 'file').slice(0, 4).toUpperCase();
 // blok delegasi di akhir jawaban Queen mode Grok diproses server, jangan ditampilkan
-const visible = (s) => String(s || '').replace(/\n?\s*\[\[DELEGATE\]\][\s\S]*$/, '').trim();
+const visible = (s) => stripMachineBlocks(s);
 const threadParam = () => new URLSearchParams(window.location.hash.split('?')[1] || '').get('thread');
 // teks polos untuk dibacakan / disalin
 const plain = (s) =>
@@ -212,7 +214,36 @@ function FileChips({ files, onRemove, onOpen }) {
 }
 
 // Jadikan tugas: dikerjakan agent otomatis (lewat n8n) atau tugas untuk diri sendiri
-function TaskForm({ agent, nick, message, ask, onDone, onCancel }) {
+function ResultView({ text, files, onOpen }) {
+  const urls = imageUrlsIn(text || '');
+  const stored = (files || []).filter((f) => f && (f.path || f.url));
+  const extra = stored.filter((f) => f.url && !urls.includes(f.url));
+  return (
+    <>
+      {text ? <Rich text={visible(text)} /> : null}
+      {urls.map((url) => (
+        <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+          <img className="aw-result-img" src={url} alt="" />
+        </a>
+      ))}
+      {extra.map((f) =>
+        String(f.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(f.url) ? (
+          <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer">
+            <img className="aw-result-img" src={f.url} alt={f.name || ''} />
+          </a>
+        ) : (
+          <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer">
+            {f.name || 'Lampiran'}
+          </a>
+        ),
+      )}
+      <ImageThumbs files={stored.filter((f) => f.path)} onOpen={onOpen} />
+      <FileChips files={stored.filter((f) => f.path)} onOpen={(f) => f.path && onOpen?.(f)} />
+    </>
+  );
+}
+
+function TaskForm({ agent, nick, message, ask, threadId, onDone, onCancel }) {
   const canAgent = agent !== 'ceo';
   const [title, setTitle] = useState(oneLine(ask || message.content, 100));
   const [forAgent, setForAgent] = useState(canAgent);
@@ -226,7 +257,7 @@ function TaskForm({ agent, nick, message, ask, onDone, onCancel }) {
     try {
       if (forAgent) {
         const detail = `${ask ? `Permintaan awal: ${ask}\n\n` : ''}Jawaban/rencana sebelumnya dari ${nick}:\n${message.content}`;
-        await createAgentTask({ agent, title: t, detail: detail.slice(0, 6000) });
+        await createAgentTask({ agent, title: t, detail: detail.slice(0, 6000), threadId });
       } else {
         await createHumanTask(t);
       }
@@ -449,8 +480,14 @@ export function AgentWorkspace({ agentId }) {
     [],
   );
 
-  const tasks = useMemo(() => planTasks.filter((t) => t.kind === 'ai' && t.who === agent).slice(-12).reverse(), [planTasks, agent]);
-  const pres = presence(agent);
+  const mine = useMemo(
+    () => planTasks.filter((t) => t.kind === 'ai' && (t.who === agent || String(t.who || '').toLowerCase() === def.nick.toLowerCase())),
+    [planTasks, agent, def.nick],
+  );
+  const busyTask = mine.find((t) => t.col === 'doing' && (!t.updatedAt || Date.now() - Date.parse(t.updatedAt) < BUSY_MS));
+  const tasks = useMemo(() => [...mine].reverse().slice(0, 12), [mine]);
+  const locked = !!(busyTask && busyTask.createdBy !== uid);
+  const pres = busyTask ? 'work' : presence(agent);
   const thread = threads.find((t) => t.id === threadId);
   const readOnly = thread && thread.user_id !== uid; // owner membaca percakapan staff lain
   const canTask = account && account.role !== 'viewer';
@@ -554,7 +591,7 @@ export function AgentWorkspace({ agentId }) {
 
   const send = async () => {
     const m = text.trim();
-    if ((!m && !files.length) || busy || waiting) return;
+    if (locked || (!m && !files.length) || busy || waiting) return;
     recRef.current?.stop();
     const pending = files;
     setText('');
@@ -779,7 +816,7 @@ export function AgentWorkspace({ agentId }) {
                 {def.role} · {DEPTS[def.dept].name}
               </span>
             </div>
-            <span className={`pres pres-${pres}`}>{PRES_LABEL[pres]}</span>
+            <span className={`pres pres-${pres}`}>{busyTask ? 'Kerja' : PRES_LABEL[pres]}</span>
             {agent === 'ceo' && level ? (
               <div className="aw-engine" role="radiogroup" aria-label="Mesin AI Queen Bea">
                 {[
@@ -833,6 +870,14 @@ export function AgentWorkspace({ agentId }) {
             )}
           </div>
 
+          {busyTask && agent !== 'ceo' && (
+            <div className="aw-busy">
+              {def.nick} sedang mengerjakan “{busyTask.title.replace(`${def.nick}: `, '')}”
+              {Number.isFinite(Number(busyTask.progress)) ? ` · ${Math.round(Number(busyTask.progress) * 100)}%` : ''}
+              {busyTask.progressNote ? ` · ${busyTask.progressNote}` : ''}.{' '}
+              {locked ? 'Kamu belum bisa mengirim pekerjaan baru sampai selesai.' : 'Kamu masih bisa mengobrol; tugas baru menunggu yang ini selesai.'}
+            </div>
+          )}
           {!level ? (
             <div className="aw-locked">
               <p>🔒 Kamu belum punya akses ke {def.nick}.</p>
@@ -859,9 +904,15 @@ export function AgentWorkspace({ agentId }) {
                     <div key={m.id} className={`aw-msg ${m.role}`}>
                       {m.role === 'agent' && avatar(true)}
                       <div className="aw-bub">
-                        {m.role === 'agent' ? <Rich text={visible(m.content)} /> : <p>{m.content}</p>}
-                        <ImageThumbs files={m.meta?.files} onOpen={setViewer} />
-                        <FileChips files={m.meta?.files} onOpen={(f) => f.path && setViewer(f)} />
+                        {m.role === 'agent' ? (
+                          <ResultView text={m.content} files={m.meta?.files} onOpen={setViewer} />
+                        ) : (
+                          <>
+                            <p>{m.content}</p>
+                            <ImageThumbs files={m.meta?.files} onOpen={setViewer} />
+                            <FileChips files={m.meta?.files} onOpen={(f) => f.path && setViewer(f)} />
+                          </>
+                        )}
                         {m.meta?.delegated?.length > 0 && (
                           <div className="aw-deleg">
                             {m.meta.delegated.map((d, i) => (
@@ -890,7 +941,15 @@ export function AgentWorkspace({ agentId }) {
                               <RateButtons agent={agent} message={m} mine={myFb[m.id]} onRated={(v) => setMyFb((x) => ({ ...x, [m.id]: v }))} />
                             )}
                             {canWrite && <button onClick={() => keep(m)}>📌 Simpan</button>}
-                            {canWrite && canTask && <button onClick={() => setTaskFor(taskFor === m.id ? null : m.id)}>✅ Jadikan tugas</button>}
+                            {canWrite && canTask && (
+                              <button
+                                onClick={() => setTaskFor(taskFor === m.id ? null : m.id)}
+                                disabled={!!busyTask}
+                                title={busyTask ? `${def.nick} sedang mengerjakan tugas lain` : 'Jadikan tugas'}
+                              >
+                                ✅ Jadikan tugas
+                              </button>
+                            )}
                           </div>
                         )}
                         {taskFor === m.id && (
@@ -899,6 +958,7 @@ export function AgentWorkspace({ agentId }) {
                             nick={def.nick}
                             message={m}
                             ask={askBefore(m)}
+                            threadId={threadId}
                             onCancel={() => setTaskFor(null)}
                             onDone={(note) => {
                               setTaskFor(null);
@@ -995,12 +1055,15 @@ export function AgentWorkspace({ agentId }) {
                       value={text}
                       maxLength={4000}
                       placeholder={
-                        listening
+                        locked
+                          ? `${def.nick} sedang mengerjakan tugas lain…`
+                          : listening
                           ? 'Mendengarkan… bicara sekarang'
                           : pres === 'offline' && agent !== 'ceo'
                             ? `${def.nick} sedang offline${netDown ? ' (server agent mati)' : ''}…`
                             : `Beri perintah ke ${def.nick}…`
                       }
+                      disabled={locked}
                       onChange={(e) => setText(e.target.value)}
                       onPaste={(e) => {
                         if (e.clipboardData.files.length) {
@@ -1030,7 +1093,7 @@ export function AgentWorkspace({ agentId }) {
                     >
                       🗣
                     </button>
-                    <button className="aw-send" onClick={send} disabled={busy || !!waiting || (!text.trim() && !files.length)} aria-label="Kirim">
+                    <button className="aw-send" onClick={send} disabled={locked || busy || !!waiting || (!text.trim() && !files.length)} aria-label="Kirim">
                       ➤
                     </button>
                   </div>
@@ -1068,25 +1131,44 @@ export function AgentWorkspace({ agentId }) {
             <>
               <p className="aw-label">Tugas {def.nick}</p>
               {tasks.length === 0 && <p className="muted small">Belum ada tugas. Klik ✅ Jadikan tugas di jawaban {def.nick}, atau minta Queen Bea mendelegasikan.</p>}
-              {tasks.map((t) => (
-                <div key={t.id} className="aw-task">
-                  <button onClick={() => setOpenItem(openItem === t.id ? null : t.id)}>
-                    <span className={`aw-col ${t.col}`}>{COL_LABEL[t.col] || t.col}</span>
-                    <b>{t.title.replace(`${def.nick}: `, '')}</b>
-                  </button>
-                  {openItem === t.id && (
-                    <div className="aw-result">
-                      {t.result ? <Rich text={t.result} /> : <p className="muted">{t.col === 'done' ? 'Hasil lengkap belum tersimpan (tugas lama).' : 'Sedang dikerjakan…'}</p>}
-                      {t.result && (
-                        <div className="aw-acts">
-                          <button onClick={() => copy(t.result)}>📋 Salin</button>
-                          <button onClick={() => download(`${slug(t.title)}.md`, `# ${t.title}\n\n${t.result}\n`)}>⬇ Unduh</button>
-                        </div>
+              {tasks.map((t) => {
+                const open = openItem === t.id;
+                const title = t.title.replace(`${def.nick}: `, '');
+                const pct = Number.isFinite(Number(t.progress)) ? Math.round(Number(t.progress) * 100) : null;
+                const linked = threads.find((th) => th.task_id === t.id) || (t.sourceThreadId ? threads.find((th) => th.id === t.sourceThreadId) : null);
+                return (
+                  <div key={t.id} className={`aw-task${open ? ' open' : ''}`}>
+                    <button onClick={() => setOpenItem(open ? null : t.id)} aria-expanded={open}>
+                      <span className={`aw-col ${t.col}`}>{COL_LABEL[t.col] || t.col}</span>
+                      <b>{title}</b>
+                      {t.col === 'doing' && (
+                        <small className="muted">
+                          {pct != null ? `${pct}%` : 'Sedang dikerjakan'}
+                          {t.progressNote ? ` · ${t.progressNote}` : ''}
+                        </small>
                       )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                      {!open && t.result && <small className="aw-preview">{oneLine(visible(t.result), 140)}</small>}
+                      {!open && !t.result && t.col === 'failed' && <small className="muted">Tidak ada hasil.</small>}
+                    </button>
+                    {open && (
+                      <div className="aw-result">
+                        {t.result || (t.resultFiles || []).length ? (
+                          <ResultView text={t.result} files={t.resultFiles} onOpen={setViewer} />
+                        ) : (
+                          <p className="muted">{t.col === 'doing' ? 'Sedang dikerjakan…' : t.col === 'failed' ? 'Tugas ini gagal dan tidak punya hasil.' : 'Belum ada hasil.'}</p>
+                        )}
+                        <div className="aw-acts">
+                          {t.result && <button onClick={() => copy(t.result)}>📋 Salin</button>}
+                          {t.result && <button onClick={() => download(`${slug(t.title)}.md`, `# ${t.title}\n\n${visible(t.result)}\n`)}>⬇ Unduh</button>}
+                          {linked && (
+                            <button onClick={() => openThread(linked.id)}>Buka di chat</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </>
           )}
 

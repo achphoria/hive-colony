@@ -107,6 +107,13 @@ test('cap waktu terbaru yang menentukan selesai, termasuk updated_at n8n', () =>
   assert.equal(missionBoardItems([stale], [], NOW).length, 0);
 });
 
+test('progres tersimpan di tugas dipakai kalau misi 3D belum ada', () => {
+  const items = missionBoardItems([row({ id: 'run-b', progress: 0.7, title: 'Graph: Render' })], [], NOW);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].progress, 0.7);
+  assert.equal(items[0].phase, 'work');
+});
+
 test('teks kosong dan gaya selesai terpasang di HUD', () => {
   const hud = readFileSync(new URL('./HUD.jsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');

@@ -77,7 +77,7 @@ function presenceOf(id, st, real, ai, inMeeting, prompts, netOnline) {
       if (ai.status !== 'on') return 'offline';
       return ai.busy > 0 || inMeeting ? 'work' : 'online';
     }
-    // Nimbus, Loop, Ping dijawab Grok Bot: tidak bergantung server PC kantor
+    // Nimbus, Loop, Ping, Pixel, dan Spark dijawab Grok Bot bila secretnya ada: tidak bergantung server PC kantor
     if (GROK_AGENTS.includes(id)) return st?.missionId ? 'work' : 'online';
     // server agent (n8n di PC kantor) mati -> agent n8n offline
     if (!prompts.includes(id) || netOnline === false) return 'offline';

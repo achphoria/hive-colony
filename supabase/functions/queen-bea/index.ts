@@ -6,7 +6,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
-import { newAdmin, loadAgents, teamBlock, parseDelegation, delegateTasks, colonyData, recordDelegation } from '../_shared/hive.ts';
+import { newAdmin, loadAgents, teamBlock, parseDelegation, delegateTasks, colonyData, recordDelegation, busyNote } from '../_shared/hive.ts';
 
 // Queen Bea memakai Sonnet 5.5: lebih pintar membagi kerja, merangkum, dan bernalar (Haiku 5.5 sebelumnya)
 const MODEL = 'claude-sonnet-5-5';
@@ -163,12 +163,14 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
       res = await ask([...messages, { role: 'assistant', content: res.content }], tools);
     }
     // delegasi lewat tool use (1 level): jalankan, kirim hasilnya, lalu minta jawaban akhir tanpa alat delegasi
-    let delegated: { agent: string; nick: string; title: string; task_id: string | null }[] = [];
+    let delegated: { agent: string; nick: string; title: string; task_id: string | null; busy?: string }[] = [];
+    const threadId = typeof body?.thread_id === 'string' ? body.thread_id : '';
     const useBlock = res.stop_reason === 'tool_use' ? (res.content.find((b) => b.type === 'tool_use' && (b as { name?: string }).name === 'delegate_tasks') as { id: string; input?: { tasks?: unknown[] } } | undefined) : undefined;
     if (useBlock) {
       const items = parseDelegation('[[DELEGATE]] ' + JSON.stringify(useBlock.input?.tasks ?? []), agents).items;
-      delegated = items.length ? await delegateTasks(adm, items, uid) : [];
-      const resultText = delegated.length ? 'Terkirim: ' + delegated.map((d) => `${d.nick} (${d.agent}) -> ${d.title}`).join('; ') : 'Tidak ada tugas yang valid; tidak ada yang dikirim.';
+      delegated = items.length ? await delegateTasks(adm, items, uid, threadId || null) : [];
+      const sent = delegated.filter((d) => d.task_id);
+      const resultText = (sent.length ? 'Terkirim: ' + sent.map((d) => `${d.nick} (${d.agent}) -> ${d.title}`).join('; ') : 'Tidak ada tugas yang valid; tidak ada yang dikirim.') + busyNote(delegated);
       const toolResults = res.content.filter((b) => b.type === 'tool_use').map((b) => ({ type: 'tool_result', tool_use_id: (b as { id: string }).id, content: (b as { id: string }).id === useBlock.id ? resultText : 'Tidak dijalankan.' }));
       // jawaban akhir: alat tetap sama (supaya thinking sah), tapi tool_choice 'none' = tidak memanggil alat lagi
       res = await ask([...messages, { role: 'assistant', content: res.content }, { role: 'user', content: toolResults }], tools, { type: 'none' });
@@ -177,12 +179,13 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
     const texts = res.content.filter((b) => b.type === 'text') as { text: string; citations?: { url?: string; title?: string }[] | null }[];
     const parsed = parseDelegation(texts.map((b) => b.text).join('').trim(), agents);
     let reply = parsed.reply;
-    if (!delegated.length && parsed.items.length && canDelegate) delegated = await delegateTasks(adm, parsed.items, uid);
+    if (!delegated.length && parsed.items.length && canDelegate) delegated = await delegateTasks(adm, parsed.items, uid, threadId || null);
     if (delegated.length) {
-      const missing = delegated.filter((d) => !reply.includes(d.nick));
-      if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+      const sent = delegated.filter((d) => d.task_id);
+      const missing = sent.filter((d) => !reply.includes(d.nick));
+      if (missing.length) reply += `\n\nTugas sudah saya kirim: ${sent.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+      reply += busyNote(delegated);
       // paket kerja dari percakapan Ruang Kerja: rekap & lampiran dikirim otomatis saat semua selesai
-      const threadId = typeof body?.thread_id === 'string' ? body.thread_id : '';
       if (threadId) {
         const { data: th } = await adm.from('hc_agent_threads').select('user_id, agent_id').eq('id', threadId).maybeSingle();
         if (th && th.user_id === uid && th.agent_id === 'ceo') {

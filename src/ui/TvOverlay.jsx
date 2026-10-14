@@ -7,7 +7,7 @@ import { useAuth } from '../sim/auth';
 import { outdoor } from '../sim/outdoor';
 import { useTv } from '../sim/tv';
 import { useAi } from '../hall/queenBea';
-import { useAgentNet } from '../hall/agentApi';
+import { useAgentNet, GROK_AGENTS } from '../hall/agentApi';
 import { feedText } from './hallData';
 import { go } from './nav';
 
@@ -56,6 +56,7 @@ function useCaptionStatus(c) {
     if (!real) return base;
     if (c.id === 'ceo') return ai === 'on' ? `Online · tersambung Claude AI · ${base}` : base;
     if (!prompts.includes(c.id)) return `Offline (belum tersambung AI) · ${base}`;
+    if (GROK_AGENTS.includes(c.id)) return st?.missionId ? `Mengerjakan tugas sungguhan · Grok Bot` : `Online · Grok Bot · ${base}`;
     if (net === false) return `Offline (server agent mati) · ${base}`;
     return st?.missionId ? `Mengerjakan tugas sungguhan · Claude via n8n` : `Online · Claude via n8n · ${base}`;
   }

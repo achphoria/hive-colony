@@ -301,6 +301,14 @@
               "fieldValue": "done"
             },
             {
+              "fieldId": "result",
+              "fieldValue": "={{ $('Parse Reply').item.json.reply }}"
+            },
+            {
+              "fieldId": "result_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
               "fieldId": "updated_at",
               "fieldValue": "={{ $now.toISO() }}"
             }
