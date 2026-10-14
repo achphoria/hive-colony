@@ -129,6 +129,11 @@ export async function uploadFiles(list) {
   }
   return out;
 }
+// tautan sementara (10 menit) ke lampiran di bucket privat
+export async function fileUrl(path, seconds = 600) {
+  const { data } = await supabase.storage.from('hc-agent-files').createSignedUrl(path, seconds);
+  return data?.signedUrl || null;
+}
 export async function openFile(path) {
   const { data } = await supabase.storage.from('hc-agent-files').createSignedUrl(path, 300);
   if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');

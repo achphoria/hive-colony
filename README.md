@@ -48,7 +48,7 @@ Tanpa login, meeting tetap berupa demo dengan transkrip simulasi.
 
 ### Queen Bea tersambung ke Claude
 
-Untuk staff yang login, Queen Bea dijawab **Claude Haiku 5.5** lewat Edge Function `queen-bea` (`supabase/functions/queen-bea`):
+Untuk staff yang login, Queen Bea dijawab **Claude Sonnet 5.5** (cadangan otomatis: Haiku 5.5) lewat Edge Function `queen-bea` (`supabase/functions/queen-bea`):
 
 - Fungsi memeriksa bahwa peminta adalah staff Hive Colony, lalu menyertakan data koloni asli dari database (staff, persetujuan menunggu, tugas terbuka, aktivitas terbaru). Queen Bea diminta tidak mengarang data yang tidak ada.
 - Dipakai di **Ngobrol dengan Chief** (chat & suara) dan di **meeting** (pertanyaan bebas; Queen Bea membaca transkrip rapat, jawabannya dibagikan ke semua peserta).
@@ -116,7 +116,7 @@ Tempat staff chat langsung dengan agent, seperti ngobrol dengan asisten AI:
 - **Aksi di jawaban agent**: 📋 Salin, 🔊 Dengar, 📌 Simpan (ke Hasil tersimpan), ✅ Jadikan tugas (dikerjakan agent otomatis lewat n8n, atau tugas untuk diri sendiri di papan rencana).
 - Kanan: tingkat akses kamu, tugas agent beserta hasil lengkapnya (`hc_plan_tasks.result`, bisa disalin/diunduh .md), Hasil tersimpan (`hc_agent_results`), peran agent, dan persona lengkap (khusus owner & Pelatih).
 - Queen Bea tahu status server agent (online/offline dari pengecekan terakhir) dan bisa membaca lampiran.
-- **Queen sebagai ketua**: untuk permintaan pekerjaan, Queen memecahnya sendiri jadi tugas (hingga 5 agent) dan mencatatnya sebagai paket kerja. Begitu semua selesai, Queen otomatis mengirim rekap + lampiran (laporan lengkap & hasil tiap agent, .md) ke percakapan itu. Queen juga bisa membaca hasil tugas 2 hari terakhir kapan saja ditanya.
+- **Queen sebagai ketua**: untuk permintaan pekerjaan, Queen memecahnya sendiri jadi tugas (hingga 5 agent) dan mencatatnya sebagai paket kerja. Begitu semua selesai, Queen otomatis mengirim rekap + lampiran (laporan lengkap & hasil tiap agent, .md) ke percakapan itu. Untuk permintaan visual (gambar/poster/Instagram), laporan juga berisi 2 desain poster 1080×1080. Lampiran dibuka di penampil bawaan (dokumen rapi + Cetak/PDF, gambar + Unduh PNG). Queen juga bisa membaca hasil tugas 2 hari terakhir kapan saja ditanya.
 - **Cari** di semua percakapan (judul & isi) dari kolom pencarian di kiri; hasil langsung membuka percakapannya.
 - **📌 Sematkan** dan **✏️ ganti judul** percakapan milik sendiri; percakapan tersemat selalu di atas.
 - **⬇ Unduh** percakapan yang sedang dibuka sebagai file .md.

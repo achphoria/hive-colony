@@ -6,7 +6,7 @@ import { AGENTS, AGENT_BY_ID, DEPTS } from '../data/hive';
 import { useHive } from '../sim/store';
 import { useAuth } from '../sim/auth';
 import { supabase } from '../lib/supabase';
-import { useAi } from '../hall/queenBea';
+import { useAi, modelLabel } from '../hall/queenBea';
 import { speak, stopSpeaking } from '../hall/ai';
 import {
   useAgentNet,
@@ -19,7 +19,6 @@ import {
   createAgentTask,
   createHumanTask,
   uploadFiles,
-  openFile,
   fileProblem,
   FILE_ACCEPT,
   MAX_FILES,
@@ -35,6 +34,7 @@ import {
 } from '../hall/agentApi';
 import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraining';
 import { useConversation } from './useConversation';
+import { FileViewer, ImageThumbs } from './FileViewer';
 import { go } from './nav';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
@@ -272,6 +272,7 @@ export function AgentWorkspace({ agentId }) {
   const [results, setResults] = useState([]);
   const [taskFor, setTaskFor] = useState(null);
   const [speaking, setSpeaking] = useState(null);
+  const [viewer, setViewer] = useState(null); // lampiran yang sedang dibuka
   const [voiceOn, setVoiceOn] = useState(loadVoicePref);
   const [listening, setListening] = useState(false);
   const [myFb, setMyFb] = useState({});
@@ -579,7 +580,7 @@ export function AgentWorkspace({ agentId }) {
     );
   }
 
-  const model = GROK_AGENTS.includes(agent) ? 'Grok Bot' : agent === 'ceo' ? (ai.status === 'on' ? 'Claude Haiku 5.5' : 'belum tersambung') : 'Claude · n8n';
+  const model = GROK_AGENTS.includes(agent) ? 'Grok Bot' : agent === 'ceo' ? (ai.status === 'on' ? modelLabel(ai.model) : 'belum tersambung') : 'Claude · n8n';
   const canWrite = level && !readOnly;
   const avatar = (sm) => (
     <div className={`aw-av${sm ? ' sm' : ''}`} style={{ '--c': DEPTS[def.dept].color }}>
@@ -824,7 +825,8 @@ export function AgentWorkspace({ agentId }) {
                       {m.role === 'agent' && avatar(true)}
                       <div className="aw-bub">
                         {m.role === 'agent' ? <Rich text={visible(m.content)} /> : <p>{m.content}</p>}
-                        <FileChips files={m.meta?.files} onOpen={(f) => f.path && openFile(f.path)} />
+                        <ImageThumbs files={m.meta?.files} onOpen={setViewer} />
+                        <FileChips files={m.meta?.files} onOpen={(f) => f.path && setViewer(f)} />
                         {m.meta?.delegated?.length > 0 && (
                           <div className="aw-deleg">
                             {m.meta.delegated.map((d, i) => (
@@ -1003,6 +1005,7 @@ export function AgentWorkspace({ agentId }) {
             </>
           )}
           {drag && <div className="aw-drop">Lepaskan file untuk dilampirkan</div>}
+          {viewer && <FileViewer file={viewer} onClose={() => setViewer(null)} />}
         </section>
 
         <aside className="aw-right">

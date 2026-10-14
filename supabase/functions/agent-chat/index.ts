@@ -190,6 +190,80 @@ const REPORT_PROMPT = `Kamu Queen Bea, Chief Executive Hive Colony. Timmu baru s
 3. **Poin utama per agent**: satu atau dua poin untuk tiap agent, sebut nama panggilannya.
 4. **Langkah berikutnya**: 2-4 rekomendasi konkret yang bisa langsung dijalankan.
 Hanya pakai isi hasil yang diberikan; jangan mengarang angka atau fakta. Tutup dengan kalimat bahwa hasil lengkap ada di lampiran.`;
+// rekap & poster memakai Sonnet 5.5 (sekali per paket kerja, kualitas lebih penting dari kecepatan)
+const REPORT_MODEL = 'claude-sonnet-5-5';
+// paket yang menyangkut visual: Pixel ikut, atau permintaannya menyebut gambar/poster/desain/konten
+const VISUAL_RE = /gambar|poster|desain|visual|feed|instagram|\big\b|banner|flyer|konten|story|reels/i;
+const POSTER_PROMPT = `Kamu desainer grafis senior di tim Hive Colony. Dari brief & hasil tim di bawah, buat 2 desain poster Instagram yang BERBEDA konsepnya, siap posting.
+Aturan teknis WAJIB untuk setiap poster:
+- SVG murni lengkap: <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080"> ... </svg>
+- Hanya elemen: g, defs, linearGradient, radialGradient, stop, clipPath, rect, circle, ellipse, line, polyline, polygon, path, text, tspan.
+- DILARANG: <image>, <script>, <foreignObject>, <style> eksternal, tautan/URL apa pun, font web. Pakai font-family="Arial, Helvetica, sans-serif".
+- Teks dalam XML: tulis "&" sebagai "&amp;", "<" sebagai "&lt;" (atau ganti "&" dengan kata "dan").
+- Semua teks Bahasa Indonesia dari brief (headline besar, subjudul, CTA), tidak keluar dari kanvas (beri margin ≥ 70 px; pecah baris panjang dengan tspan; perkirakan lebar teks ±0,6 × font-size per huruf).
+- JANGAN menulis placeholder seperti [NOMINAL], [TANGGAL], [NAMA BRAND], XXX. Kalau brief belum punya angka/tanggal/nama, tulis teks contoh yang wajar dan siap pakai (mis. "Diskon 20%", "Setiap Sabtu", "Info: DM kami").
+- Pakai palet warna dari brief kalau ada. Desain harus kaya & berlapis seperti poster profesional: latar gradasi atau blok warna, ilustrasi utama yang jelas dari banyak bentuk (path/ellipse/polygon dengan bayangan & sorotan), elemen dekoratif (pola, garis, titik, label/badge), hierarki teks tegas (headline sangat besar, subjudul, info pendukung, tombol CTA). Kontras tinggi agar terbaca di HP.
+- Ukuran tiap SVG ±5.000–10.000 karakter.`;
+const POSTER_SCHEMA = {
+  type: 'object',
+  properties: {
+    posters: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { title: { type: 'string' }, svg: { type: 'string' } },
+        required: ['title', 'svg'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['posters'],
+  additionalProperties: false,
+};
+
+// SVG dari model dibersihkan sebelum disimpan: tanpa script, event handler, gambar & tautan luar
+function cleanSvg(raw: string) {
+  let s = String(raw || '').trim();
+  const start = s.indexOf('<svg');
+  const end = s.lastIndexOf('</svg>');
+  if (start < 0 || end < start) return null;
+  s = s.slice(start, end + 6);
+  s = s
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, '')
+    .replace(/<(image|use|a|iframe|object|embed)\b[\s\S]*?(\/>|<\/\1\s*>)/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    .replace(/\s(xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*')/gi, '')
+    .replace(/url\(\s*['"]?(?!#)[^)]*\)/gi, 'none')
+    .replace(/javascript:/gi, '')
+    .replace(/@import[^;]*;?/gi, '')
+    // "&" mentah membuat SVG tidak valid (gambar gagal tampil)
+    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
+  if (!/xmlns=/.test(s.slice(0, 200))) s = s.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  return s.length > 300 && s.length < 200000 ? s : null;
+}
+
+async function makePosters(client: Anthropic, request: string, items: { nick: string; short: string; result: string }[]) {
+  const res = await client.messages.create({
+    model: REPORT_MODEL,
+    max_tokens: 16000,
+    thinking: { type: 'adaptive' },
+    // deno-lint-ignore no-explicit-any
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: POSTER_SCHEMA } } as any,
+    system: POSTER_PROMPT,
+    messages: [{ role: 'user', content: `Permintaan pengguna: ${request || '-'}\n\nHASIL TIM (brief):\n${items.map((i) => `### ${i.nick} — ${i.short}\n${i.result.slice(0, 5000)}`).join('\n\n')}` }],
+  });
+  const text = res.content
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join('');
+  const parsed = JSON.parse(text) as { posters?: { title: string; svg: string }[] };
+  return (parsed.posters || [])
+    .slice(0, 3)
+    .map((p) => ({ title: String(p.title || 'Poster').slice(0, 80), svg: cleanSvg(p.svg) }))
+    .filter((p) => p.svg) as { title: string; svg: string }[];
+}
+
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -222,13 +296,22 @@ async function queenReport(id: string) {
 
   // rekap oleh Claude; kalau gagal, rekap sederhana tetap dikirim
   let recap = '';
+  let posters: { title: string; svg: string }[] = [];
+  const wantPosters = items.some((i) => i.who === 'visual') || VISUAL_RE.test(String(d.request || ''));
   if (apiKey) {
+    const client = new Anthropic({ apiKey });
+    const posterJob = wantPosters
+      ? makePosters(client, String(d.request || ''), items).catch((e) => {
+          console.error('poster', String(e));
+          return [];
+        })
+      : Promise.resolve([]);
     try {
-      const client = new Anthropic({ apiKey });
       const res = await client.messages.create({
-        model: MODEL,
-        max_tokens: 1400,
-        thinking: { type: 'disabled' },
+        model: REPORT_MODEL,
+        max_tokens: 4000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'low' },
         system: REPORT_PROMPT,
         messages: [
           {
@@ -245,10 +328,12 @@ async function queenReport(id: string) {
     } catch (e) {
       console.error('recap', String(e));
     }
+    posters = await posterJob;
   }
   if (!recap) {
     recap = `Semua tugas sudah selesai, ${name}! 🐝\n\n${items.map((i) => `- **${i.nick}**: ${i.short}`).join('\n')}\n\nHasil lengkap ada di lampiran.`;
   }
+  if (posters.length) recap += `\n\n🎨 ${posters.length} desain poster siap pakai ada di lampiran: klik untuk melihat dan unduh sebagai PNG.`;
 
   // lampiran: laporan lengkap + hasil tiap agent (.md) di folder milik pengguna
   const base = `${d.user_id}/laporan/${d.id}`;
@@ -267,6 +352,14 @@ async function queenReport(id: string) {
     const { error } = await admin.storage.from(BUCKET).upload(path, new Blob([bytes], { type: 'text/markdown' }), { contentType: 'text/markdown', upsert: true });
     if (error) console.error('upload laporan', error.message);
     else files.push({ path, name: doc.name, type: 'text/markdown', size: bytes.length });
+  }
+
+  for (const [n, p] of posters.entries()) {
+    const bytes = new TextEncoder().encode(p.svg);
+    const path = `${base}/poster-${n + 1}.svg`;
+    const { error } = await admin.storage.from(BUCKET).upload(path, new Blob([bytes], { type: 'image/svg+xml' }), { contentType: 'image/svg+xml', upsert: true });
+    if (error) console.error('upload poster', error.message);
+    else files.push({ path, name: `Poster ${n + 1} - ${p.title}.svg`.slice(0, 110), type: 'image/svg+xml', size: bytes.length });
   }
 
   await admin.from('hc_agent_messages').insert({

@@ -8,7 +8,7 @@ import { go } from './nav';
 import { useAuth } from '../sim/auth';
 import { updatePresence } from '../sim/presence';
 import { sound } from '../audio/sound';
-import { useAi, checkAi } from '../hall/queenBea';
+import { useAi, checkAi, modelLabel } from '../hall/queenBea';
 import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
 import { useAgentNet, useAgentScores, checkHealth, GROK_AGENTS } from '../hall/agentApi';
@@ -235,7 +235,7 @@ export function ServerStatusDetail() {
         'Server agent (n8n · PC kantor)',
         net.online === null ? 'Memeriksa…' : `${net.online ? 'Online, 20 agent siap kerja' : 'Offline, tugas agent tertunda'}${net.checkedAt ? ` · dicek ${hm(net.checkedAt)} WIB` : ''}`,
       )}
-      {row(ai === 'unknown' ? null : ai === 'on', 'Queen Bea (Claude Haiku 5.5)', ai === 'on' ? 'Tersambung' : ai === 'unknown' ? 'Memeriksa…' : 'Belum tersambung')}
+      {row(ai === 'unknown' ? null : ai === 'on', `Queen Bea (${modelLabel(useAi.getState().model)})`, ai === 'on' ? 'Tersambung' : ai === 'unknown' ? 'Memeriksa…' : 'Belum tersambung')}
       {row(null, 'Grok Bot (Nimbus, Loop, Ping, Queen opsi)', 'Bot eksternal, tidak dipantau otomatis. Kalau tidak bisa dihubungi, chat akan memberi tahu.')}
       <p className="muted small srv-note">
         Sisa saldo token Claude tidak bisa dibaca dari API.

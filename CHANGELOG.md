@@ -4,6 +4,13 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Queen Bea naik ke Claude Sonnet 5.5, lampiran bisa dibuka, poster otomatis
+- **Queen Bea** sekarang memakai **Claude Sonnet 5.5** (berpikir adaptif): pembagian kerja & jawaban lebih matang. Mode rapat tetap cepat (effort rendah). Kalau Sonnet gagal, otomatis pindah ke Haiku 5.5 agar Queen tetap menjawab. Perkiraan biaya ±Rp300–500 per pesan.
+- **Penampil lampiran** di Ruang Kerja: klik lampiran .md/.txt/.csv/.json untuk membaca dengan format rapi, lalu **Cetak / PDF** atau unduh. Gambar tampil sebagai pratinjau kecil di pesan; klik untuk membesarkan dan **Unduh PNG**. PDF dibuka di tab baru.
+- **Poster otomatis**: kalau paket kerja Queen menyangkut visual (Pixel ikut, atau permintaan menyebut gambar/poster/desain/Instagram/konten), laporan akhir Queen menyertakan **2 desain poster 1080×1080** (SVG, bisa diunduh PNG). Rekap laporan juga ditulis Sonnet 5.5.
+- Keamanan poster: SVG dari AI dibersihkan di server (tanpa script, event handler, gambar & tautan luar). Bucket `hc-agent-files` sekarang menerima `image/svg+xml` (migrasi `20261014170000_hc_agent_files_svg.sql`).
+- Gambar AI sungguhan (foto/ilustrasi) menyusul setelah kunci API gambar dipasang di Supabase Secrets.
+
 ### Queen Bea sebagai ketua: membagi kerja sendiri & laporan otomatis
 - Queen memutuskan sendiri pembagian kerja: setiap permintaan berupa pekerjaan dipecah jadi tugas untuk agent yang tepat (hingga 5, lintas divisi) tanpa menanyakan siapa yang harus mengerjakan.
 - Setiap delegasi dari percakapan dicatat sebagai paket kerja (`hc_delegations`). Begitu semua tugasnya selesai, trigger memanggil `agent-chat` (`queen_report`) dan Queen mengirim **rekap** (ringkasan, poin per agent, langkah berikutnya) ke percakapan yang sama, lengkap dengan **lampiran** laporan lengkap + hasil tiap agent (.md).

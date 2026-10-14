@@ -1,5 +1,5 @@
 // Edge Function: queen-bea
-// Queen Bea (Chief Executive Hive Colony) dijawab oleh Claude. Hanya untuk staff yang login.
+// Queen Bea (Chief Executive Hive Colony) dijawab oleh Claude Sonnet 5.5. Hanya untuk staff yang login.
 // Kunci API dibaca dari Supabase Edge Function Secrets (ANTHROPIC_API_KEY), tidak pernah ke browser.
 //   POST { action: 'status' }                        -> { configured, model }
 //   POST { mode: 'chat' | 'meeting', messages, transcript?, attachments? } -> { reply }
@@ -8,7 +8,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
 import { newAdmin, loadAgents, teamBlock, parseDelegation, delegateTasks, colonyData, recordDelegation } from '../_shared/hive.ts';
 
-const MODEL = 'claude-haiku-5-5';
+// Queen Bea memakai Sonnet 5.5: lebih pintar membagi kerja, merangkum, dan bernalar (Haiku 5.5 sebelumnya)
+const MODEL = 'claude-sonnet-5-5';
+const FALLBACK_MODEL = 'claude-haiku-5-5'; // cadangan kalau Sonnet menolak pengaturan permintaan
 const MAX_TURNS = 12; // riwayat chat yang dikirim ke Claude
 const MAX_CHARS = 2000; // per pesan
 const MAX_TX_LINES = 40; // baris transkrip meeting
@@ -116,33 +118,49 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
     { type: 'text' as const, text: PERSONA },
     { type: 'text' as const, text: context },
   ];
-  const ask = (msgs: unknown[], tools: unknown[]) =>
+  // Sonnet 5.5: thinking adaptif (thinking 'disabled' ditolak model ini). Effort sedang untuk chat,
+  // rendah saat rapat supaya jawaban suara tetap cepat. Thinking ikut dihitung ke max_tokens.
+  const meeting = body?.mode === 'meeting';
+  let model = MODEL;
+  const ask = (msgs: unknown[], tools: unknown[], toolChoice?: { type: 'none' | 'auto' }) =>
     client.messages.create({
-      model: MODEL,
-      max_tokens: 1200,
-      // obrolan cepat: tanpa thinking, effort rendah
-      thinking: { type: 'disabled' },
-      output_config: { effort: 'low' },
+      model,
+      max_tokens: meeting ? 2048 : 4096,
+      // deno-lint-ignore no-explicit-any
+      thinking: (model === MODEL ? { type: 'adaptive' } : { type: 'disabled' }) as any,
+      output_config: { effort: model === MODEL ? (meeting ? 'low' : 'medium') : 'low' },
       system,
       // deno-lint-ignore no-explicit-any
       messages: msgs as any,
       // deno-lint-ignore no-explicit-any
-      ...(tools.length ? { tools: tools as any } : {}),
+      ...(tools.length ? { tools: tools as any, ...(toolChoice ? { tool_choice: toolChoice } : {}) } : {}),
     });
   try {
     let res;
+    // daftar alat tidak boleh berubah sepanjang satu giliran (thinking terikat ke system, tools & riwayat)
+    let tools: unknown[] = canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH];
     try {
-      res = await ask(messages, canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH]);
+      res = await ask(messages, tools);
     } catch (e) {
       // kalau alat pencarian ditolak untuk model/akun ini, tetap jawab tanpa riset
       if (e instanceof Anthropic.BadRequestError) {
         console.warn('web search tidak tersedia:', e.message);
-        res = await ask(messages, canDelegate ? [DELEGATE_TOOL] : []);
+        tools = canDelegate ? [DELEGATE_TOOL] : [];
+        try {
+          res = await ask(messages, tools);
+        } catch (e2) {
+          // pengaturan Sonnet ditolak: tetap jawab dengan model cadangan
+          if (!(e2 instanceof Anthropic.BadRequestError)) throw e2;
+          console.error('Sonnet ditolak, pakai cadangan:', e2.message);
+          model = FALLBACK_MODEL;
+          tools = canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH];
+          res = await ask(messages, tools);
+        }
       } else throw e;
     }
     // pencarian panjang bisa berhenti di tengah (pause_turn): kirim ulang apa adanya, server melanjutkan
     for (let i = 0; res.stop_reason === 'pause_turn' && i < MAX_CONTINUE; i++) {
-      res = await ask([...messages, { role: 'assistant', content: res.content }], canDelegate ? [WEB_SEARCH, DELEGATE_TOOL] : [WEB_SEARCH]);
+      res = await ask([...messages, { role: 'assistant', content: res.content }], tools);
     }
     // delegasi lewat tool use (1 level): jalankan, kirim hasilnya, lalu minta jawaban akhir tanpa alat delegasi
     let delegated: { agent: string; nick: string; title: string; task_id: string | null }[] = [];
@@ -152,7 +170,8 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
       delegated = items.length ? await delegateTasks(adm, items, uid) : [];
       const resultText = delegated.length ? 'Terkirim: ' + delegated.map((d) => `${d.nick} (${d.agent}) -> ${d.title}`).join('; ') : 'Tidak ada tugas yang valid; tidak ada yang dikirim.';
       const toolResults = res.content.filter((b) => b.type === 'tool_use').map((b) => ({ type: 'tool_result', tool_use_id: (b as { id: string }).id, content: (b as { id: string }).id === useBlock.id ? resultText : 'Tidak dijalankan.' }));
-      res = await ask([...messages, { role: 'assistant', content: res.content }, { role: 'user', content: toolResults }], []);
+      // jawaban akhir: alat tetap sama (supaya thinking sah), tapi tool_choice 'none' = tidak memanggil alat lagi
+      res = await ask([...messages, { role: 'assistant', content: res.content }, { role: 'user', content: toolResults }], tools, { type: 'none' });
     }
     if (res.stop_reason === 'refusal') return json({ reply: 'Maaf, untuk pertanyaan itu saya tidak bisa membantu. Ada hal lain soal koloni?' });
     const texts = res.content.filter((b) => b.type === 'text') as { text: string; citations?: { url?: string; title?: string }[] | null }[];
