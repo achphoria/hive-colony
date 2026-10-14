@@ -97,7 +97,7 @@ export function useHallData(me) {
   const feed = merged.slice(0, 6).map((e) => ({ id: e.id, t: hhmm(e.clock), text: e.text, kind: e.kind }));
 
   const pending = approvals.filter((a) => a.status === 'pending');
-  const openTasks = planTasks.filter((t) => t.col !== 'done');
+  const openTasks = planTasks.filter((t) => t.col !== 'done' && t.col !== 'failed');
   const open = [
     ...pending.map((a) => ({ title: a.title, sub: `${a.by} · tunggu Anda`, color: '#E24B4A' })),
     ...(real ? openTasks.map((t) => ({ title: t.title, sub: `${AGENT_BY_ID[t.who]?.nick || t.who} · ${t.col === 'doing' ? 'jalan' : 'belum'}`, color: t.col === 'doing' ? '#F5B700' : '#C0C5CE' })) : []),

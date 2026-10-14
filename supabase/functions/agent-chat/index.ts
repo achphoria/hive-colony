@@ -34,8 +34,16 @@ import {
   recordDelegation,
   colonyData,
   GROK_DELEGATE_GUIDE,
+  AgentBusyError,
+  busyTask,
+  busyNote,
+  compiledPrompt,
+  releaseStaleTasks,
+  settleTask,
+  touchTaskProgress,
   type Db,
 } from '../_shared/hive.ts';
+import { classifyTaskReply, isEmptyPromise, parseCommit, stripMachineBlocks } from '../_shared/taskProtocol.js';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
 const MAX_MESSAGE = 4000;
@@ -69,6 +77,7 @@ async function ping() {
   }
 }
 async function health() {
+  await releaseStaleTasks(admin);
   const { data: row } = await admin.from('hc_system_status').select('value, checked_at').eq('key', 'n8n').maybeSingle();
   if (row && Date.now() - new Date(row.checked_at).getTime() < HEALTH_TTL_MS) return { online: !!row.value?.online, checked_at: row.checked_at };
   const online = await ping();
@@ -152,6 +161,7 @@ async function runDueRoutines() {
     .limit(10);
   let ran = 0;
   for (const r of (due ?? []) as Routine[]) {
+    if (await busyTask(admin, r.agent_id)) continue; // tetap jatuh tempo; dicoba lagi tick berikutnya
     // klaim dulu (jadwal berikutnya dihitung ulang trigger), supaya tick yang bersamaan tidak menjalankan dua kali
     const { data: claimed } = await admin.from('hc_agent_routines').update({ last_run_at: nowIso }).eq('id', r.id).eq('next_run_at', r.next_run_at).select('id').maybeSingle();
     if (!claimed) continue;
@@ -173,18 +183,99 @@ async function grokDelegate(messageId: number) {
   if (!t || t.agent_id !== 'ceo') return;
   const { data: prof } = await admin.from('hc_profiles').select('role').eq('id', t.user_id).maybeSingle();
   const parsed = parseDelegation(String(m.content), await loadAgents(admin));
-  const delegated = parsed.items.length && prof && prof.role !== 'viewer' ? await delegateTasks(admin, parsed.items, t.user_id) : [];
+  const delegated = parsed.items.length && prof && prof.role !== 'viewer' ? await delegateTasks(admin, parsed.items, t.user_id, m.thread_id) : [];
   if (delegated.length) {
     const { data: ask } = await admin.from('hc_agent_messages').select('content').eq('thread_id', m.thread_id).eq('role', 'user').lt('id', m.id).order('id', { ascending: false }).limit(1).maybeSingle();
     await recordDelegation(admin, { threadId: m.thread_id, userId: t.user_id, request: ask?.content || '', taskIds: delegated.map((d) => d.task_id) });
   }
   let reply = parsed.reply || 'Siap.';
-  const missing = delegated.filter((d) => !reply.includes(d.nick));
-  if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+  const missing = delegated.filter((d) => d.task_id && !reply.includes(d.nick));
+  if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.filter((d) => d.task_id).map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+  reply += busyNote(delegated);
   await admin
     .from('hc_agent_messages')
     .update({ content: reply.slice(0, 20000), meta: { ...(m.meta || {}), delegated } })
     .eq('id', m.id);
+}
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+// Balasan Grok: [[COMMIT]] di chat menjadi tugas sungguhan; di thread tugas, progres/hasil diarahkan ke papan.
+async function grokReply(messageId: number) {
+  const { data: m } = await admin.from('hc_agent_messages').select('id, thread_id, role, content, meta').eq('id', messageId).maybeSingle();
+  if (!m || m.role !== 'agent' || m.meta?.skip) return;
+  const { data: t } = await admin.from('hc_agent_threads').select('id, agent_id, user_id, task_id').eq('id', m.thread_id).maybeSingle();
+  if (!t || t.agent_id === 'ceo') return;
+  const { nick } = await nickOf(t.agent_id);
+  if (t.task_id) {
+    const c = classifyTaskReply(String(m.content), m.meta || {});
+    if (c.kind === 'result') await settleTask(admin, { taskId: t.task_id, outcome: 'done', result: c.text, files: c.files, sourceMessageId: m.id });
+    else if (c.kind === 'failed') await settleTask(admin, { taskId: t.task_id, outcome: 'failed', result: c.note, sourceMessageId: m.id });
+    else await touchTaskProgress(admin, t.task_id, c.progress, c.note);
+    const stripped = stripMachineBlocks(String(m.content));
+    if (stripped && stripped !== String(m.content).trim()) {
+      await admin.from('hc_agent_messages').update({ content: stripped.slice(0, 20000) }).eq('id', m.id);
+    }
+    return;
+  }
+  const commit = parseCommit(String(m.content));
+  if (commit) {
+    let extra = '';
+    try {
+      const id = await startAgentTask(admin, {
+        agent: t.agent_id,
+        nick,
+        dept: (await nickOf(t.agent_id)).dept,
+        title: commit.title,
+        detail: commit.detail || String(m.content),
+        by: t.user_id,
+        caller: { type: 'commit', id: t.user_id },
+        activity: `${nick} mulai tugas dari chat: ${commit.title}`,
+        sourceThreadId: t.id,
+      });
+      extra = `\n\nTugas “${commit.title}” masuk papan misi dan sedang dikerjakan. Kemajuan tampil di papan; hasilnya kembali ke percakapan ini.`;
+      await admin.from('hc_agent_messages').update({ meta: { ...(m.meta || {}), task_id: id } }).eq('id', m.id);
+    } catch (e) {
+      extra = e instanceof AgentBusyError
+        ? `\n\nSaya belum bisa mulai tugas baru karena sedang mengerjakan “${e.taskTitle.replace(/^[^:]+:\s*/, '')}”.`
+        : '\n\nTugas gagal dibuat. Tekan ✅ Jadikan tugas untuk mencobanya lagi.';
+    }
+    const stripped = stripMachineBlocks(String(m.content));
+    await admin.from('hc_agent_messages').update({ content: `${stripped || 'Baik.'}${extra}`.slice(0, 20000) }).eq('id', m.id);
+    return;
+  }
+  if (isEmptyPromise(String(m.content))) {
+    await admin.from('hc_agent_messages').insert({
+      thread_id: t.id,
+      role: 'system',
+      content: `${nick} baru berjanji di chat, tetapi tidak ada tugas yang berjalan. Klik ✅ Jadikan tugas supaya pekerjaan masuk papan misi dan hasilnya kembali ke percakapan ini.`,
+      meta: { skip: true, kind: 'hint' },
+    });
+  }
+}
+
+async function applyTaskUpdate(b: Record<string, unknown>) {
+  const taskId = String(b.task_id || '');
+  const token = String(b.token || '');
+  if (!UUID_RE.test(taskId) || !UUID_RE.test(token)) return { error: 'bad_request' };
+  const { data: row } = await admin.from('hc_task_callbacks').select('task_id').eq('task_id', taskId).eq('token', token).maybeSingle();
+  if (!row) return { error: 'forbidden' };
+  const status = String(b.status || '');
+  if (status === 'progress') {
+    let p = Number(b.progress);
+    if (Number.isFinite(p) && p > 1) p = p / 100;
+    await touchTaskProgress(admin, taskId, Number.isFinite(p) ? Math.min(0.99, Math.max(0, p)) : null, String(b.note || '').slice(0, 300));
+    return { ok: true };
+  }
+  if (status === 'failed') {
+    await settleTask(admin, { taskId, outcome: 'failed', result: String(b.note || b.result || 'Tugas gagal.') });
+    return { ok: true };
+  }
+  if (status === 'done') {
+    await settleTask(admin, { taskId, outcome: 'done', result: String(b.result || ''), files: b.files });
+    return { ok: true };
+  }
+  return { error: 'bad_request' };
 }
 
 // ---------- laporan otomatis Queen: semua tugas paket selesai -> rekap + lampiran ke percakapan ----------
@@ -465,11 +556,20 @@ Deno.serve(async (req) => {
       background(grokDelegate(mid).catch((e) => console.error('grok_delegate', String(e))));
       return json({ ok: true, queued: true }, 202);
     }
+    if (b?.action === 'grok_reply') {
+      const mid = Number(b?.message_id);
+      if (!Number.isInteger(mid)) return json({ error: 'bad_request' }, 400);
+      background(grokReply(mid).catch((e) => console.error('grok_reply', String(e))));
+      return json({ ok: true, queued: true }, 202);
+    }
     const id = String(b?.approval_id ?? '');
     if (b?.action !== 'resume' || !/^[0-9a-f-]{36}$/i.test(id) || !['approved', 'rejected'].includes(b?.status)) return json({ error: 'bad_request' }, 400);
     background(resume(id, b.status).catch((e) => console.error('resume', String(e))));
     return json({ ok: true, queued: true }, 202);
   }
+
+  const early = await req.json().catch(() => ({}));
+  if (early?.action === 'task_update') return json(await applyTaskUpdate(early));
 
   const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (!jwt) return json({ error: 'not_logged_in' }, 401);
@@ -483,7 +583,7 @@ Deno.serve(async (req) => {
   const { data: me } = await sb.from('hc_profiles').select('name, role').eq('id', uid).maybeSingle();
   if (!me) return json({ error: 'not_hive_staff' }, 403);
 
-  const body = await req.json().catch(() => ({}));
+  const body = early;
   if (body?.action === 'health') return json(await health());
   if (body?.action === 'usage') return json(await quota(sb, me.role));
   // Jalankan sekarang (owner / Pelatih agent itu), jadwal rutin tidak berubah
@@ -495,7 +595,11 @@ Deno.serve(async (req) => {
     if (lv !== 'owner' && lv !== 'train') return json({ error: 'no_access' }, 403);
     try {
       return json({ task_id: await runRoutine(r as Routine, uid, true) });
-    } catch {
+    } catch (e) {
+      if (e instanceof AgentBusyError) {
+        const { nick: rn } = await nickOf(r.agent_id);
+        return json({ error: 'agent_busy', message: `${rn} sedang mengerjakan “${e.taskTitle.replace(/^[^:]+:\s*/, '')}”. Tunggu sampai selesai.` }, 409);
+      }
       return json({ error: 'db_error' }, 500);
     }
   }
@@ -513,7 +617,7 @@ Deno.serve(async (req) => {
     const { data: ag } = await admin.from('hc_agent_prompts').select('nick, dept, active, system_prompt').eq('agent_id', agent).maybeSingle();
     if (!ag || !ag.active) return json({ error: 'unknown_agent' }, 404);
     nick = ag.nick;
-    persona = ag.system_prompt || '';
+    persona = await compiledPrompt(admin, agent);
     dept = ag.dept;
   }
 
@@ -524,10 +628,21 @@ Deno.serve(async (req) => {
     const title = String(body?.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
     const detail = String(body?.detail ?? '').trim().slice(0, 6000);
     if (!title) return json({ error: 'empty_message' }, 400);
+    let sourceThread: string | null = null;
+    const askedThread = typeof body?.thread_id === 'string' ? body.thread_id : '';
+    if (UUID_RE.test(askedThread)) {
+      const { data: th } = await admin.from('hc_agent_threads').select('id, user_id, agent_id').eq('id', askedThread).maybeSingle();
+      if (th && th.user_id === uid && th.agent_id === agent) sourceThread = th.id;
+    }
     try {
-      const taskId = await startAgentTask(admin, { agent, nick, dept, title, detail, by: uid, caller: { type: 'staff', id: uid }, activity: `${me.name} memberi tugas ke ${nick}: ${title}` });
+      const taskId = await startAgentTask(admin, {
+        agent, nick, dept, title, detail, by: uid, caller: { type: 'staff', id: uid },
+        activity: `${me.name} memberi tugas ke ${nick}: ${title}`,
+        sourceThreadId: sourceThread,
+      });
       return json({ task_id: taskId });
-    } catch {
+    } catch (e) {
+      if (e instanceof AgentBusyError) return json({ error: 'agent_busy', message: `${nick} sedang mengerjakan “${e.taskTitle.replace(/^[^:]+:\s*/, '')}”. Tunggu sampai selesai sebelum memberi tugas baru.` }, 409);
       return json({ error: 'db_error' }, 500);
     }
   }
@@ -540,6 +655,14 @@ Deno.serve(async (req) => {
   let message = String(body?.message ?? '').trim().slice(0, MAX_MESSAGE);
   if (!message && files.length) message = 'Tolong pelajari lampiran ini.';
   if (!message) return json({ error: 'empty_message' }, 400);
+
+  if (agent !== 'ceo') {
+    const busy = await busyTask(admin, agent);
+    if (busy && busy.created_by !== uid) {
+      const short = String(busy.title || '').replace(/^[^:]+:\s*/, '');
+      return json({ error: 'agent_busy', message: `${nick} sedang mengerjakan “${short}”. Kamu belum bisa memberi pekerjaan baru sampai selesai.` }, 409);
+    }
+  }
 
   const q = await quota(sb, me.role);
   if (q.limit > 0 && q.used >= q.limit) return json({ error: 'daily_limit', ...q }, 429);

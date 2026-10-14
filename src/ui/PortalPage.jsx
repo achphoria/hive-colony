@@ -92,7 +92,7 @@ export function PortalPage() {
 
   const cards = [...teamTasks.map((t) => ({ kind: 'team', id: t.id, title: t.title, col: t.col })), ...todos.map((t) => ({ kind: 'todo', id: t.id, title: t.title, col: t.col, source: t.source }))];
   const activeCount = cards.filter((c) => c.col !== 'done').length;
-  const runningAgent = agentTasks.filter((t) => t.col !== 'done').length;
+  const runningAgent = agentTasks.filter((t) => t.col === 'todo' || t.col === 'doing').length;
   const weekAgo = Date.now() - 7 * 86400e3;
   const meetingsWeek = meetings.filter((m) => new Date(m.started_at).getTime() > weekAgo).length;
 
@@ -256,11 +256,11 @@ export function PortalPage() {
                       {nickOf(t.who)} · {when(t.createdAt)}
                     </small>
                   </span>
-                  <em className={`aw-col ${t.col}`}>{t.col === 'done' ? 'Selesai' : t.col === 'doing' ? 'Jalan' : 'Antre'}</em>
+                  <em className={`aw-col ${t.col}`}>{t.col === 'done' ? 'Selesai' : t.col === 'doing' ? 'Jalan' : t.col === 'failed' ? 'Gagal' : 'Antre'}</em>
                 </button>
                 {openTask === t.id && (
                   <div className="aw-result">
-                    {t.result ? <Rich text={t.result} /> : <p className="muted">{t.col === 'done' ? 'Hasil belum tersimpan.' : 'Sedang dikerjakan…'}</p>}
+                    {t.result ? <Rich text={t.result} /> : <p className="muted">{t.col === 'failed' ? 'Gagal, tidak ada hasil.' : t.col === 'doing' ? 'Sedang dikerjakan…' : 'Belum ada hasil.'}</p>}
                     <div className="aw-acts">
                       <button onClick={() => go(`/agent/${t.who}`)}>Buka ruang kerja {nickOf(t.who)}</button>
                       {t.result && <button onClick={() => navigator.clipboard?.writeText(t.result)}>📋 Salin</button>}

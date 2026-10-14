@@ -72,7 +72,8 @@ export function missionBoardItems(tasks, missions, now = Date.now(), windowMs = 
     };
     if (t.col === 'doing') {
       const m = live.get(id);
-      const progress = m && Number.isFinite(m.progress) ? Math.min(1, Math.max(0, m.progress)) : 0.05;
+      const stored = Number(t.progress);
+      const progress = m && Number.isFinite(m.progress) ? Math.min(1, Math.max(0, m.progress)) : Number.isFinite(stored) ? Math.min(0.99, Math.max(0, stored)) : 0.05;
       running.push({ ...base, phase: 'work', progress, finished: false });
     } else if (t.col === 'done') {
       const at = taskFinishedAt(t);

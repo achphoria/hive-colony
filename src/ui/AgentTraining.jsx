@@ -227,12 +227,12 @@ export function SkillPanel({ agent, nick, canTrain, names }) {
         <span>
           {score ? `${score.up} 👍 · ${score.down} 👎` : 'Belum ada penilaian.'}
           <br />
-          <small className="muted">Nilai jawaban {nick} dengan 👍/👎 di chat.</small>
+          <small className="muted">Nilai jawaban {nick} dengan 👍/👎 di chat. Skor ini hanya tampilan. Yang mengubah jawaban berikutnya adalah persona, skill aktif, dan pelajaran aktif.</small>
         </span>
       </div>
 
       {agent === 'ceo' ? (
-        <p className="muted small">Skill & pelajaran berlaku untuk 20 agent di n8n. Persona Queen Bea diatur di kode Edge Function queen-bea.</p>
+        <p className="muted small">Persona Queen Bea diatur di kode Edge Function queen-bea. Skill agent lain (termasuk Grok Bot) dirakit ke prompt yang dikirim ke bot.</p>
       ) : (
         <>
           <p className="aw-label">Skill</p>

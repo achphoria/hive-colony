@@ -429,6 +429,33 @@
   background: #e3f1d4;
   color: #3f6b1c;
 }
+.aw-col.failed {
+  background: #f8d0d0;
+  color: #8d1d1d;
+}
+.aw-busy {
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff4e0;
+  color: #7a4b00;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.aw-preview {
+  color: #6b6658;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.aw-result-img {
+  display: block;
+  max-width: 100%;
+  margin: 8px 0;
+  border-radius: 8px;
+}
 .aw-result {
   padding: 0 10px 10px;
   font-size: 13px;

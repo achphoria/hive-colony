@@ -391,6 +391,7 @@ function realMissions(dt) {
     const lead = world.byId[m.leadId];
     if (lead && lead.missionId !== m.id) lead.missionId = m.id;
     if (lead && lead.state !== 'desk' && lead.state !== 'fly') goHome(lead);
+    if (m.reported) continue;
     if (lead && lead.state === 'desk') m.progress = Math.min(0.92, m.progress + (0.92 - m.progress) * dt * 0.05);
   }
 }
@@ -415,7 +416,16 @@ export function syncRealTasks(tasks) {
     finishReal(m, t?.col === 'done');
   }
   for (const t of doing) {
-    if (world.missions.some((m) => m.real && m.taskId === String(t.id))) continue;
+    const reported = Number(t.progress);
+    const hasReport = Number.isFinite(reported);
+    const existing = world.missions.find((m) => m.real && m.taskId === String(t.id));
+    if (existing) {
+      if (hasReport) {
+        existing.progress = Math.min(0.99, Math.max(0, reported));
+        existing.reported = true;
+      }
+      continue;
+    }
     const lead = realLead(t.who);
     if (!lead || lead.missionId) continue; // satu agent mengerjakan satu tugas dalam satu waktu
     const m = {
@@ -429,7 +439,8 @@ export function syncRealTasks(tasks) {
       roomId: lead.seat.roomId,
       phase: 'work',
       t: 0,
-      progress: 0.05,
+      progress: hasReport ? Math.min(0.99, Math.max(0.05, reported)) : 0.05,
+      reported: hasReport,
     };
     lead.missionId = m.id;
     if (lead.state !== 'desk') goHome(lead);

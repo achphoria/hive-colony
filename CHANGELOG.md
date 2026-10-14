@@ -4,6 +4,13 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Tugas Grok masuk papan, kunci sibuk, hasil kembali ke chat
+- Pixel, Spark, Nimbus, Loop, dan Ping memakai Grok Bot kalau secretnya ada; kalau tidak, chat dan tugas jatuh ke n8n.
+- Bot tidak boleh berjanji kerja latar dari chat biasa. Komitmen sungguhan lewat blok `[[COMMIT]]` (atau tombol Jadikan tugas) membuat kartu `hc_plan_tasks` dan progresnya tampil di papan misi. Callback `task_update` atau blok `[[PROGRESS]]` / `[[DONE]]` mengisi kemajuan dan hasil.
+- Tugas tanpa hasil tidak lagi menjadi Selesai: statusnya Gagal. Hasil yang ada disalin ke percakapan agent, dan kartu tugas di panel kanan bisa dibuka untuk membaca hasil lengkap (teks dan gambar).
+- Saat agent sedang mengerjakan tugas, staff lain tidak bisa memberi chat atau tugas baru ("sedang mengerjakan …"). Kunci lepas saat selesai, gagal, atau setelah 30 menit tanpa kabar.
+- Persona, skill aktif, dan pelajaran aktif (hasil `hc_agent_compile`) dikirim di setiap panggilan Grok. Skor 👍/👎 tidak mengubah jawaban sampai dijadikan pelajaran.
+
 ### Pixel & Spark lewat Grok Bot
 - Pixel (`visual`) dan Spark (`ads`) ikut daftar agent Grok Bot, bersama Nimbus, Loop, dan Ping. Secret: `GROKBOT_URL_VISUAL` / `GROKBOT_KEY_VISUAL` dan `GROKBOT_URL_ADS` / `GROKBOT_KEY_ADS`.
 - Kalau secret sebuah agent belum ada, chat dan tugasnya jatuh ke n8n/Claude, bukan gagal. Bot yang sudah dikonfigurasi tetapi tidak menjawab tetap menampilkan pesan tidak bisa dihubungi.
