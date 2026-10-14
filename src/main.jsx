@@ -6,6 +6,7 @@ import './ui/avatar.css';
 import './ui/hall.css';
 import './hall/hall2.css';
 import './ui/agents.css';
+import './ui/intro.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

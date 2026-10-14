@@ -88,6 +88,10 @@ Buka **`#/tv`** (https://achphoria.github.io/hive-colony/#/tv) atau tombol **�
 - Overlay: jam & tanggal WIB, badge LIVE, jumlah staff online & agent AI, caption ala siaran TV, dan ticker aktivitas.
 - Gerakkan mouse untuk kontrol (shot berikutnya, layar penuh, keluar). Keyboard: `N`/→ shot berikutnya, `F` layar penuh.
 
+### Mode Intro: video perkenalan (`#/intro`)
+
+Video ±75 detik yang diputar langsung dari scene 3D koloni (bukan rekaman): pembuka heksagon, terbang ke menara saat matahari terbit, tur lantai & 7 divisi, Queen Bea mendelegasikan tugas ke Graph & Spark (tugas contoh hanya tampil di layar ini), Ruang Kerja (lampiran, suara, 👍/👎), Hive Hall & notulen, time-lapse malam ("Bekerja 24 jam"), statistik & keamanan, lalu penutup. Buka dari rak alat (🎬 Intro), tekan **F** untuk layar penuh, mulai rekam layar (Win+Alt+R atau OBS), lalu **Putar** (atau Spasi). Kursor & tombol tersembunyi selama diputar. `#/intro?t=30` memutar mulai detik ke-30 untuk merekam ulang satu bagian. Kodenya: `src/scene/IntroDirector.jsx` (kamera, jam, lantai, tugas contoh) dan `src/ui/IntroOverlay.jsx` + `intro.css` (teks & kartu).
+
 ### Tampilan "golden honey"
 
 Tampilan koloni dan Hive Hall mengikuti konsep visual atasan (diorama pulau melayang & aula madu):

@@ -4,6 +4,10 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Mode Intro: video perkenalan ±75 detik
+- Halaman `#/intro` (tombol 🎬 Intro di rak alat) memutar video perkenalan langsung dari scene 3D koloni: terbang ke menara saat matahari terbit, tur 7 divisi, Queen mendelegasikan tugas, Ruang Kerja, Hive Hall, time-lapse malam, statistik, dan penutup.
+- Siap direkam: layar penuh dengan F, kursor & tombol tersembunyi saat diputar, `#/intro?t=30` untuk merekam ulang mulai detik tertentu.
+
 ### Grok Bot penuh, statistik & kuota, Ruang Kerja lebih nyaman
 - **Tugas untuk Nimbus, Loop, Ping lewat Grok Bot**: Jadikan tugas, tugas rutin, dan delegasi Queen dikirim lewat thread tugas; balasan bot otomatis jadi hasil tugas di papan rencana dan tugas ditandai selesai. Ketiganya selalu tampil Online (tidak bergantung n8n).
 - **Queen Bea mode Grok** sekarang menerima data koloni & daftar agent, dan bisa mendelegasikan tugas lewat blok `[[DELEGATE]]` yang diproses server (blok disembunyikan dari chat).

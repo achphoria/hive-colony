@@ -4,6 +4,7 @@ import { Scene } from './scene/Scene';
 import { HUD, useAutoSound } from './ui/HUD';
 import { HallView } from './ui/HallView';
 import { TvOverlay } from './ui/TvOverlay';
+import { IntroOverlay } from './ui/IntroOverlay';
 import { AgentWorkspace } from './ui/AgentWorkspace';
 import { AccessPage } from './ui/AccessPage';
 import { StatsPage } from './ui/StatsPage';
@@ -25,7 +26,7 @@ import { PerformanceMonitor } from '@react-three/drei';
 // Resolusi render menyesuaikan kemampuan perangkat: turun otomatis kalau frame mulai tersendat.
 const MAX_DPR = Math.min(1.5, window.devicePixelRatio || 1);
 
-function Tower({ tv = false }) {
+function Tower({ tv = false, intro = false }) {
   const [dpr, setDpr] = useState(MAX_DPR);
   const saver = useSaver((s) => s.on);
   return (
@@ -44,10 +45,10 @@ function Tower({ tv = false }) {
           onFallback={() => setDpr(0.75)}
         />
         <Suspense fallback={null}>
-          <Scene tv={tv} />
+          <Scene tv={tv} intro={intro} />
         </Suspense>
       </Canvas>
-      {tv ? <TvOverlay /> : <HUD />}
+      {intro ? <IntroOverlay /> : tv ? <TvOverlay /> : <HUD />}
     </div>
   );
 }
@@ -116,6 +117,7 @@ export function App() {
   if (!session) return <LoginPage />;
   if (!account) return needsInvite ? <JoinPage /> : <Splash />;
   if (route === '/tv') return <Tower tv />;
+  if (route === '/intro') return <Tower intro />;
   if (route === '/agent' || route.startsWith('/agent/')) return <AgentWorkspace agentId={route.split('/')[2] || 'ceo'} />;
   if (route === '/akses') return <AccessPage />;
   if (route === '/statistik') return <StatsPage />;

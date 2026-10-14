@@ -708,6 +708,7 @@ function ToolRail({ className = 'panel tool-rail', onPick }) {
         <em>{saver ? 'Hemat aktif' : 'Mode hemat'}</em>
       </button>
       {owner && tool('📊', 'Statistik', () => go('/statistik'))}
+      {tool('🎬', 'Intro', () => go('/intro'), 'Video perkenalan Hive Colony (±75 detik), siap direkam')}
       {tool('📺', 'Mode TV', () => go('/tv'), 'Mode spectator untuk layar besar')}
       {tool('🧑', hasProfile ? 'Avatar saya' : 'Buat avatar', () => go('/avatar'))}
       {hasProfile && <DanceMenu onPick={onPick} />}
