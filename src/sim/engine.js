@@ -9,6 +9,7 @@ import {
   MISSIONS,
   DEPTS,
   AGENT_BY_ID,
+  resolveAgent,
   LIFT_X,
   DAY_LEN,
   NIGHT_SHIFT,
@@ -394,19 +395,29 @@ function realMissions(dt) {
   }
 }
 
-// Sinkron tugas agent sungguhan (hc_plan_tasks kind "ai") ke misi 3D
+function realLead(who) {
+  const def = resolveAgent(who);
+  const lead = def && world.byId[def.id];
+  if (!lead || lead.guest) return null;
+  return lead;
+}
+
+// Sinkron tugas agent sungguhan (hc_plan_tasks kind "ai") ke misi 3D.
+// Kartu yang baru selesai tidak ditahan di sini: finishReal jalan saat col berubah,
+// supaya perayaan tidak menunggu kartu itu hilang dari papan misi.
 export function syncRealTasks(tasks) {
   if (!world.real) return;
-  const doing = tasks.filter((t) => t.kind === 'ai' && t.col === 'doing' && world.byId[t.who] && !world.byId[t.who].guest);
+  const list = Array.isArray(tasks) ? tasks : [];
+  const doing = list.filter((t) => t.kind === 'ai' && t.col === 'doing' && realLead(t.who));
   const ids = new Set(doing.map((t) => String(t.id)));
   for (const m of world.missions.filter((x) => x.real && !ids.has(x.taskId))) {
-    const t = tasks.find((x) => String(x.id) === m.taskId);
+    const t = list.find((x) => String(x.id) === m.taskId);
     finishReal(m, t?.col === 'done');
   }
   for (const t of doing) {
     if (world.missions.some((m) => m.real && m.taskId === String(t.id))) continue;
-    const lead = world.byId[t.who];
-    if (lead.missionId) continue; // satu agent mengerjakan satu tugas dalam satu waktu
+    const lead = realLead(t.who);
+    if (!lead || lead.missionId) continue; // satu agent mengerjakan satu tugas dalam satu waktu
     const m = {
       id: world.seq++,
       real: true,
@@ -551,6 +562,7 @@ function syncUI() {
       phase: m.phase,
       progress: Math.round(m.progress * 100) / 100,
       real: !!m.real,
+      taskId: m.taskId ? String(m.taskId) : null,
     }));
   const ms = JSON.stringify(missions);
   if (ms !== lastUI.missions) {

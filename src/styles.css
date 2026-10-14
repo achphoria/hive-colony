@@ -304,6 +304,23 @@ h2 {
 .mission:hover {
   border-color: var(--royal);
 }
+.mission.done {
+  background: #f3faea;
+  border-color: #8dcb45;
+}
+.mission.done:hover {
+  border-color: #5f9a32;
+}
+.mission.done .phase {
+  color: #3e7a1a;
+  font-weight: 700;
+}
+.mission.done .bar {
+  background: rgba(141, 203, 69, 0.22);
+}
+.mission.done .bar i {
+  background: linear-gradient(90deg, #8dcb45, #5f9a32);
+}
 .mission p {
   margin: 6px 0 2px;
   font-size: 13px;
