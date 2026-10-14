@@ -4,6 +4,10 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Ikon situs & pratinjau link
+- Logo heksagon Hive Colony jadi **favicon** (SVG + PNG 32px), **ikon layar utama HP** (apple-touch-icon & manifest, termasuk versi maskable untuk Android), dan warna tema browser emas.
+- **Gambar pratinjau link** (og-image 1200×630) saat link Hive Colony dibagikan di WhatsApp, Telegram, atau Slack.
+
 ### Mode TV ala Kyumen, Portal saya, intro baru & wajib untuk staff baru
 - **Mode TV**: kamera hanya berkeliling koloni seperti Kyumen (orbit menara, tur lantai, menyusuri depan menara), tanpa close-up karakter. Lebih tenang dan ringan.
 - **Portal saya** (`#/saya`, tombol ketiga di koloni): kanban tugas tim untuk saya + to-do pribadi, tugas saya ke agent beserta hasilnya, percakapan & hasil tersimpan, rapat yang saya ikuti dan tindak lanjut untuk saya (bisa langsung masuk kanban). Kartu "Portal karyawan" di Hive Hall dihapus.

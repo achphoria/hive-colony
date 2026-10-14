@@ -1,0 +1,17 @@
+{
+  "name": "Hive Colony",
+  "short_name": "Hive Colony",
+  "description": "Kantor virtual 3D untuk 21 agent AI: Queen Bea, Ruang Kerja, Hive Hall, dan Portal saya.",
+  "lang": "id",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFF6DC",
+  "theme_color": "#F5B700",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
