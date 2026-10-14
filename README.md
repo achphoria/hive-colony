@@ -83,14 +83,13 @@ Model khusus ratu (`src/scene/QueenBea.jsx`): lebih tinggi, wajah humanoid denga
 
 Buka **`#/tv`** (https://achphoria.github.io/hive-colony/#/tv) atau tombol **📺 Mode TV** di koloni. Panel disembunyikan dan kamera dikendalikan "sutradara" otomatis:
 
-- Bergantian: orbit menara, tur per lantai, close-up agent (prioritas yang sedang misi/rapat/istirahat dan Queen Bea), dan close-up staff di taman (staff online diutamakan).
-- Garis pandang ke wajah dicek dengan raycast di lima titik; kalau terhalang (layar hologram, perabot, ruangan lain, pohon) sudut lain dicoba. Lantai di atas target disembunyikan. Agent di meja diambil dari sudut 3/4.
+- Kamera hanya berkeliling koloni (gaya yang sama dengan Kyumen), tidak mengikuti karakter: bergantian orbit menara, tur per lantai, dan menyusuri depan menara (tangga lobby, taman, kolam madu). Tenang dan ringan untuk diputar seharian.
 - Overlay: jam & tanggal WIB, badge LIVE, jumlah staff online & agent AI, caption ala siaran TV, dan ticker aktivitas.
 - Gerakkan mouse untuk kontrol (shot berikutnya, layar penuh, keluar). Keyboard: `N`/→ shot berikutnya, `F` layar penuh.
 
 ### Mode Intro: video perkenalan (`#/intro`)
 
-Video ±75 detik yang diputar langsung dari scene 3D koloni (bukan rekaman): pembuka heksagon, terbang ke menara saat matahari terbit, tur lantai & 7 divisi, Queen Bea mendelegasikan tugas ke Graph & Spark (tugas contoh hanya tampil di layar ini), Ruang Kerja (lampiran, suara, 👍/👎), Hive Hall & notulen, time-lapse malam ("Bekerja 24 jam"), statistik & keamanan, lalu penutup. Buka dari rak alat (🎬 Intro), tekan **F** untuk layar penuh, mulai rekam layar (Win+Alt+R atau OBS), lalu **Putar** (atau Spasi). Kursor & tombol tersembunyi selama diputar. `#/intro?t=30` memutar mulai detik ke-30 untuk merekam ulang satu bagian. Kodenya: `src/scene/IntroDirector.jsx` (kamera, jam, lantai, tugas contoh) dan `src/ui/IntroOverlay.jsx` + `intro.css` (teks & kartu).
+Video ±80 detik yang diputar langsung dari scene 3D koloni (bukan rekaman): pembuka heksagon, terbang ke menara saat matahari terbit, tur lantai & 7 divisi, Queen Bea mendelegasikan tugas ke Graph & Spark (tugas contoh hanya tampil di layar ini), Ruang Kerja (lampiran, suara, 👍/👎), Hive Hall & notulen, Portal saya (kanban), time-lapse malam ("Bekerja 24 jam"), statistik & keamanan, lalu penutup. Buka dari rak alat (🎬 Intro), tekan **F** untuk layar penuh, mulai rekam layar (Win+Alt+R atau OBS), lalu **Putar** (atau Spasi). Kursor & tombol tersembunyi selama diputar. `#/intro?t=30` memutar mulai detik ke-30 untuk merekam ulang satu bagian. Kodenya: `src/scene/IntroDirector.jsx` (kamera, jam, lantai, tugas contoh) dan `src/ui/IntroOverlay.jsx` + `intro.css` (teks & kartu).
 
 ### Tampilan "golden honey"
 
@@ -153,6 +152,26 @@ Per agent: jumlah pesan, tugas, gagal/offline, rata-rata waktu balas, mesin (Cla
 ### Akses agent (`#/akses`, khusus owner)
 
 Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak punya akses sampai diatur. Klik chip agent untuk berganti: Tanpa akses → **Pakai** (chat & perintah) → **Pelatih** (juga melihat & nanti mengubah skill agent). Ada tombol cepat "Pakai semua" / "Kosongkan" per divisi. Dijaga RLS (`hc_agent_access`, `hc_agent_level()`) dan dicek ulang di server.
+
+## SOP staff baru
+
+1. Owner atau kepala divisi membuat kode undangan di **Undang staff** (`#/undang`).
+2. Staff mendaftar di `#/join` dengan kode itu (konfirmasi email kalau diminta).
+3. Saat pertama kali masuk, staff **wajib menonton video perkenalan** (±80 detik). Selama belum selesai, semua halaman menampilkan intro dan tidak bisa dilewati atau dilompati. Selesai menonton → tombol **Mulai pakai Hive Colony** menyimpan tanda sudah menonton (`hc_profiles.intro_seen_at`, fungsi `hc_mark_intro_seen`).
+4. Staff membuat avatar, lalu membuka **Portal saya** dan **Ruang Kerja**. Agent yang boleh dipakai diatur owner di **Akses agent**.
+
+Akun yang sudah ada sebelum aturan ini tidak dipaksa menonton; intro tetap bisa diputar kapan saja dari rak alat (🎬 Intro).
+
+## Portal saya (`#/saya`)
+
+Tampilan pribadi tiap staff, dibuka dari tombol **🙋 Portal saya** di koloni (kanan Ruang Kerja):
+
+- **Kanban saya**: Belum / Jalan / Selesai. Isinya tugas papan rencana yang ditugaskan ke saya (label *Tim*, terlihat tim; penanggung jawab disimpan sebagai akun di `hc_plan_tasks.assignee`, tugas lama dicocokkan lewat nama) dan **to-do pribadi** (label *Pribadi*, tabel `hc_todos`, hanya terlihat pemiliknya). Geser kartu antar kolom atau pakai tombol ← →; tambah to-do di kolom Belum.
+- **Tugas saya ke agent**: tugas yang saya buat lewat Jadikan tugas, tugas rutin, atau delegasi Queen (`hc_plan_tasks.created_by`), dengan status dan hasil lengkap.
+- **Percakapan & hasil saya**: percakapan terbaru (tersemat di atas) dan hasil tersimpan; klik untuk membukanya di Ruang Kerja.
+- **Rapat & notulen saya**: rapat yang saya ikuti atau buat, ringkasan notulen, dan **tindak lanjut yang PIC-nya saya** dengan tombol **+ Kanban**.
+
+Kartu "Portal karyawan" (segera hadir) di Hive Hall dihapus. Cuti, slip gaji, dokumen, dan KPI menyusul sebagai tahap berikutnya.
 
 ## Wajib login (tanpa mode demo)
 

@@ -1,8 +1,8 @@
-// Mode Intro (#/intro): video perkenalan ±75 detik yang diputar dari scene 3D asli.
+// Mode Intro (#/intro): video perkenalan ±80 detik yang diputar dari scene 3D asli.
 // Waktu diputar oleh IntroDirector (di dalam kanvas) dan dibaca teks di atasnya (IntroOverlay).
 import { create } from 'zustand';
 
-export const INTRO_LEN = 75; // detik
+export const INTRO_LEN = 82; // detik
 
 // status: ready (layar mulai) | playing | done
 export const useIntro = create((set, get) => ({

@@ -1851,3 +1851,31 @@ body {
 .tool-rail-inline .tool {
   min-width: 70px;
 }
+
+/* tombol utama ketiga: Portal saya */
+.pa-btn.portal {
+  background: linear-gradient(180deg, #fff6dc, #f3e3c0);
+  color: #3a2a12;
+}
+.primary-actions.is-dock {
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.is-dock .pa-btn b {
+  font-size: 13.5px;
+}
+.is-dock .pa-btn {
+  padding: 8px 6px;
+  column-gap: 6px;
+}
+/* tiga tombol utama: ringkas di laptop supaya tidak menabrak bar obrolan di tengah */
+@media (max-width: 1400px) {
+  .pa-btn small {
+    display: none;
+  }
+}
+@media (max-width: 1100px) {
+  .hud:not(.is-mobile) .plaza {
+    bottom: 84px;
+  }
+}

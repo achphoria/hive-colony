@@ -14,7 +14,7 @@ import { decideApproval, advanceTask } from '../sim/hallSync';
 import { useMeeting } from '../hall/meeting';
 import { MeetingView } from '../hall/MeetingView';
 import { ReportView } from '../hall/ReportView';
-import { ChiefView, PortalView } from '../hall/ChiefView';
+import { ChiefView } from '../hall/ChiefView';
 import { ArchiveView } from '../hall/ArchiveView';
 
 function useActionError() {
@@ -342,7 +342,6 @@ function ActionDock({ onAction }) {
     },
     { id: 'report', ic: '📊', bg: '#FCE7B0', title: 'Presentasi report', sub: 'Queen Bea mempresentasikan laporan koloni.' },
     { id: 'chief', ic: '👑', bg: '#DCE6F4', title: 'Ngobrol dengan Chief', sub: 'Chat dengan lampiran, atau ngobrol pakai suara.' },
-    { id: 'portal', ic: '🗂', bg: '#F3E3C0', title: 'Portal karyawan', sub: 'Cuti, slip gaji, dokumen.', soon: true },
   ];
   return (
     <div className="dock">
@@ -471,7 +470,6 @@ export function HallView() {
           {tab === 'lobi' && mode === 'meeting' && <MeetingView onLeave={() => setMode('lobby')} onReport={() => setMode('report')} />}
           {tab === 'lobi' && mode === 'report' && <ReportView onClose={() => setMode(meetingJoined ? 'meeting' : 'lobby')} />}
           {tab === 'lobi' && mode === 'chief' && <ChiefView />}
-          {tab === 'lobi' && mode === 'portal' && <PortalView />}
         </div>
       </div>
     );

@@ -100,7 +100,7 @@ export function createAgentTask({ agent, title, detail }) {
 export async function createHumanTask(title) {
   const acc = useAuth.getState().account;
   const uid = useAuth.getState().session?.user?.id;
-  const { error } = await supabase.from('hc_plan_tasks').insert({ title: title.slice(0, 200), who: acc.name, kind: 'human', col: 'todo', updated_by: uid });
+  const { error } = await supabase.from('hc_plan_tasks').insert({ title: title.slice(0, 200), who: acc.name, kind: 'human', col: 'todo', updated_by: uid, assignee: uid });
   if (error) throw new Error(error.message.includes('row-level') ? 'Akun viewer tidak bisa membuat tugas.' : 'Tugas gagal dibuat.');
   await supabase.from('hc_activity').insert({ kind: 'task', dept: acc.primary_dept || null, text: `${acc.name} menambah tugas: ${title.slice(0, 120)}` });
 }

@@ -646,3 +646,63 @@
 .io-depts {
   background: linear-gradient(0deg, rgba(13, 9, 4, 0.55), rgba(13, 9, 4, 0) 45%);
 }
+
+/* adegan Portal saya: kanban mini, satu kartu berpindah kolom */
+.io-portal {
+  width: min(500px, 88vw);
+}
+.io-kanban {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.io-kcol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 112px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(255, 246, 220, 0.08);
+}
+.io-kcol span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffc93c;
+}
+.io-kcol i {
+  font-style: normal;
+  font-size: 12.5px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: rgba(255, 246, 220, 0.14);
+}
+.io-kcol i.hot {
+  background: #ffd34d;
+  color: #3a2a12;
+  font-weight: 700;
+  animation: io-hop 0.55s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes io-hop {
+  from {
+    opacity: 0;
+    transform: translateX(-24px) scale(0.92);
+  }
+}
+/* staff baru: langkah setelah video */
+.io-next {
+  background: rgba(13, 9, 4, 0.82);
+}
+.io-next ol {
+  margin: 4px 0 6px;
+  padding-left: 22px;
+  text-align: left;
+  line-height: 1.8;
+  font-size: 16px;
+}
+.io-err {
+  color: #ffb4a6;
+}

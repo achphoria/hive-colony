@@ -671,6 +671,11 @@ function PrimaryActions({ className = 'primary-actions', onPick }) {
         <b>Ruang Kerja</b>
         <small>Chat & tugas agent</small>
       </button>
+      <button className="pa-btn portal" onClick={() => nav('/saya')}>
+        <span aria-hidden="true">🙋</span>
+        <b>Portal saya</b>
+        <small>Kanban, tugas & rapat</small>
+      </button>
     </div>
   );
 }

@@ -360,21 +360,3 @@ export function ChiefView() {
     </div>
   );
 }
-
-export function PortalView() {
-  return (
-    <div className="portal">
-      <div className="portal-card">
-        <div className="portal-ic">🗂</div>
-        <h2>Portal karyawan</h2>
-        <p>Sedang dibangun. Nanti di sini ada pengajuan cuti, slip gaji, dokumen kontrak, dan absensi.</p>
-        <div className="portal-soon">
-          {['Pengajuan cuti', 'Slip gaji', 'Dokumen', 'Absensi'].map((x) => (
-            <span key={x}>{x}</span>
-          ))}
-        </div>
-        <span className="soon-badge">Segera hadir</span>
-      </div>
-    </div>
-  );
-}

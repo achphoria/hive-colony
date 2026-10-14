@@ -224,7 +224,7 @@ export function InvitePage() {
 
   if (!account || !['owner', 'lead'].includes(account.role)) {
     return (
-      <Shell title="Undang staff" sub="Hanya owner atau kepala divisi yang bisa membuat undangan.">
+      <Shell title="Undang staff" sub="Hanya owner atau kepala divisi yang bisa membuat undangan. Staff baru wajib menonton video perkenalan (±80 detik) saat pertama kali masuk.">
         <button className="save" onClick={() => go(account ? '/' : '/login')}>
           {account ? 'Kembali ke koloni' : 'Masuk dulu'}
         </button>

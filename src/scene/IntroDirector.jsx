@@ -34,10 +34,10 @@ const demoTasks = (col) => [...realTasks(), ...DEMO.map((d) => ({ ...d, col }))]
 function clockAt(t) {
   if (t < 5) return 5.6;
   if (t < 15) return mix(5.6, 7.6, seg(t, 5, 15));
-  if (t < 55) return 10;
-  if (t < 59) return (mix(18, 24, seg(t, 55, 59)) + 24) % 24;
-  if (t < 62) return mix(0, 8, seg(t, 59, 62));
-  return Math.min(11, 8 + (t - 62) * 0.2);
+  if (t < 62) return 10;
+  if (t < 66) return (mix(18, 24, seg(t, 62, 66)) + 24) % 24;
+  if (t < 69) return mix(0, 8, seg(t, 66, 69));
+  return Math.min(11, 8 + (t - 69) * 0.2);
 }
 
 // posisi kamera & titik pandang untuk detik ke-t
@@ -90,17 +90,22 @@ function shotAt(t) {
     const shift = pos.clone().sub(target).cross(V(0, 1, 0)).normalize().multiplyScalar(-4);
     return { pos: pos.add(shift), target: target.add(shift) };
   }
-  if (t < 63) {
-    const a = 2.6 + (t - 55) * 0.05;
-    return { pos: V(Math.cos(a) * 62, 32, Math.sin(a) * 62), target: V(0, 7, 0) };
+  if (t < 62) {
+    // Portal saya: menyusuri depan menara (taman & tangga lobby) tempat staff berkumpul
+    const x = mix(-22, 10, ease(seg(t, 55, 62)));
+    return { pos: V(x, 12, 44), target: V(x * 0.5 + 6, 3, 8) };
   }
   if (t < 70) {
-    const a = 3.0 + (t - 63) * 0.06;
+    const a = 2.6 + (t - 62) * 0.05;
+    return { pos: V(Math.cos(a) * 62, 32, Math.sin(a) * 62), target: V(0, 7, 0) };
+  }
+  if (t < 77) {
+    const a = 3.0 + (t - 70) * 0.06;
     return { pos: V(Math.cos(a) * 44, 40, Math.sin(a) * 44), target: V(0, 6, 0) };
   }
   // penutup: kamera menjauh dari koloni
-  const k = ease(seg(t, 70, INTRO_LEN));
-  const a = 3.4 + (t - 70) * 0.04;
+  const k = ease(seg(t, 77, INTRO_LEN));
+  const a = 3.4 + (t - 77) * 0.04;
   return { pos: V(Math.cos(a) * mix(50, 170, k), mix(36, 90, k), Math.sin(a) * mix(50, 170, k)), target: V(0, 8, 0) };
 }
 
@@ -116,7 +121,7 @@ const CUES = [
   { at: 32, run: () => setFloor('all') },
   { at: 47, run: () => setFloor(0) },
   { at: 55, run: () => setFloor('all') },
-  { at: 61.6, run: () => syncRealTasks(demoTasks('done')) },
+  { at: 68.6, run: () => syncRealTasks(demoTasks('done')) },
 ];
 
 export function IntroDirector() {

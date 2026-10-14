@@ -4,6 +4,13 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Mode TV ala Kyumen, Portal saya, intro baru & wajib untuk staff baru
+- **Mode TV**: kamera hanya berkeliling koloni seperti Kyumen (orbit menara, tur lantai, menyusuri depan menara), tanpa close-up karakter. Lebih tenang dan ringan.
+- **Portal saya** (`#/saya`, tombol ketiga di koloni): kanban tugas tim untuk saya + to-do pribadi, tugas saya ke agent beserta hasilnya, percakapan & hasil tersimpan, rapat yang saya ikuti dan tindak lanjut untuk saya (bisa langsung masuk kanban). Kartu "Portal karyawan" di Hive Hall dihapus.
+- **Database**: penanggung jawab (`assignee`) dan pembuat (`created_by`) di tugas papan rencana, tabel to-do pribadi `hc_todos`, penanda `intro_seen_at` di profil.
+- **Intro** jadi ±80 detik dengan adegan baru "Pekerjaanmu, satu halaman" (Portal saya).
+- **SOP staff baru**: staff yang baru mendaftar wajib menonton intro sampai selesai sebelum bisa membuka halaman lain, lalu diarahkan membuat avatar. Akun lama tidak dipaksa.
+
 ### Mode Intro: video perkenalan ±75 detik
 - Halaman `#/intro` (tombol 🎬 Intro di rak alat) memutar video perkenalan langsung dari scene 3D koloni: terbang ke menara saat matahari terbit, tur 7 divisi, Queen mendelegasikan tugas, Ruang Kerja, Hive Hall, time-lapse malam, statistik, dan penutup.
 - Siap direkam: layar penuh dengan F, kursor & tombol tersembunyi saat diputar, `#/intro?t=30` untuk merekam ulang mulai detik tertentu.

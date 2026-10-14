@@ -1,9 +1,11 @@
 // Teks & kartu animasi di atas Mode Intro (#/intro). Waktunya mengikuti IntroDirector (useIntro.t).
 // Siap direkam: kursor & tombol hilang selama diputar, tombol muncul lagi di akhir.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { DEPTS } from '../data/hive';
 import { useIntro, INTRO_LEN } from '../sim/intro';
 import { go } from './nav';
+import { useAuth } from '../sim/auth';
+import { markIntroSeen } from '../hall/portalApi';
 
 const DEPT_IDS = ['cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 // #/intro?t=30 -> mulai dari detik ke-30 (merekam ulang satu bagian)
@@ -33,7 +35,12 @@ function Layer({ on, className = '', children }) {
 
 const Headline = ({ on, children, pos = 'bl' }) => <div className={`io-headline ${pos}${on ? ' on' : ''}`}>{children}</div>;
 
-export function IntroOverlay() {
+// required: staff baru yang belum pernah menonton (wajib sekali, tidak bisa dilewati)
+export function IntroOverlay({ required = false }) {
+  const account = useAuth((s) => s.account);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const from = () => (required ? 0 : startFrom());
   const status = useIntro((s) => s.status);
   const t = useIntro((s) => s.t);
   const clock = useIntro((s) => s.clock);
@@ -48,7 +55,7 @@ export function IntroOverlay() {
       }
       if (e.code === 'Space' && useIntro.getState().status !== 'playing') {
         e.preventDefault();
-        useIntro.getState().start(startFrom());
+        useIntro.getState().start(required ? 0 : startFrom());
       }
     };
     window.addEventListener('keydown', onKey);
@@ -58,7 +65,7 @@ export function IntroOverlay() {
 
   const hh = String(Math.floor(clock)).padStart(2, '0');
   const mm = String(Math.floor((clock % 1) * 60)).padStart(2, '0');
-  const black = status === 'ready' ? 1 : t < 4.2 ? 1 : t < 5.6 ? 1 - (t - 4.2) / 1.4 : t > 73.5 ? Math.min(1, (t - 73.5) / 1.3) : 0;
+  const black = status === 'ready' ? 1 : t < 4.2 ? 1 : t < 5.6 ? 1 - (t - 4.2) / 1.4 : t > INTRO_LEN - 1.5 ? Math.min(1, (t - (INTRO_LEN - 1.5)) / 1.3) : 0;
 
   return (
     <div className={`intro${playing ? ' playing' : ''}`}>
@@ -195,20 +202,61 @@ export function IntroOverlay() {
         notulen sudah jadi
       </Headline>
 
-      {/* 55–63: bekerja 24 jam */}
-      <Layer on={between(t, 55.4, 62.8)} className="io-clock">
+      {/* 55–62: Portal saya */}
+      <Layer on={between(t, 55.4, 61.6)} className="io-chat">
+        <div className="io-card io-portal">
+          <div className="io-card-head">
+            <span className="io-av">🙋</span>
+            <b>Portal saya</b>
+            <em>Selamat pagi, Rina 👋</em>
+          </div>
+          <div className="io-kanban">
+            {[
+              ['todo', 'Belum'],
+              ['doing', 'Jalan'],
+              ['done', 'Selesai'],
+            ].map(([col, label]) => {
+              const moving = t < 57.6 ? 'todo' : t < 59.6 ? 'doing' : 'done';
+              return (
+                <div key={col} className="io-kcol">
+                  <span>{label}</span>
+                  {col === 'todo' && <i>Balas review Google</i>}
+                  {col === moving && (
+                    <i key={moving} className="hot">
+                      Siapkan materi promo
+                    </i>
+                  )}
+                  {col === 'done' && <i>Rekap absensi</i>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="io-locks">
+            <span>🐝 Graph · Rekap penjualan ✓</span>
+            <span>📝 Tindak lanjut rapat untukmu</span>
+          </div>
+        </div>
+      </Layer>
+      <Headline on={between(t, 56.4, 61.6)}>
+        Pekerjaanmu,
+        <br />
+        satu halaman
+      </Headline>
+
+      {/* 62–70: bekerja 24 jam */}
+      <Layer on={between(t, 62.4, 69.8)} className="io-clock">
         <b>
           {hh}
           <span>:</span>
           {mm}
         </b>
         <p>WIB</p>
-        <div className={`io-toast${t > 61.6 ? ' on' : ''}`}>✓ Tugas rutin 08:00 · Rekap keluhan member</div>
+        <div className={`io-toast${t > 68.6 ? ' on' : ''}`}>✓ Tugas rutin 08:00 · Rekap keluhan member</div>
       </Layer>
-      <Headline on={between(t, 56.5, 62.8)}>Bekerja 24 jam</Headline>
+      <Headline on={between(t, 63.5, 69.8)}>Bekerja 24 jam</Headline>
 
-      {/* 63–70: terkendali */}
-      <Layer on={between(t, 63.4, 69.6)} className="io-chat">
+      {/* 70–77: terkendali */}
+      <Layer on={between(t, 70.4, 76.6)} className="io-chat">
         <div className="io-card">
           <p className="io-kicker">Statistik owner</p>
           <div className="io-bars-chart">
@@ -223,14 +271,14 @@ export function IntroOverlay() {
           </div>
         </div>
       </Layer>
-      <Headline on={between(t, 64.2, 69.6)}>
+      <Headline on={between(t, 71.2, 76.6)}>
         Terpantau, terkendali,
         <br />
         aman
       </Headline>
 
-      {/* 70–75: penutup */}
-      <Layer on={between(t, 70.4, INTRO_LEN + 1) && status !== 'ready'} className="io-center io-end">
+      {/* 77–82: penutup */}
+      <Layer on={between(t, 77.4, INTRO_LEN + 1) && status !== 'ready'} className="io-center io-end">
         <Hex size={110} draw={false} />
         <h2>HIVE COLONY</h2>
         <p>Tim AI yang dilatih oleh tim kita sendiri</p>
@@ -240,19 +288,30 @@ export function IntroOverlay() {
       {status === 'ready' && (
         <div className="io-start">
           <Hex size={90} draw={false} />
-          <h2>Video perkenalan Hive Colony</h2>
-          <p>±75 detik. Tekan F untuk layar penuh, lalu mulai rekam layar (Win+Alt+R atau OBS) sebelum menekan Putar.</p>
+          {required ? (
+            <>
+              <h2>Selamat datang, {account?.name?.split(' ')[0] || 'rekan baru'}! 👋</h2>
+              <p>Sebelum mulai, tonton dulu video perkenalan Hive Colony (±80 detik). Wajib sekali untuk staff baru, supaya kamu tahu cara bekerja bersama 21 agent AI kita.</p>
+            </>
+          ) : (
+            <>
+              <h2>Video perkenalan Hive Colony</h2>
+              <p>±80 detik. Tekan F untuk layar penuh, lalu mulai rekam layar (Win+Alt+R atau OBS) sebelum menekan Putar.</p>
+            </>
+          )}
           <div className="io-actions">
-            <button className="io-btn pri" onClick={() => useIntro.getState().start(startFrom())}>
-              ▶ Putar{startFrom() ? ` dari detik ${startFrom()}` : ''}
+            <button className="io-btn pri" onClick={() => useIntro.getState().start(from())}>
+              ▶ Putar{from() ? ` dari detik ${from()}` : ''}
             </button>
-            <button className="io-btn" onClick={() => go('/')}>
-              Kembali ke koloni
-            </button>
+            {!required && (
+              <button className="io-btn" onClick={() => go('/')}>
+                Kembali ke koloni
+              </button>
+            )}
           </div>
         </div>
       )}
-      {status === 'done' && (
+      {status === 'done' && !required && (
         <div className="io-actions io-after">
           <button className="io-btn pri" onClick={() => useIntro.getState().start()}>
             ↺ Putar ulang
@@ -260,6 +319,39 @@ export function IntroOverlay() {
           <button className="io-btn" onClick={() => go('/')}>
             Kembali ke koloni
           </button>
+        </div>
+      )}
+      {status === 'done' && required && (
+        <div className="io-start io-next">
+          <h2>Siap mulai! 🎉</h2>
+          <ol>
+            <li>Buat avatarmu supaya terlihat di koloni.</li>
+            <li>Buka <b>Portal saya</b> untuk melihat tugas dan rapatmu.</li>
+            <li>Coba <b>Ruang Kerja</b>: agent yang boleh kamu pakai diatur owner.</li>
+          </ol>
+          {err && <p className="io-err">{err}</p>}
+          <div className="io-actions">
+            <button
+              className="io-btn pri"
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                setErr('');
+                try {
+                  await markIntroSeen();
+                  go('/avatar');
+                } catch (e) {
+                  setErr(e.message);
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? 'Menyimpan…' : 'Mulai pakai Hive Colony →'}
+            </button>
+            <button className="io-btn" onClick={() => useIntro.getState().start()}>
+              ↺ Putar ulang
+            </button>
+          </div>
         </div>
       )}
     </div>

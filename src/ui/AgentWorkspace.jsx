@@ -99,7 +99,7 @@ function loadVoicePref() {
 }
 
 // teks jawaban agent: baris, poin, dan **tebal** sederhana (tanpa HTML mentah)
-function Rich({ text }) {
+export function Rich({ text }) {
   const inline = (s) =>
     s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <b key={i}>{p.slice(2, -2)}</b> : <Fragment key={i}>{p}</Fragment>));
   const blocks = [];

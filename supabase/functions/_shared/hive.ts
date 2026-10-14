@@ -93,7 +93,7 @@ export async function startAgentTask(
   const grok = GROK_AGENTS.includes(o.agent);
   const { data: t, error } = await a
     .from('hc_plan_tasks')
-    .insert({ title: `${o.nick}: ${o.title}`.slice(0, 200), who: o.agent, kind: 'ai', col: grok ? 'doing' : 'todo', updated_by: o.by })
+    .insert({ title: `${o.nick}: ${o.title}`.slice(0, 200), who: o.agent, kind: 'ai', col: grok ? 'doing' : 'todo', updated_by: o.by, created_by: o.by })
     .select('id')
     .single();
   if (error || !t) throw new Error('db_error');
