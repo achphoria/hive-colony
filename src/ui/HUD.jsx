@@ -260,7 +260,7 @@ export function ServerStatusDetail() {
         net.online === null ? 'Memeriksa…' : `${net.online ? 'Online, 20 agent siap kerja' : 'Offline, tugas agent tertunda'}${net.checkedAt ? ` · dicek ${hm(net.checkedAt)} WIB` : ''}`,
       )}
       {row(ai === 'unknown' ? null : ai === 'on', `Queen Bea (${modelLabel(useAi.getState().model)})`, ai === 'on' ? 'Tersambung' : ai === 'unknown' ? 'Memeriksa…' : 'Belum tersambung')}
-      {row(null, 'Grok Bot (Nimbus, Loop, Ping, Queen opsi)', 'Bot eksternal, tidak dipantau otomatis. Kalau tidak bisa dihubungi, chat akan memberi tahu.')}
+      {row(null, 'Grok Bot (Nimbus, Loop, Ping, Pixel, Spark, Queen opsi)', 'Bot eksternal, tidak dipantau otomatis. Kalau tidak bisa dihubungi, chat akan memberi tahu.')}
       <p className="muted small srv-note">
         Sisa saldo token Claude tidak bisa dibaca dari API.
         {owner ? (

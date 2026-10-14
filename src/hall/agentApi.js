@@ -314,7 +314,8 @@ export async function setDailyLimit(n) {
   return data;
 }
 
-// agent yang dijawab Grok Bot (bukan n8n): status online tidak bergantung server PC kantor
+// Agent yang dijawab Grok Bot (bukan n8n): status online tidak bergantung server PC kantor.
+// Server jatuh ke n8n kalau secret GROKBOT_URL/KEY agent itu belum ada; UI tetap menandai mereka Grok Bot.
 export const GROK_AGENTS = ['cloud', 'workflow', 'network', 'visual', 'ads'];
 
 export async function loadMessages(threadId) {

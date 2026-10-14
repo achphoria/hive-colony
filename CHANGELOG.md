@@ -11,6 +11,11 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 - Saat agent sedang mengerjakan tugas, staff lain tidak bisa memberi chat atau tugas baru ("sedang mengerjakan …"). Kunci lepas saat selesai, gagal, atau setelah 30 menit tanpa kabar.
 - Persona, skill aktif, dan pelajaran aktif (hasil `hc_agent_compile`) dikirim di setiap panggilan Grok. Skor 👍/👎 tidak mengubah jawaban sampai dijadikan pelajaran.
 
+### Pixel & Spark lewat Grok Bot
+- Pixel (`visual`) dan Spark (`ads`) ikut daftar agent Grok Bot, bersama Nimbus, Loop, dan Ping. Secret: `GROKBOT_URL_VISUAL` / `GROKBOT_KEY_VISUAL` dan `GROKBOT_URL_ADS` / `GROKBOT_KEY_ADS`.
+- Kalau secret sebuah agent belum ada, chat dan tugasnya jatuh ke n8n/Claude, bukan gagal. Bot yang sudah dikonfigurasi tetapi tidak menjawab tetap menampilkan pesan tidak bisa dihubungi.
+- Chat Pixel, termasuk permintaan gambar/poster/desain, mengikuti jalur yang sama. Dua poster SVG di laporan akhir Queen tetap dibuat Claude: webhook Grok Bot hanya menulis balasan teks, sedangkan poster butuh SVG terstruktur yang langsung dilampirkan. Notulen rapat dan Queen mode rapat tetap Claude.
+
 ### Riwayat chat tidak terkesan hilang setelah refresh (`6c15133`)
 - Ruang Kerja mengingat percakapan terakhir dengan tiap agent (di browser ini). Setelah refresh, percakapan itu langsung terbuka lagi, bukan halaman kosong.
 - Daftar **Percakapan** dipindah ke atas daftar agent di kolom kiri (dengan scroll sendiri), supaya riwayat langsung terlihat tanpa menggulir melewati 21 agent.
