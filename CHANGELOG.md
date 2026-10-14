@@ -4,7 +4,7 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
-### Riwayat chat tidak terkesan hilang setelah refresh
+### Riwayat chat tidak terkesan hilang setelah refresh (`6c15133`)
 - Ruang Kerja mengingat percakapan terakhir dengan tiap agent (di browser ini). Setelah refresh, percakapan itu langsung terbuka lagi, bukan halaman kosong.
 - Daftar **Percakapan** dipindah ke atas daftar agent di kolom kiri (dengan scroll sendiri), supaya riwayat langsung terlihat tanpa menggulir melewati 21 agent.
 
