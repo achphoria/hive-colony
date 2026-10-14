@@ -208,15 +208,38 @@ async function agentStatus(a: Db) {
   return `STATUS SERVER AGENT: ${state}, dicek ${wib(data.checked_at)} WIB${ageMin > 10 ? ` (${ageMin} menit lalu, bisa sudah berubah)` : ''}. ${grok}`;
 }
 
-// data koloni dibaca dengan identitas staff (RLS), status server dengan service role
-export async function colonyData(sb: Db, me: { name: string; role: string; primary_dept: string }, a: Db) {
-  const [staff, approvals, tasks, activity, status] = await Promise.all([
+const RESULT_DAYS = 2; // hasil tugas agent yang ikut dibaca Queen
+const RESULT_MAX = 8;
+const RESULT_CHARS = 900;
+
+// data koloni dibaca dengan identitas staff (RLS), status server dengan service role.
+// uid (opsional) = staff yang sedang bicara, supaya tugas yang dia minta ditandai.
+export async function colonyData(sb: Db, me: { name: string; role: string; primary_dept: string }, a: Db, uid?: string) {
+  const since = new Date(Date.now() - RESULT_DAYS * 86400e3).toISOString();
+  const [staff, approvals, tasks, done, activity, status] = await Promise.all([
     sb.from('hc_profiles').select('name, role, primary_dept').order('created_at').limit(50),
     sb.from('hc_approvals').select('title, requested_by, status, created_at').eq('status', 'pending').limit(20),
-    sb.from('hc_plan_tasks').select('title, who, col').neq('col', 'done').limit(30),
+    sb.from('hc_plan_tasks').select('title, who, col, created_by').neq('col', 'done').limit(30),
+    sb
+      .from('hc_plan_tasks')
+      .select('title, who, kind, result, result_at, created_by')
+      .eq('kind', 'ai')
+      .not('result', 'is', null)
+      .gte('result_at', since)
+      .order('result_at', { ascending: false })
+      .limit(RESULT_MAX),
     sb.from('hc_activity').select('text, created_at').order('created_at', { ascending: false }).limit(15),
     agentStatus(a),
   ]);
+  const mine = (r: { created_by?: string }) => (uid && r.created_by === uid ? ' · diminta pengguna ini' : '');
+  const results = (done.data ?? []).length
+    ? (done.data ?? [])
+        .map((r: { title: string; who: string; result: string; result_at: string; created_by?: string }) => {
+          const body = String(r.result).replace(/\s+/g, ' ').trim();
+          return `- ${r.title} · ${r.who} · selesai ${wib(r.result_at)} WIB${mine(r)}\n  Hasil: ${body.slice(0, RESULT_CHARS)}${body.length > RESULT_CHARS ? '… (terpotong; hasil lengkap ada di panel Tugas agent itu & Portal saya)' : ''}`;
+        })
+        .join('\n')
+    : '- (belum ada hasil dalam 2 hari terakhir)';
   // deno-lint-ignore no-explicit-any
   const list = (rows: unknown[] | null, fmt: (r: any) => string) => (rows && rows.length ? rows.map((r) => `- ${fmt(r)}`).join('\n') : '- (kosong)');
   const now = wib(new Date().toISOString());
@@ -231,7 +254,10 @@ Persetujuan yang menunggu:
 ${list(approvals.data, (r) => `${r.title} (diajukan ${r.requested_by})`)}
 
 Tugas papan rencana yang belum selesai:
-${list(tasks.data, (r) => `${r.title} · ${r.who} · ${r.col === 'doing' ? 'sedang jalan' : 'belum mulai'}`)}
+${list(tasks.data, (r) => `${r.title} · ${r.who} · ${r.col === 'doing' ? 'sedang jalan' : 'belum mulai / menunggu'}${mine(r)}`)}
+
+HASIL TUGAS AGENT TERBARU (${RESULT_DAYS} hari terakhir, terbaru di atas):
+${results}
 
 Aktivitas terbaru:
 ${list(activity.data, (r) => `${wib(r.created_at)} · ${r.text}`)}`;

@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
       let context = '';
       if (agent === 'ceo') {
         const { data: meFull } = await sb.from('hc_profiles').select('name, role, primary_dept').eq('id', uid).maybeSingle();
-        context = [await colonyData(sb, meFull || { ...me, primary_dept: '-' }, admin), teamBlock(await loadAgents(admin)), me.role === 'viewer' ? 'Pengguna ini viewer: jangan mendelegasikan tugas.' : GROK_DELEGATE_GUIDE].join('\n\n');
+        context = [await colonyData(sb, meFull || { ...me, primary_dept: '-' }, admin, uid), teamBlock(await loadAgents(admin)), me.role === 'viewer' ? 'Pengguna ini viewer: jangan mendelegasikan tugas.' : GROK_DELEGATE_GUIDE].join('\n\n');
       }
       await dispatchGrok({ agent, threadId, message: full, userName: me.name, messageId: userMsg?.id ?? null, history, persona, context });
       await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);

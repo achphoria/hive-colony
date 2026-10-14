@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
   if (attachments) messages[messages.length - 1].content += `\n\nLAMPIRAN (isi file yang dikirim pengguna):\n${attachments}`;
 
   const agents = await loadAgents(adm);
-  let context = (await colonyData(sb, me, adm)) +'\n\n' + teamBlock(agents);
+  let context = (await colonyData(sb, me, adm, uid)) +'\n\n' + teamBlock(agents);
   if (body?.mode === 'meeting') {
     const tx = Array.isArray(body?.transcript) ? body.transcript.slice(-MAX_TX_LINES) : [];
     const lines = tx.map((l: { who?: string; text?: string }) => `${String(l?.who ?? '?').slice(0, 40)}: ${String(l?.text ?? '').slice(0, 400)}`);

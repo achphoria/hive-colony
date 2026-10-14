@@ -4,6 +4,10 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Perbaikan: Queen Bea bisa membaca hasil kerja timnya
+- Sebelumnya data yang dibaca Queen hanya berisi tugas yang belum selesai tanpa isi hasilnya, sehingga Queen meminta pengguna menempelkan hasil sendiri.
+- Sekarang Queen (mode Claude & Grok) menerima blok **hasil tugas agent 2 hari terakhir** beserta isinya, tugas yang diminta pengguna ditandai, dan persona diarahkan untuk merangkum hasil sendiri serta menyebut status tugas yang menunggu persetujuan.
+
 ### Ikon situs & pratinjau link
 - Logo heksagon Hive Colony jadi **favicon** (SVG + PNG 32px), **ikon layar utama HP** (apple-touch-icon & manifest, termasuk versi maskable untuk Android), dan warna tema browser emas.
 - **Gambar pratinjau link** (og-image 1200×630) saat link Hive Colony dibagikan di WhatsApp, Telegram, atau Slack.
