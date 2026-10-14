@@ -1,8 +1,9 @@
 // Edge Function: agent-chat
 // Ruang Kerja Agent: staff ngobrol langsung dengan agent. Akses dicek (hc_agent_level), riwayat
 // disimpan di hc_agent_threads/hc_agent_messages, lalu pesan diteruskan ke:
-//   - 20 agent  -> webhook n8n "Hive - Agent Task Worker" (Claude, persona di hc_agent_prompts)
-//   - Queen Bea -> Edge Function queen-bea (supaya delegasi ke agent tetap jalan)
+//   - agent Grok (cloud, workflow, network, visual, ads) -> webhook Grok Bot kalau secret-nya ada, kalau tidak n8n
+//   - agent lain -> webhook n8n "Hive - Agent Task Worker" (Claude, persona di hc_agent_prompts)
+//   - Queen Bea -> Edge Function queen-bea (supaya delegasi ke agent tetap jalan), atau Grok Bot kalau engine = grokbot
 //   POST { action: 'health' }                                     -> { online, checked_at }
 //   POST { action: 'send', agent, message, thread_id?, files?, engine? } -> { thread_id, reply, status, meta }
 //        status 'pending' = diteruskan ke Grok Bot; balasan masuk belakangan lewat Realtime
@@ -22,6 +23,8 @@ import {
   callN8n,
   callWorker,
   GROK_AGENTS,
+  grokCredentials,
+  routeAgent,
   dispatchGrok,
   startAgentTask,
   loadAgents,
@@ -31,6 +34,7 @@ import {
   recordDelegation,
   colonyData,
   GROK_DELEGATE_GUIDE,
+  type Db,
 } from '../_shared/hive.ts';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
@@ -192,7 +196,13 @@ const REPORT_PROMPT = `Kamu Queen Bea, Chief Executive Hive Colony. Timmu baru s
 Hanya pakai isi hasil yang diberikan; jangan mengarang angka atau fakta. Tutup dengan kalimat bahwa hasil lengkap ada di lampiran.`;
 // rekap & poster memakai Sonnet 5.5 (sekali per paket kerja, kualitas lebih penting dari kecepatan)
 const REPORT_MODEL = 'claude-sonnet-5-5';
-// paket yang menyangkut visual: Pixel ikut, atau permintaannya menyebut gambar/poster/desain/konten
+// Paket yang menyangkut visual: Pixel ikut, atau permintaannya menyebut gambar/poster/desain/konten.
+// Ini hanya gerbang poster SVG di laporan Queen, bukan jalur chat Pixel.
+// Chat Pixel (termasuk permintaan gambar/poster/desain) mengikuti routeAgent di kirim pesan:
+// Grok Bot kalau GROKBOT_URL_VISUAL dan GROKBOT_KEY_VISUAL ada, kalau tidak n8n/Claude — sama seperti Spark.
+// Poster tetap Anthropic karena makePosters butuh JSON SVG yang langsung diunggah sebagai lampiran.
+// Webhook Grok Bot hanya menerima pesan dan menulis balasan teks secara async, jadi tidak bisa menggantikan langkah ini.
+// Notulen rapat (meeting-recap) dan Queen mode rapat (queen-bea) juga tetap Claude: itu suara Queen, bukan balasan Pixel.
 const VISUAL_RE = /gambar|poster|desain|visual|feed|instagram|\big\b|banner|flyer|konten|story|reels/i;
 const POSTER_PROMPT = `Kamu desainer grafis senior di tim Hive Colony. Dari brief & hasil tim di bawah, buat 2 desain poster Instagram yang BERBEDA konsepnya, siap posting.
 Aturan teknis WAJIB untuk setiap poster:
@@ -373,7 +383,7 @@ async function queenReport(id: string) {
 }
 
 // ---------- kuota pesan harian per staff (owner tanpa batas) ----------
-async function quota(sb: ReturnType<typeof createClient>, role: string) {
+async function quota(sb: Db, role: string) {
   const [{ data: used }, { data: lim }] = await Promise.all([sb.rpc('hc_my_usage_today'), admin.from('hc_system_status').select('value').eq('key', 'limits').maybeSingle()]);
   const limit = role === 'owner' ? 0 : Number(lim?.value?.daily_per_staff) || 0;
   return { used: Number(used) || 0, limit };
@@ -573,8 +583,10 @@ Deno.serve(async (req) => {
     .single();
 
   // Grok Bot: diteruskan ke bot, balasannya ditulis bot sendiri ke hc_agent_messages (meta.engine = 'grokbot')
+  // Agent di GROK_AGENTS (termasuk Pixel & Spark, juga permintaan gambar/poster/desain) hanya kalau secret-nya ada.
+  // Secret kosong -> lanjut ke n8n/Claude di bawah, bukan pesan gagal.
   const engine = body?.engine === 'grokbot' ? 'grokbot' : 'claude';
-  const useGrok = GROK_AGENTS.includes(agent) || (agent === 'ceo' && engine === 'grokbot');
+  const useGrok = routeAgent(agent, { engine, configured: !!grokCredentials(agent) }) === 'grok';
   if (useGrok) {
     try {
       const attachments = files.length ? await readFiles(files) : '';
@@ -589,11 +601,17 @@ Deno.serve(async (req) => {
       await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
       return json({ thread_id: threadId, reply: '', status: 'pending', meta: { engine: 'grokbot' }, quota: quotaAfter });
     } catch (e) {
-      const errMeta = { engine: 'grokbot', error: String((e as Error)?.message || e).slice(0, 200) };
-      const errReply = `${nick} (Grok Bot) tidak bisa dihubungi. Coba lagi nanti.`;
-      await admin.from('hc_agent_messages').insert({ thread_id: threadId, role: 'system', content: errReply, meta: errMeta });
-      await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
-      return json({ thread_id: threadId, reply: errReply, status: 'error', meta: errMeta, quota: quotaAfter });
+      const code = String((e as Error)?.message || e);
+      // secret hilang di antara pengecekan dan kirim: agent daftar Grok jatuh ke n8n, jangan gagalkan chat
+      if (code.includes('grokbot_not_configured') && GROK_AGENTS.includes(agent)) {
+        console.warn('grok secrets missing, fallback n8n', agent);
+      } else {
+        const errMeta = { engine: 'grokbot', error: code.slice(0, 200) };
+        const errReply = `${nick} (Grok Bot) tidak bisa dihubungi. Coba lagi nanti.`;
+        await admin.from('hc_agent_messages').insert({ thread_id: threadId, role: 'system', content: errReply, meta: errMeta });
+        await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
+        return json({ thread_id: threadId, reply: errReply, status: 'error', meta: errMeta, quota: quotaAfter });
+      }
     }
   }
 

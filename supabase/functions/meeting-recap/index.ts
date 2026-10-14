@@ -129,7 +129,11 @@ Deno.serve(async (req) => {
   return json({ status: 'summarizing' });
 });
 
-type Admin = ReturnType<typeof createClient>;
+// Klien service-role. ReturnType<typeof createClient> memakai schema `never` dan tidak
+// cocok dengan klien yang diinferensi `public`, jadi tipe ini sengaja longgar.
+// deno-lint-ignore no-explicit-any
+type Admin = any;
+type MeetingLine = { speaker_name: string; kind: string; text: string; created_at: string };
 
 async function summarize(admin: Admin, meeting: { id: string; title: string; started_at: string; ended_at: string | null }) {
   const id = meeting.id;
@@ -139,7 +143,7 @@ async function summarize(admin: Admin, meeting: { id: string; title: string; sta
     .eq('meeting_id', id)
     .order('created_at')
     .limit(1500);
-  const all = lines ?? [];
+  const all = (lines ?? []) as MeetingLine[];
   const participants = [...new Set(all.filter((l) => l.kind !== 'ai').map((l) => l.speaker_name))];
   const speech = all.filter((l) => l.kind === 'speech' || l.kind === 'ai');
 
