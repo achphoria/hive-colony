@@ -149,7 +149,7 @@ export function teamBlock(agents: Agent[]) {
   return `TIM AGENT (agent_id · nama · divisi · peran):\n${agents.map((g) => `- ${g.agent_id} · ${g.nick} · ${g.dept} · ${roleOf(g)}${GROK_AGENTS.includes(g.agent_id) ? ' · (Grok Bot)' : ''}`).join('\n')}`;
 }
 
-const MAX_DELEGATE = 3;
+export const MAX_DELEGATE = 5;
 export type DelegateItem = { agent: Agent; title: string; detail: string };
 // blok di akhir jawaban: [[DELEGATE]] [{"agent":"analyst","title":"…","detail":"…"}]
 export function parseDelegation(text: string, agents: Agent[]) {
@@ -196,6 +196,32 @@ export async function delegateTasks(a: Db, items: DelegateItem[], by: string) {
     }
   }
   return out;
+}
+
+// ---------- paket kerja Queen: dicatat per percakapan, laporan otomatis saat semua selesai ----------
+// Trigger hc_plan_tasks_delegation_done memanggil agent-chat (queen_report) begitu semua tugas paket
+// punya hasil. Agent yang sangat cepat bisa selesai sebelum paket tercatat, jadi dicek sekali di sini.
+export async function requestReport(a: Db, delegationId: string) {
+  const { secret } = await n8nConfig(a);
+  await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hive-secret': secret },
+    body: JSON.stringify({ action: 'queen_report', delegation_id: delegationId }),
+    signal: AbortSignal.timeout(8000),
+  }).catch((e) => console.error('report request', String(e)));
+}
+export async function recordDelegation(a: Db, o: { threadId: string; userId: string; request: string; taskIds: (string | null)[] }) {
+  const taskIds = o.taskIds.filter(Boolean) as string[];
+  if (!o.threadId || !taskIds.length) return null;
+  const { data } = await a
+    .from('hc_delegations')
+    .insert({ thread_id: o.threadId, user_id: o.userId, request: String(o.request || '').slice(0, 2000), task_ids: taskIds })
+    .select('id')
+    .single();
+  if (!data) return null;
+  const { data: rows } = await a.from('hc_plan_tasks').select('col, result').in('id', taskIds);
+  if (rows && rows.length === taskIds.length && rows.every((r: { col: string; result: string | null }) => r.col === 'done' && r.result)) await requestReport(a, data.id);
+  return data.id as string;
 }
 
 // status server agent (n8n di PC kantor) dari pengecekan terakhir Edge Function agent-chat
@@ -266,4 +292,4 @@ ${list(activity.data, (r) => `${wib(r.created_at)} · ${r.text}`)}`;
 // petunjuk delegasi untuk Queen Bea mode Grok Bot (tanpa alat/tool: lewat blok teks di akhir jawaban)
 export const GROK_DELEGATE_GUIDE = `CARA MENDELEGASIKAN (khusus mesin ini): kalau tugas perlu dikerjakan agent di TIM AGENT, tulis jawabanmu seperti biasa (sebutkan agent mana mendapat tugas apa), lalu di BARIS PALING AKHIR tambahkan blok persis seperti ini, tanpa teks lain sesudahnya:
 [[DELEGATE]] [{"agent":"<agent_id>","title":"<judul singkat>","detail":"<instruksi jelas>"}]
-Maksimal 3 tugas, hanya agent_id dari TIM AGENT (bukan ceo). Untuk obrolan biasa jangan tambahkan blok ini. Blok ini otomatis disembunyikan dari pengguna dan tugasnya dikirim sistem.`;
+Maksimal 5 tugas, hanya agent_id dari TIM AGENT (bukan ceo). Untuk obrolan biasa jangan tambahkan blok ini. Blok ini otomatis disembunyikan dari pengguna dan tugasnya dikirim sistem.`;

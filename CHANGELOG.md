@@ -4,6 +4,11 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Queen Bea sebagai ketua: membagi kerja sendiri & laporan otomatis
+- Queen memutuskan sendiri pembagian kerja: setiap permintaan berupa pekerjaan dipecah jadi tugas untuk agent yang tepat (hingga 5, lintas divisi) tanpa menanyakan siapa yang harus mengerjakan.
+- Setiap delegasi dari percakapan dicatat sebagai paket kerja (`hc_delegations`). Begitu semua tugasnya selesai, trigger memanggil `agent-chat` (`queen_report`) dan Queen mengirim **rekap** (ringkasan, poin per agent, langkah berikutnya) ke percakapan yang sama, lengkap dengan **lampiran** laporan lengkap + hasil tiap agent (.md).
+- Berlaku untuk Queen mode Claude & Grok, termasuk tugas yang dikerjakan agent Grok Bot.
+
 ### Tim agent bergerak otomatis (persetujuan kata kunci dimatikan)
 - Kata kunci persetujuan owner dihapus dari semua agent (sebelumnya Spark: `iklan`, `pengeluaran`; Sage: `kontrak`; Penny: `pembayaran`). Delegasi Queen dan tugas langsung dikerjakan tanpa menunggu.
 - Alasan: agent saat ini hanya menulis draf & rekomendasi, belum melakukan aksi sungguhan (bayar, pasang iklan, tanda tangan), dan kata "iklan" membuat hampir semua tugas Spark tertahan.

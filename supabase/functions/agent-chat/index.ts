@@ -12,6 +12,7 @@
 //   POST { action: 'routines' } + x-hive-secret                   -> { ran }       (dari n8n "Hive - Routine Tick")
 //   POST { action: 'grok_delegate', message_id } + x-hive-secret  -> 202          (balasan Queen mode Grok berisi [[DELEGATE]])
 //   POST { action: 'usage' }                                      -> { used, limit } (kuota pesan harian saya)
+//   POST { action: 'queen_report', delegation_id } + x-hive-secret -> 202         (semua tugas paket Queen selesai: rekap + lampiran)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
@@ -27,6 +28,7 @@ import {
   teamBlock,
   parseDelegation,
   delegateTasks,
+  recordDelegation,
   colonyData,
   GROK_DELEGATE_GUIDE,
 } from '../_shared/hive.ts';
@@ -168,6 +170,10 @@ async function grokDelegate(messageId: number) {
   const { data: prof } = await admin.from('hc_profiles').select('role').eq('id', t.user_id).maybeSingle();
   const parsed = parseDelegation(String(m.content), await loadAgents(admin));
   const delegated = parsed.items.length && prof && prof.role !== 'viewer' ? await delegateTasks(admin, parsed.items, t.user_id) : [];
+  if (delegated.length) {
+    const { data: ask } = await admin.from('hc_agent_messages').select('content').eq('thread_id', m.thread_id).eq('role', 'user').lt('id', m.id).order('id', { ascending: false }).limit(1).maybeSingle();
+    await recordDelegation(admin, { threadId: m.thread_id, userId: t.user_id, request: ask?.content || '', taskIds: delegated.map((d) => d.task_id) });
+  }
   let reply = parsed.reply || 'Siap.';
   const missing = delegated.filter((d) => !reply.includes(d.nick));
   if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
@@ -175,6 +181,102 @@ async function grokDelegate(messageId: number) {
     .from('hc_agent_messages')
     .update({ content: reply.slice(0, 20000), meta: { ...(m.meta || {}), delegated } })
     .eq('id', m.id);
+}
+
+// ---------- laporan otomatis Queen: semua tugas paket selesai -> rekap + lampiran ke percakapan ----------
+const REPORT_PROMPT = `Kamu Queen Bea, Chief Executive Hive Colony. Timmu baru saja menyelesaikan SEMUA tugas dari permintaan pengguna. Tulis laporan untuk pengguna dalam Bahasa Indonesia yang hangat, rapi, dan ringkas (maks. ±250 kata), dengan susunan:
+1. Satu kalimat pembuka bahwa semua tugas sudah selesai.
+2. **Ringkasan** (2-3 kalimat) yang menyatukan hasil tim menjadi satu gambaran.
+3. **Poin utama per agent**: satu atau dua poin untuk tiap agent, sebut nama panggilannya.
+4. **Langkah berikutnya**: 2-4 rekomendasi konkret yang bisa langsung dijalankan.
+Hanya pakai isi hasil yang diberikan; jangan mengarang angka atau fakta. Tutup dengan kalimat bahwa hasil lengkap ada di lampiran.`;
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40) || 'hasil';
+
+async function queenReport(id: string) {
+  // klaim paket (trigger & pengecekan langsung bisa datang bersamaan)
+  const { data: d } = await admin
+    .from('hc_delegations')
+    .update({ reported_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('reported_at', null)
+    .select('id, thread_id, user_id, request, task_ids')
+    .maybeSingle();
+  if (!d) return;
+  const [{ data: tasks }, { data: prof }, { data: agents }] = await Promise.all([
+    admin.from('hc_plan_tasks').select('id, title, who, result, result_at').in('id', d.task_ids),
+    admin.from('hc_profiles').select('name').eq('id', d.user_id).maybeSingle(),
+    admin.from('hc_agent_prompts').select('agent_id, nick'),
+  ]);
+  const nicks = Object.fromEntries((agents ?? []).map((g: { agent_id: string; nick: string }) => [g.agent_id, g.nick]));
+  const items = (tasks ?? []).map((t: { id: string; title: string; who: string; result: string | null }) => {
+    const nick = nicks[t.who] || t.who;
+    return { ...t, nick, short: t.title.startsWith(`${nick}: `) ? t.title.slice(nick.length + 2) : t.title, result: String(t.result || '') };
+  });
+  if (!items.length) return;
+  const name = String(prof?.name || '').split(' ')[0] || 'kamu';
+
+  // rekap oleh Claude; kalau gagal, rekap sederhana tetap dikirim
+  let recap = '';
+  if (apiKey) {
+    try {
+      const client = new Anthropic({ apiKey });
+      const res = await client.messages.create({
+        model: MODEL,
+        max_tokens: 1400,
+        thinking: { type: 'disabled' },
+        system: REPORT_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `Nama pengguna: ${name}\nPermintaan pengguna: ${d.request || '-'}\n\nHASIL TIM:\n${items.map((i) => `### ${i.nick} — ${i.short}\n${i.result.slice(0, 6000)}`).join('\n\n')}`,
+          },
+        ],
+      });
+      recap = res.content
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as { text: string }).text)
+        .join('\n')
+        .trim();
+    } catch (e) {
+      console.error('recap', String(e));
+    }
+  }
+  if (!recap) {
+    recap = `Semua tugas sudah selesai, ${name}! 🐝\n\n${items.map((i) => `- **${i.nick}**: ${i.short}`).join('\n')}\n\nHasil lengkap ada di lampiran.`;
+  }
+
+  // lampiran: laporan lengkap + hasil tiap agent (.md) di folder milik pengguna
+  const base = `${d.user_id}/laporan/${d.id}`;
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  const docs = [
+    {
+      name: `Laporan tim ${today}.md`,
+      text: `# Laporan tim Queen Bea\n\n**Permintaan:** ${d.request || '-'}\n\n${recap}\n\n---\n\n${items.map((i) => `## ${i.nick} · ${i.short}\n\n${i.result}`).join('\n\n---\n\n')}\n`,
+    },
+    ...items.map((i) => ({ name: `${i.nick} - ${i.short}.md`.slice(0, 110), text: `# ${i.nick} · ${i.short}\n\n${i.result}\n` })),
+  ];
+  const files: { path: string; name: string; type: string; size: number }[] = [];
+  for (const [n, doc] of docs.entries()) {
+    const bytes = new TextEncoder().encode(doc.text);
+    const path = `${base}/${n === 0 ? 'laporan-lengkap' : slugify(doc.name)}.md`;
+    const { error } = await admin.storage.from(BUCKET).upload(path, new Blob([bytes], { type: 'text/markdown' }), { contentType: 'text/markdown', upsert: true });
+    if (error) console.error('upload laporan', error.message);
+    else files.push({ path, name: doc.name, type: 'text/markdown', size: bytes.length });
+  }
+
+  await admin.from('hc_agent_messages').insert({
+    thread_id: d.thread_id,
+    role: 'agent',
+    content: recap.slice(0, 20000),
+    meta: { report: d.id, files, delegated: items.map((i) => ({ agent: i.who, nick: i.nick, title: i.short, task_id: i.id })) },
+  });
+  await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', d.thread_id);
+  await admin.from('hc_activity').insert({ kind: 'report', dept: 'ceo', text: `Queen Bea mengirim laporan tim (${items.length} tugas) ke ${prof?.name || 'staff'}`.slice(0, 280) });
 }
 
 // ---------- kuota pesan harian per staff (owner tanpa batas) ----------
@@ -248,6 +350,12 @@ Deno.serve(async (req) => {
     if (!secret || hook !== secret) return json({ error: 'forbidden' }, 403);
     const b = await req.json().catch(() => ({}));
     if (b?.action === 'routines') return json({ ok: true, ran: await runDueRoutines() });
+    if (b?.action === 'queen_report') {
+      const did = String(b?.delegation_id ?? '');
+      if (!/^[0-9a-f-]{36}$/i.test(did)) return json({ error: 'bad_request' }, 400);
+      background(queenReport(did).catch((e) => console.error('queen_report', String(e))));
+      return json({ ok: true, queued: true }, 202);
+    }
     if (b?.action === 'grok_delegate') {
       const mid = Number(b?.message_id);
       if (!Number.isInteger(mid)) return json({ error: 'bad_request' }, 400);
@@ -407,7 +515,7 @@ Deno.serve(async (req) => {
       const r = await fetch(`${SUPABASE_URL}/functions/v1/queen-bea`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${jwt}`, apikey: ANON, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: msgs, attachments }),
+        body: JSON.stringify({ messages: msgs, attachments, thread_id: threadId }),
         signal: AbortSignal.timeout(120000),
       });
       const d = await r.json().catch(() => ({}));

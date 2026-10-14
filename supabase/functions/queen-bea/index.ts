@@ -6,7 +6,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
-import { newAdmin, loadAgents, teamBlock, parseDelegation, delegateTasks, colonyData } from '../_shared/hive.ts';
+import { newAdmin, loadAgents, teamBlock, parseDelegation, delegateTasks, colonyData, recordDelegation } from '../_shared/hive.ts';
 
 const MODEL = 'claude-haiku-5-5';
 const MAX_TURNS = 12; // riwayat chat yang dikirim ke Claude
@@ -33,12 +33,12 @@ const WEB_SEARCH = {
 };
 const DELEGATE_TOOL = {
   name: 'delegate_tasks',
-  description: 'Kirim tugas ke agent di TIM AGENT. Maksimal 3 tugas. Tugas muncul di papan rencana dan dikerjakan agent secara otomatis.',
+  description: 'Kirim tugas ke agent di TIM AGENT. Maksimal 5 tugas. Tugas muncul di papan rencana, dikerjakan agent otomatis, dan rekapnya dikirim ke percakapan saat semua selesai.',
   input_schema: {
     type: 'object',
     properties: {
       tasks: {
-        type: 'array', maxItems: 3,
+        type: 'array', maxItems: 5,
         items: {
           type: 'object',
           properties: {
@@ -162,6 +162,14 @@ ${lines.length ? lines.join('\n') : '- (belum ada yang bicara)'}`;
     if (delegated.length) {
       const missing = delegated.filter((d) => !reply.includes(d.nick));
       if (missing.length) reply += `\n\nTugas sudah saya kirim: ${delegated.map((d) => `${d.nick} (${d.title})`).join(', ')}.`;
+      // paket kerja dari percakapan Ruang Kerja: rekap & lampiran dikirim otomatis saat semua selesai
+      const threadId = typeof body?.thread_id === 'string' ? body.thread_id : '';
+      if (threadId) {
+        const { data: th } = await adm.from('hc_agent_threads').select('user_id, agent_id').eq('id', threadId).maybeSingle();
+        if (th && th.user_id === uid && th.agent_id === 'ceo') {
+          await recordDelegation(adm, { threadId, userId: uid, request: messages[messages.length - 1]?.content || '', taskIds: delegated.map((d) => d.task_id) });
+        }
+      }
     }
     // sumber riset dari kutipan pencarian web (unik per URL)
     const seen = new Set<string>();
