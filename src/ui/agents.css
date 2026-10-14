@@ -101,6 +101,11 @@
   letter-spacing: 0.05em;
   color: #8a7a55;
 }
+.aw-threads {
+  max-height: 34vh;
+  overflow-y: auto;
+  margin-top: 4px;
+}
 .aw-thread {
   display: flex;
   align-items: stretch;

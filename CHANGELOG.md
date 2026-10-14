@@ -4,6 +4,10 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Riwayat chat tidak terkesan hilang setelah refresh
+- Ruang Kerja mengingat percakapan terakhir dengan tiap agent (di browser ini). Setelah refresh, percakapan itu langsung terbuka lagi, bukan halaman kosong.
+- Daftar **Percakapan** dipindah ke atas daftar agent di kolom kiri (dengan scroll sendiri), supaya riwayat langsung terlihat tanpa menggulir melewati 21 agent.
+
 ### Queen Bea naik ke Claude Sonnet 5.5, lampiran bisa dibuka, poster otomatis (`477f690`)
 - **Queen Bea** sekarang memakai **Claude Sonnet 5.5** (berpikir adaptif): pembagian kerja & jawaban lebih matang. Mode rapat tetap cepat (effort rendah). Kalau Sonnet gagal, otomatis pindah ke Haiku 5.5 agar Queen tetap menjawab. Perkiraan biaya ±Rp300–500 per pesan.
 - **Penampil lampiran** di Ruang Kerja: klik lampiran .md/.txt/.csv/.json untuk membaca dengan format rapi, lalu **Cetak / PDF** atau unduh. Gambar tampil sebagai pratinjau kecil di pesan; klik untuk membesarkan dan **Unduh PNG**. PDF dibuka di tab baru.

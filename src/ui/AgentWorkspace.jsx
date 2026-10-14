@@ -43,6 +43,23 @@ const COL_LABEL = { todo: 'Belum', doing: 'Jalan', done: 'Selesai' };
 const SpeechRec = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 const VOICE_KEY = 'hc-aw-voice';
 const ENGINE_KEY = 'hc-aw-engine';
+// percakapan terakhir per agent, supaya setelah refresh langsung terbuka lagi
+const LAST_KEY = 'hc-aw-last-thread:';
+function lastThread(agent) {
+  try {
+    return localStorage.getItem(LAST_KEY + agent);
+  } catch {
+    return null;
+  }
+}
+function rememberThread(agent, id) {
+  try {
+    if (id) localStorage.setItem(LAST_KEY + agent, id);
+    else localStorage.removeItem(LAST_KEY + agent);
+  } catch {
+    /* penyimpanan browser tidak tersedia */
+  }
+}
 const WAIT_POLL_MS = 5000;
 const WAIT_MAX_MS = 3 * 60 * 1000;
 function loadEngine() {
@@ -304,7 +321,11 @@ export function AgentWorkspace({ agentId }) {
     setError('');
     setTaskFor(null);
     setFiles([]);
-    loadThreads(agent).then(setThreads);
+    loadThreads(agent).then((list) => {
+      setThreads(list);
+      const last = lastThread(agent);
+      if (!threadParam() && last && list.some((t) => t.id === last)) setThreadId((cur) => cur || last);
+    });
     loadResults(agent).then(setResults);
     if (threadParam()) setThreadId(threadParam());
     if (agent !== 'ceo')
@@ -316,6 +337,11 @@ export function AgentWorkspace({ agentId }) {
         .then(({ data }) => setPrompt(data?.system_prompt || ''));
     else setPrompt('');
   }, [agent, account]);
+
+  const openThread = (id) => {
+    setThreadId(id);
+    rememberThread(agent, id);
+  };
 
   // pindah percakapan lewat ?thread= tanpa ganti agent
   useEffect(() => {
@@ -511,7 +537,7 @@ export function AgentWorkspace({ agentId }) {
         speak(plain(r.reply), () => setSpeaking((s) => (s === 'last' ? null : s)));
       }
       if (!threadId) {
-        setThreadId(r.thread_id);
+        openThread(r.thread_id);
         loadThreads(agent).then(setThreads);
       } else {
         setMsgs(await loadMessages(r.thread_id));
@@ -635,7 +661,7 @@ export function AgentWorkspace({ agentId }) {
                   onClick={() => {
                     setSearch('');
                     go(`/agent/${f.agent}?thread=${f.threadId}`);
-                    if (f.agent === agent) setThreadId(f.threadId);
+                    if (f.agent === agent) openThread(f.threadId);
                   }}
                 >
                   <b>
@@ -650,75 +676,84 @@ export function AgentWorkspace({ agentId }) {
               ))}
             </div>
           )}
-          <AgentList current={agent} access={access} presence={presence} onPick={(id) => go(`/agent/${id}`)} />
           {level && (
             <>
               <p className="aw-label">Percakapan</p>
-              <button className={`aw-thread new${threadId ? '' : ' on'}`} onClick={() => setThreadId(null) || setMsgs([])}>
+              <button
+                className={`aw-thread new${threadId ? '' : ' on'}`}
+                onClick={() => {
+                  openThread(null);
+                  setMsgs([]);
+                }}
+              >
                 ＋ Percakapan baru
               </button>
-              {threads.map((t) => (
-                <div key={t.id} className={`aw-thread${t.id === threadId ? ' on' : ''}${t.pinned ? ' pinned' : ''}`}>
-                  <button onClick={() => setThreadId(t.id)}>
-                    <span>
-                      {t.pinned && '📌 '}
-                      {t.task_id && '🗂 '}
-                      {t.title}
-                    </span>
-                    <small>
-                      {timeLabel(t.updated_at)}
-                      {t.user_id !== uid && names[t.user_id] ? ` · ${names[t.user_id]}` : ''}
-                    </small>
-                  </button>
-                  {t.user_id === uid && (
-                    <span className="aw-thread-acts">
-                      <button
-                        className="aw-del"
-                        aria-label={t.pinned ? 'Lepas sematan' : 'Sematkan percakapan'}
-                        title={t.pinned ? 'Lepas sematan' : 'Sematkan'}
-                        onClick={async () => {
-                          await updateThread(t.id, { pinned: !t.pinned }).catch((e) => setError(e.message));
-                          loadThreads(agent).then(setThreads);
-                        }}
-                      >
-                        📌
-                      </button>
-                      <button
-                        className="aw-del"
-                        aria-label="Ganti judul percakapan"
-                        title="Ganti judul"
-                        onClick={async () => {
-                          const title = window.prompt('Judul percakapan', t.title);
-                          if (!title || title === t.title) return;
-                          await updateThread(t.id, { title }).catch((e) => setError(e.message));
-                          loadThreads(agent).then(setThreads);
-                        }}
-                      >
-                        ✏️
-                      </button>
-                    </span>
-                  )}
-                  {t.user_id === uid && (
-                    <button
-                      className="aw-del"
-                      aria-label="Hapus percakapan"
-                      onClick={async () => {
-                        if (!window.confirm('Hapus percakapan ini?')) return;
-                        await deleteThread(t.id);
-                        if (t.id === threadId) {
-                          setThreadId(null);
-                          setMsgs([]);
-                        }
-                        loadThreads(agent).then(setThreads);
-                      }}
-                    >
-                      ×
+              <div className="aw-threads">
+                {threads.map((t) => (
+                  <div key={t.id} className={`aw-thread${t.id === threadId ? ' on' : ''}${t.pinned ? ' pinned' : ''}`}>
+                    <button onClick={() => openThread(t.id)}>
+                      <span>
+                        {t.pinned && '📌 '}
+                        {t.task_id && '🗂 '}
+                        {t.title}
+                      </span>
+                      <small>
+                        {timeLabel(t.updated_at)}
+                        {t.user_id !== uid && names[t.user_id] ? ` · ${names[t.user_id]}` : ''}
+                      </small>
                     </button>
-                  )}
-                </div>
-              ))}
+                    {t.user_id === uid && (
+                      <span className="aw-thread-acts">
+                        <button
+                          className="aw-del"
+                          aria-label={t.pinned ? 'Lepas sematan' : 'Sematkan percakapan'}
+                          title={t.pinned ? 'Lepas sematan' : 'Sematkan'}
+                          onClick={async () => {
+                            await updateThread(t.id, { pinned: !t.pinned }).catch((e) => setError(e.message));
+                            loadThreads(agent).then(setThreads);
+                          }}
+                        >
+                          📌
+                        </button>
+                        <button
+                          className="aw-del"
+                          aria-label="Ganti judul percakapan"
+                          title="Ganti judul"
+                          onClick={async () => {
+                            const title = window.prompt('Judul percakapan', t.title);
+                            if (!title || title === t.title) return;
+                            await updateThread(t.id, { title }).catch((e) => setError(e.message));
+                            loadThreads(agent).then(setThreads);
+                          }}
+                        >
+                          ✏️
+                        </button>
+                      </span>
+                    )}
+                    {t.user_id === uid && (
+                      <button
+                        className="aw-del"
+                        aria-label="Hapus percakapan"
+                        onClick={async () => {
+                          if (!window.confirm('Hapus percakapan ini?')) return;
+                          await deleteThread(t.id);
+                          if (t.id === threadId) {
+                            openThread(null);
+                            setMsgs([]);
+                          }
+                          loadThreads(agent).then(setThreads);
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </>
           )}
+          {level && <p className="aw-label">Agent</p>}
+          <AgentList current={agent} access={access} presence={presence} onPick={(id) => go(`/agent/${id}`)} />
         </aside>
 
         <section
