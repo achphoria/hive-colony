@@ -4,6 +4,11 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 14 Oktober 2026
 
+### Tim agent bergerak otomatis (persetujuan kata kunci dimatikan)
+- Kata kunci persetujuan owner dihapus dari semua agent (sebelumnya Spark: `iklan`, `pengeluaran`; Sage: `kontrak`; Penny: `pembayaran`). Delegasi Queen dan tugas langsung dikerjakan tanpa menunggu.
+- Alasan: agent saat ini hanya menulis draf & rekomendasi, belum melakukan aksi sungguhan (bayar, pasang iklan, tanda tangan), dan kata "iklan" membuat hampir semua tugas Spark tertahan.
+- Alur persetujuan tetap ada dan bisa dinyalakan lagi per agent lewat `hc_agent_prompts.needs_approval_for` (contoh di migrasi `20261014150000_hc_agent_no_approval.sql`).
+
 ### Perbaikan: Queen Bea bisa membaca hasil kerja timnya
 - Sebelumnya data yang dibaca Queen hanya berisi tugas yang belum selesai tanpa isi hasilnya, sehingga Queen meminta pengguna menempelkan hasil sendiri.
 - Sekarang Queen (mode Claude & Grok) menerima blok **hasil tugas agent 2 hari terakhir** beserta isinya, tugas yang diminta pengguna ditandai, dan persona diarahkan untuk merangkum hasil sendiri serta menyebut status tugas yang menunggu persetujuan.
