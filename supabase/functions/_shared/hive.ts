@@ -44,8 +44,26 @@ export async function callN8n(a: Db, path: string, body: unknown, timeoutMs: num
 export const callWorker = (a: Db, body: unknown, timeoutMs: number) => callN8n(a, '/webhook/hive/agent-task', body, timeoutMs);
 
 // ---------- Grok Bot: GROKBOT_URL_<AGENT> & GROKBOT_KEY_<AGENT> di Edge Function Secrets ----------
-// agent yang selalu dijawab Grok Bot (Queen Bea hanya kalau engine = 'grokbot')
-export const GROK_AGENTS = ['cloud', 'workflow', 'network'];
+// Agent di daftar ini dijawab Grok Bot hanya kalau kedua secret-nya terpasang.
+// Kalau secret belum ada, chat & tugas jatuh ke n8n/Claude (bukan gagal).
+// Queen Bea tidak ada di daftar ini: dia ke Grok Bot hanya kalau engine = 'grokbot'.
+export const GROK_AGENTS = ['cloud', 'workflow', 'network', 'visual', 'ads'];
+
+export function grokCredentials(agent: string, envGet: (name: string) => string | undefined = (n) => Deno.env.get(n)) {
+  const id = agent.trim().toUpperCase();
+  const url = (envGet(`GROKBOT_URL_${id}`) ?? '').trim();
+  const token = (envGet(`GROKBOT_KEY_${id}`) ?? '').trim();
+  return url && token ? { url, token } : null;
+}
+
+// 'grok' = webhook Grok Bot; 'claude' = n8n/Claude (queen-bea untuk ceo).
+// Queen yang dipilih Grok Bot tetap mencoba Grok meski secret kosong (pilihan eksplisit, bukan fallback diam-diam).
+export function routeAgent(agent: string, opts: { engine?: string; configured: boolean }): 'grok' | 'claude' {
+  if (GROK_AGENTS.includes(agent)) return opts.configured ? 'grok' : 'claude';
+  if (agent === 'ceo' && opts.engine === 'grokbot') return 'grok';
+  return 'claude';
+}
+
 export async function dispatchGrok(o: {
   agent: string;
   threadId: string;
@@ -56,13 +74,11 @@ export async function dispatchGrok(o: {
   persona: string;
   context?: string;
 }) {
-  const key = o.agent.toUpperCase();
-  const url = Deno.env.get(`GROKBOT_URL_${key}`);
-  const token = Deno.env.get(`GROKBOT_KEY_${key}`);
-  if (!url || !token) throw new Error('grokbot_not_configured');
-  const r = await fetch(url, {
+  const creds = grokCredentials(o.agent);
+  if (!creds) throw new Error('grokbot_not_configured');
+  const r = await fetch(creds.url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       thread_id: o.threadId,
       agent_id: o.agent,
@@ -90,7 +106,7 @@ export async function startAgentTask(
   a: Db,
   o: { agent: string; nick: string; dept: string | null; title: string; detail: string; by: string | null; caller: Record<string, unknown>; activity: string },
 ) {
-  const grok = GROK_AGENTS.includes(o.agent);
+  const grok = routeAgent(o.agent, { configured: !!grokCredentials(o.agent) }) === 'grok';
   const { data: t, error } = await a
     .from('hc_plan_tasks')
     .insert({ title: `${o.nick}: ${o.title}`.slice(0, 200), who: o.agent, kind: 'ai', col: grok ? 'doing' : 'todo', updated_by: o.by, created_by: o.by })
@@ -127,6 +143,19 @@ export async function startAgentTask(
   background(
     dispatchGrok({ agent: o.agent, threadId: th.id, message, userName: prof?.name || 'Hive Colony', messageId: msg?.id ?? null, history: [], persona: ag?.system_prompt || '' }).catch(
       async (e) => {
+        // secret hilang setelah tugas dibuat: kerjakan lewat n8n, jangan tinggalkan tugas gagal
+        if (String(e).includes('grokbot_not_configured')) {
+          console.warn('grok secrets missing, fallback n8n', o.agent);
+          await a.from('hc_plan_tasks').update({ col: 'todo', updated_at: new Date().toISOString() }).eq('id', t.id);
+          try {
+            const r = await callWorker(a, { agent: o.agent, title: o.title, detail: o.detail, task_id: t.id, caller: o.caller }, 110000);
+            const d = await r.json();
+            if (d?.reply) await a.from('hc_plan_tasks').update({ result: String(d.reply).slice(0, 20000), result_at: new Date().toISOString() }).eq('id', t.id);
+          } catch (err) {
+            console.error('task call', String(err));
+          }
+          return;
+        }
         console.error('grok task', String(e));
         await a.from('hc_plan_tasks').update({ col: 'todo', updated_at: new Date().toISOString() }).eq('id', t.id);
         await a
@@ -146,7 +175,7 @@ export async function loadAgents(a: Db): Promise<Agent[]> {
 const roleOf = (ag: Agent) => (ag.system_prompt.split(`Kamu adalah ${ag.nick}. `)[1] || ag.system_prompt).slice(0, 140);
 export function teamBlock(agents: Agent[]) {
   if (!agents.length) return 'TIM AGENT: (tidak tersedia, jangan delegasi)';
-  return `TIM AGENT (agent_id · nama · divisi · peran):\n${agents.map((g) => `- ${g.agent_id} · ${g.nick} · ${g.dept} · ${roleOf(g)}${GROK_AGENTS.includes(g.agent_id) ? ' · (Grok Bot)' : ''}`).join('\n')}`;
+  return `TIM AGENT (agent_id · nama · divisi · peran):\n${agents.map((g) => `- ${g.agent_id} · ${g.nick} · ${g.dept} · ${roleOf(g)}${routeAgent(g.agent_id, { configured: !!grokCredentials(g.agent_id) }) === 'grok' ? ' · (Grok Bot)' : ''}`).join('\n')}`;
 }
 
 export const MAX_DELEGATE = 5;
@@ -227,7 +256,7 @@ export async function recordDelegation(a: Db, o: { threadId: string; userId: str
 // status server agent (n8n di PC kantor) dari pengecekan terakhir Edge Function agent-chat
 async function agentStatus(a: Db) {
   const { data } = await a.from('hc_system_status').select('value, checked_at').eq('key', 'n8n').maybeSingle();
-  const grok = 'Nimbus, Loop, dan Ping memakai Grok Bot, jadi tidak bergantung pada server ini.';
+  const grok = 'Nimbus, Loop, Ping, Pixel, dan Spark memakai Grok Bot bila secret botnya terpasang, jadi tidak bergantung pada server ini. Tanpa secret, agent itu tetap lewat n8n.';
   if (!data) return `STATUS SERVER AGENT: belum pernah dicek. ${grok}`;
   const ageMin = Math.round((Date.now() - new Date(data.checked_at).getTime()) / 60000);
   const state = data.value?.online ? 'ONLINE (agent n8n bisa menerima tugas)' : 'OFFLINE (server agent di PC kantor tidak menjawab; tugas agent n8n tertunda)';
