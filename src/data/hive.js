@@ -78,6 +78,15 @@ export const AGENTS = [
 ];
 export const AGENT_BY_ID = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
+// who di hc_plan_tasks kadang id ('analyst'), kadang nama ('Graph' / 'graph').
+const AGENT_BY_KEY = new Map();
+for (const a of AGENTS) AGENT_BY_KEY.set(a.nick.trim().toLowerCase(), a);
+for (const a of AGENTS) AGENT_BY_KEY.set(a.id.toLowerCase(), a);
+export function resolveAgent(who) {
+  const key = String(who ?? '').trim().toLowerCase();
+  return key ? AGENT_BY_KEY.get(key) || null : null;
+}
+
 // Agent yang tetap bekerja saat malam (jaga malam)
 export const NIGHT_SHIFT = new Set(AGENTS.filter((a) => a.mode !== 'Hybrid').map((a) => a.id));
 

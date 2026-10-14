@@ -13,9 +13,33 @@ import { useMeeting } from '../hall/meeting';
 import { PlazaBar } from './PlazaBar';
 import { useAgentNet, useAgentScores, checkHealth, GROK_AGENTS } from '../hall/agentApi';
 import { useSaver } from '../sim/saver';
+import { BOARD_EMPTY_REAL, missionBoardItems, nextBoardTick } from './missionBoard';
 
 const DEPT_ORDER = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
-const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan' };
+const PHASE = { dispatch: 'Dikirim', gather: 'Berkumpul', work: 'Dikerjakan', done: '✅ Selesai' };
+
+// Mode real: tugas jalan + yang selesai dalam ±10 menit. Timer menghitung ulang supaya kartu
+// selesai hilang sendiri, tanpa menunggu data baru dari database.
+function useMissionBoardItems() {
+  const missions = useHive((s) => s.missions);
+  const tasks = useHive((s) => s.planTasks);
+  const real = useAuth((s) => !!s.account);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!real) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(id);
+  }, [real]);
+  useEffect(() => {
+    if (!real) return undefined;
+    const at = nextBoardTick(tasks, Date.now());
+    if (at == null) return undefined;
+    const id = setTimeout(() => setNow(Date.now()), Math.max(250, at - Date.now() + 30));
+    return () => clearTimeout(id);
+  }, [real, tasks, now]);
+  if (!real) return missions;
+  return missionBoardItems(tasks, missions, now);
+}
 
 function Logo() {
   return (
@@ -591,7 +615,7 @@ function Directory({ defaultOpen = false, onPick }) {
 }
 
 function MissionBoard({ className = 'panel board', onPick }) {
-  const missions = useHive((s) => s.missions);
+  const items = useMissionBoardItems();
   const simLog = useHive((s) => s.log);
   const dbActivity = useHive((s) => s.dbActivity);
   const real = useAuth((s) => !!s.account);
@@ -602,7 +626,7 @@ function MissionBoard({ className = 'panel board', onPick }) {
     <aside className={className}>
       <div className="tabs">
         <button className={tab === 'active' ? 'on' : ''} onClick={() => setTab('active')}>
-          Papan misi <em>{missions.length}</em>
+          Papan misi <em>{items.length}</em>
         </button>
         <button className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
           Log koloni
@@ -610,13 +634,13 @@ function MissionBoard({ className = 'panel board', onPick }) {
       </div>
       {tab === 'active' ? (
         <div className="list">
-          {missions.length === 0 && (
-            <p className="empty">{real ? 'Belum ada tugas yang sedang dikerjakan. Minta Queen Bea mendelegasikan tugas ke agent, nanti lebahnya bekerja di sini.' : 'Queen Bea sedang menyiapkan misi berikutnya…'}</p>
+          {items.length === 0 && (
+            <p className="empty">{real ? BOARD_EMPTY_REAL : 'Queen Bea sedang menyiapkan misi berikutnya…'}</p>
           )}
-          {missions.map((m) => (
+          {items.map((m) => (
             <button
               key={m.id}
-              className="mission"
+              className={`mission${m.finished || m.phase === 'done' ? ' done' : ''}`}
               onClick={() => {
                 useHive.getState().selectRoom(m.roomId);
                 onPick?.();
@@ -905,7 +929,7 @@ function ListIcon() {
 // Tampilan HP: hanya header; panel lain masuk laci samping yang muncul saat tab ditekan.
 function MobileHUD() {
   const [drawer, setDrawer] = useState(null);
-  const missions = useHive((s) => s.missions);
+  const missions = useMissionBoardItems();
   const close = () => setDrawer(null);
   const plaza = useAuth((s) => !!s.account);
   return (
