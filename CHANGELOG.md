@@ -2,6 +2,16 @@
 
 Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bisa diklik di GitHub untuk melihat detail perubahannya.
 
+## 15 Oktober 2026
+
+### Studio Pixel: Pixel benar-benar mengirim gambar
+- Grok Bot hanya bisa membalas teks, jadi Pixel sebelumnya menjanjikan "render" tanpa pernah mengirim file, dan logo yang dilampirkan tidak terbaca.
+- Sekarang setiap **tugas visual Pixel** (dari chat lewat `[[COMMIT]]`, ✅ Jadikan tugas, tugas rutin, atau delegasi Queen) dikerjakan **Studio Pixel** di server (`supabase/functions/_shared/studio.ts`, aksi `studio` di `agent-chat`). Hasilnya **2 varian poster** dalam ukuran yang diminta (feed 1080×1350, persegi, story, banner) dan langsung muncul di chat Pixel sebagai gambar yang bisa diunduh PNG.
+- **Logo/gambar yang dilampirkan pengguna ditempel asli**, tidak digambar ulang AI; logo yang kurang kontras diberi pelat latar. Teks memakai kalimat persis dari brief.
+- **Foto latar AI (xAI)** siap pakai: begitu `XAI_API_KEY` dipasang di Supabase Edge Function Secrets, Studio membuat foto realistis (resolusi 1k) lalu menempelkan teks & logo asli di atasnya. Model bisa diganti lewat secret opsional `XAI_IMAGE_MODEL` (bawaan `grok-imagine-image-2.0`). Tanpa kunci, poster memakai ilustrasi grafis.
+- Persona Grok Pixel mendapat aturan Studio: untuk permintaan gambar langsung membuat `[[COMMIT]]` berisi brief lengkap, tidak lagi bilang "tidak bisa merender".
+- Laporan Queen: kalau Pixel sudah membuat desain, poster itu yang dilampirkan (tidak dibuat dobel). Poster laporan tanpa Pixel tetap dibuat Studio tanpa foto AI.
+
 ## 14 Oktober 2026
 
 ### Tugas Grok masuk papan, kunci sibuk, hasil kembali ke chat

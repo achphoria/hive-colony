@@ -14,6 +14,7 @@
 //   POST { action: 'grok_delegate', message_id } + x-hive-secret  -> 202          (balasan Queen mode Grok berisi [[DELEGATE]])
 //   POST { action: 'usage' }                                      -> { used, limit } (kuota pesan harian saya)
 //   POST { action: 'queen_report', delegation_id } + x-hive-secret -> 202         (semua tugas paket Queen selesai: rekap + lampiran)
+//   POST { action: 'studio', task_id, detail } + x-hive-secret     -> 202         (tugas visual Pixel: Studio membuat poster + logo asli + foto AI opsional)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
@@ -44,6 +45,7 @@ import {
   type Db,
 } from '../_shared/hive.ts';
 import { classifyTaskReply, isEmptyPromise, parseCommit, stripMachineBlocks } from '../_shared/taskProtocol.js';
+import { designPosters, runStudio, type Poster } from '../_shared/studio.ts';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
 const MAX_MESSAGE = 4000;
@@ -295,74 +297,10 @@ const REPORT_MODEL = 'claude-sonnet-5-5';
 // Webhook Grok Bot hanya menerima pesan dan menulis balasan teks secara async, jadi tidak bisa menggantikan langkah ini.
 // Notulen rapat (meeting-recap) dan Queen mode rapat (queen-bea) juga tetap Claude: itu suara Queen, bukan balasan Pixel.
 const VISUAL_RE = /gambar|poster|desain|visual|feed|instagram|\big\b|banner|flyer|konten|story|reels/i;
-const POSTER_PROMPT = `Kamu desainer grafis senior di tim Hive Colony. Dari brief & hasil tim di bawah, buat 2 desain poster Instagram yang BERBEDA konsepnya, siap posting.
-Aturan teknis WAJIB untuk setiap poster:
-- SVG murni lengkap: <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080"> ... </svg>
-- Hanya elemen: g, defs, linearGradient, radialGradient, stop, clipPath, rect, circle, ellipse, line, polyline, polygon, path, text, tspan.
-- DILARANG: <image>, <script>, <foreignObject>, <style> eksternal, tautan/URL apa pun, font web. Pakai font-family="Arial, Helvetica, sans-serif".
-- Teks dalam XML: tulis "&" sebagai "&amp;", "<" sebagai "&lt;" (atau ganti "&" dengan kata "dan").
-- Semua teks Bahasa Indonesia dari brief (headline besar, subjudul, CTA), tidak keluar dari kanvas (beri margin ≥ 70 px; pecah baris panjang dengan tspan; perkirakan lebar teks ±0,6 × font-size per huruf).
-- JANGAN menulis placeholder seperti [NOMINAL], [TANGGAL], [NAMA BRAND], XXX. Kalau brief belum punya angka/tanggal/nama, tulis teks contoh yang wajar dan siap pakai (mis. "Diskon 20%", "Setiap Sabtu", "Info: DM kami").
-- Pakai palet warna dari brief kalau ada. Desain harus kaya & berlapis seperti poster profesional: latar gradasi atau blok warna, ilustrasi utama yang jelas dari banyak bentuk (path/ellipse/polygon dengan bayangan & sorotan), elemen dekoratif (pola, garis, titik, label/badge), hierarki teks tegas (headline sangat besar, subjudul, info pendukung, tombol CTA). Kontras tinggi agar terbaca di HP.
-- Ukuran tiap SVG ±5.000–10.000 karakter.`;
-const POSTER_SCHEMA = {
-  type: 'object',
-  properties: {
-    posters: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { title: { type: 'string' }, svg: { type: 'string' } },
-        required: ['title', 'svg'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ['posters'],
-  additionalProperties: false,
-};
-
-// SVG dari model dibersihkan sebelum disimpan: tanpa script, event handler, gambar & tautan luar
-function cleanSvg(raw: string) {
-  let s = String(raw || '').trim();
-  const start = s.indexOf('<svg');
-  const end = s.lastIndexOf('</svg>');
-  if (start < 0 || end < start) return null;
-  s = s.slice(start, end + 6);
-  s = s
-    .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
-    .replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, '')
-    .replace(/<(image|use|a|iframe|object|embed)\b[\s\S]*?(\/>|<\/\1\s*>)/gi, '')
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
-    .replace(/\s(xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*')/gi, '')
-    .replace(/url\(\s*['"]?(?!#)[^)]*\)/gi, 'none')
-    .replace(/javascript:/gi, '')
-    .replace(/@import[^;]*;?/gi, '')
-    // "&" mentah membuat SVG tidak valid (gambar gagal tampil)
-    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
-  if (!/xmlns=/.test(s.slice(0, 200))) s = s.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-  return s.length > 300 && s.length < 200000 ? s : null;
-}
-
-async function makePosters(client: Anthropic, request: string, items: { nick: string; short: string; result: string }[]) {
-  const res = await client.messages.create({
-    model: REPORT_MODEL,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    // deno-lint-ignore no-explicit-any
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: POSTER_SCHEMA } } as any,
-    system: POSTER_PROMPT,
-    messages: [{ role: 'user', content: `Permintaan pengguna: ${request || '-'}\n\nHASIL TIM (brief):\n${items.map((i) => `### ${i.nick} — ${i.short}\n${i.result.slice(0, 5000)}`).join('\n\n')}` }],
-  });
-  const text = res.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { text: string }).text)
-    .join('');
-  const parsed = JSON.parse(text) as { posters?: { title: string; svg: string }[] };
-  return (parsed.posters || [])
-    .slice(0, 3)
-    .map((p) => ({ title: String(p.title || 'Poster').slice(0, 80), svg: cleanSvg(p.svg) }))
-    .filter((p) => p.svg) as { title: string; svg: string }[];
+// poster laporan dibuat Studio Pixel (_shared/studio.ts), tanpa foto AI supaya laporan tetap cepat & murah
+async function makePosters(client: Anthropic, request: string, items: { nick: string; short: string; result: string }[]): Promise<Poster[]> {
+  const brief = `Permintaan pengguna: ${request || '-'}\n\nHASIL TIM (brief):\n${items.map((i) => `### ${i.nick} — ${i.short}\n${i.result.slice(0, 5000)}`).join('\n\n')}`;
+  return (await designPosters(client, { brief, count: 2, photo: false })).posters;
 }
 
 const slugify = (s: string) =>
@@ -383,12 +321,13 @@ async function queenReport(id: string) {
     .maybeSingle();
   if (!d) return;
   const [{ data: tasks }, { data: prof }, { data: agents }] = await Promise.all([
-    admin.from('hc_plan_tasks').select('id, title, who, result, result_at').in('id', d.task_ids),
+    admin.from('hc_plan_tasks').select('id, title, who, result, result_at, result_files').in('id', d.task_ids),
     admin.from('hc_profiles').select('name').eq('id', d.user_id).maybeSingle(),
     admin.from('hc_agent_prompts').select('agent_id, nick'),
   ]);
   const nicks = Object.fromEntries((agents ?? []).map((g: { agent_id: string; nick: string }) => [g.agent_id, g.nick]));
-  const items = (tasks ?? []).map((t: { id: string; title: string; who: string; result: string | null }) => {
+  type TaskFile = { path?: string; name?: string; type?: string; size?: number };
+  const items = (tasks ?? []).map((t: { id: string; title: string; who: string; result: string | null; result_files: TaskFile[] | null }) => {
     const nick = nicks[t.who] || t.who;
     return { ...t, nick, short: t.title.startsWith(`${nick}: `) ? t.title.slice(nick.length + 2) : t.title, result: String(t.result || '') };
   });
@@ -398,7 +337,8 @@ async function queenReport(id: string) {
   // rekap oleh Claude; kalau gagal, rekap sederhana tetap dikirim
   let recap = '';
   let posters: { title: string; svg: string }[] = [];
-  const wantPosters = items.some((i) => i.who === 'visual') || VISUAL_RE.test(String(d.request || ''));
+  const taskImages = items.flatMap((i) => (Array.isArray(i.result_files) ? i.result_files : []).filter((f) => f?.path && String(f.type || '').startsWith('image/')));
+  const wantPosters = !taskImages.length && (items.some((i) => i.who === 'visual') || VISUAL_RE.test(String(d.request || '')));
   if (apiKey) {
     const client = new Anthropic({ apiKey });
     const posterJob = wantPosters
@@ -434,7 +374,8 @@ async function queenReport(id: string) {
   if (!recap) {
     recap = `Semua tugas sudah selesai, ${name}! 🐝\n\n${items.map((i) => `- **${i.nick}**: ${i.short}`).join('\n')}\n\nHasil lengkap ada di lampiran.`;
   }
-  if (posters.length) recap += `\n\n🎨 ${posters.length} desain poster siap pakai ada di lampiran: klik untuk melihat dan unduh sebagai PNG.`;
+  const designs = posters.length + taskImages.length;
+  if (designs) recap += `\n\n🎨 ${designs} desain siap pakai ada di lampiran: klik untuk melihat dan unduh sebagai PNG.`;
 
   // lampiran: laporan lengkap + hasil tiap agent (.md) di folder milik pengguna
   const base = `${d.user_id}/laporan/${d.id}`;
@@ -455,6 +396,7 @@ async function queenReport(id: string) {
     else files.push({ path, name: doc.name, type: 'text/markdown', size: bytes.length });
   }
 
+  for (const f of taskImages.slice(0, 6)) files.push({ path: String(f.path), name: String(f.name || 'Desain'), type: String(f.type), size: Number(f.size) || 0 });
   for (const [n, p] of posters.entries()) {
     const bytes = new TextEncoder().encode(p.svg);
     const path = `${base}/poster-${n + 1}.svg`;
@@ -548,6 +490,18 @@ Deno.serve(async (req) => {
       const did = String(b?.delegation_id ?? '');
       if (!/^[0-9a-f-]{36}$/i.test(did)) return json({ error: 'bad_request' }, 400);
       background(queenReport(did).catch((e) => console.error('queen_report', String(e))));
+      return json({ ok: true, queued: true }, 202);
+    }
+    if (b?.action === 'studio') {
+      const tid = String(b?.task_id ?? '');
+      if (!/^[0-9a-f-]{36}$/i.test(tid)) return json({ error: 'bad_request' }, 400);
+      if (!apiKey) return json({ error: 'claude_not_configured' }, 503);
+      background(
+        runStudio(admin, new Anthropic({ apiKey }), tid, String(b?.detail ?? '').slice(0, 8000)).catch(async (e) => {
+          console.error('studio', String(e));
+          await settleTask(admin, { taskId: tid, outcome: 'failed', result: 'Studio Pixel gagal membuat desain. Coba lagi nanti.' });
+        }),
+      );
       return json({ ok: true, queued: true }, 202);
     }
     if (b?.action === 'grok_delegate') {

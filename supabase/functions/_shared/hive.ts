@@ -80,6 +80,32 @@ pct adalah 0-100. Ini tidak menutup tugas.
 - Jangan mengirim [[DONE]] kosong atau yang hanya berisi janji.
 - Kalau payload berisi objek task (id, callback_url, token), kamu juga boleh POST JSON ke callback_url: {"action":"task_update","task_id","token","status":"progress"|"done"|"failed","progress":0.4,"note":"...","result":"...","files":[{"url":"https://...","name":"poster.png","type":"image/png"}]}. status done tanpa result ditolak dan tugas menjadi gagal, bukan selesai.`;
 
+// Pixel tidak bisa membuat file gambar sendiri: tugas visualnya dikerjakan Studio Pixel di server.
+export const STUDIO_AGENT = 'visual';
+const STUDIO_RE = /gambar|poster|desain|design|visual|banner|flyer|feed|instagram|\big\b|story|reels|thumbnail|render|logo|ilustrasi|foto|mockup|konten|carousel/i;
+export const isStudioTask = (agent: string, text: string) => agent === STUDIO_AGENT && STUDIO_RE.test(text);
+export const STUDIO_GROK_RULES = `STUDIO PIXEL (wajib):
+- File gambar/poster/desain dibuat otomatis oleh Studio Pixel di server dari kartu tugas, termasuk logo/gambar yang dilampirkan pengguna di chat ini (ditempel asli).
+- Untuk permintaan gambar: kalau brief sudah cukup (atau pengguna menyetujui konsep), langsung akhiri jawaban dengan [[COMMIT]] berisi brief lengkap: ukuran, semua teks persis (judul, subjudul, lokasi, tanggal, CTA), gaya, warna, posisi logo.
+- Jangan bilang kamu tidak bisa merender atau membaca lampiran, dan jangan menulis seolah gambar sudah jadi. Katakan desainnya sedang dibuat Studio Pixel dan hasilnya otomatis muncul di chat ini.`;
+
+// tugas visual Pixel dijalankan di invocation agent-chat tersendiri (waktu jalan penuh untuk desain & foto)
+async function requestStudio(a: Db, taskId: string, detail: string, nick: string) {
+  try {
+    const { secret } = await n8nConfig(a);
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hive-secret': secret },
+      body: JSON.stringify({ action: 'studio', task_id: taskId, detail }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (r.status !== 202) throw new Error(`studio_http_${r.status}`);
+  } catch (e) {
+    console.error('studio', String(e));
+    await settleTask(a, { taskId, outcome: 'failed', result: `Studio ${nick} tidak bisa dimulai. Coba lagi nanti.` });
+  }
+}
+
 export async function dispatchGrok(o: {
   agent: string;
   threadId: string;
@@ -93,7 +119,8 @@ export async function dispatchGrok(o: {
 }) {
   const creds = grokCredentials(o.agent);
   if (!creds) throw new Error('grokbot_not_configured');
-  const persona = o.agent === 'ceo' ? o.persona || '' : `${o.persona || ''}\n\n${GROK_TASK_RULES}`;
+  const persona =
+    o.agent === 'ceo' ? o.persona || '' : `${o.persona || ''}\n\n${GROK_TASK_RULES}${o.agent === STUDIO_AGENT ? `\n\n${STUDIO_GROK_RULES}` : ''}`;
   const r = await fetch(creds.url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
@@ -311,6 +338,11 @@ export async function startAgentTask(
   if (error || !t) throw new Error('db_error');
   await a.from('hc_task_callbacks').insert({ task_id: t.id });
   await a.from('hc_activity').insert({ kind: 'task', dept: o.dept, text: o.activity.slice(0, 280) });
+
+  if (isStudioTask(o.agent, `${o.title}\n${o.detail}`)) {
+    background(requestStudio(a, t.id, o.detail, o.nick));
+    return t.id as string;
+  }
 
   if (!grok) {
     background(runWorker(a, { agent: o.agent, nick: o.nick, title: o.title, detail: o.detail, taskId: t.id, caller: o.caller }));
