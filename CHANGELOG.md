@@ -4,6 +4,13 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 15 Oktober 2026
 
+### Gambar Pixel dari Grok Bot (Studio Pixel dimatikan)
+- Sesuai keputusan owner, gambar Pixel dibuat **Grok Bot sendiri**. Tugas visual Pixel kembali ke Grok Bot; Studio Pixel dan rencana `XAI_API_KEY` di Supabase dihapus (kunci xAI cukup di bot).
+- **Gambar dari bot otomatis tersimpan**: setiap file berupa URL https di balasan bot (`meta.files`) atau di callback `task_update` diunduh server dan disimpan ke bucket `hc-agent-files`, jadi tampil sebagai pratinjau, bisa diperbesar & **Unduh PNG**, dan tidak hilang walau URL bot kedaluwarsa. Trigger `hc_agent_task_reply` juga memproses pesan bot yang membawa file (migrasi `20261015090000_hc_grok_reply_files.sql`).
+- **Lampiran pengguna ikut ke bot**: payload Grok Bot sekarang berisi `files: [{name, type, url}]` (tautan sementara) untuk lampiran pesan, dan untuk tugas berisi gambar dari percakapan asal (mis. logo).
+- Aturan file ditambahkan ke persona yang dikirim ke bot. Spesifikasi untuk pengelola bot: `docs/GROKBOT-GAMBAR.md`.
+- Poster SVG di laporan Queen tetap ada hanya untuk paket visual yang tidak menghasilkan gambar dari agent.
+
 ### Studio Pixel: Pixel benar-benar mengirim gambar (`f95fed7`)
 - Grok Bot hanya bisa membalas teks, jadi Pixel sebelumnya menjanjikan "render" tanpa pernah mengirim file, dan logo yang dilampirkan tidak terbaca.
 - Sekarang setiap **tugas visual Pixel** (dari chat lewat `[[COMMIT]]`, ✅ Jadikan tugas, tugas rutin, atau delegasi Queen) dikerjakan **Studio Pixel** di server (`supabase/functions/_shared/studio.ts`, aksi `studio` di `agent-chat`). Hasilnya **2 varian poster** dalam ukuran yang diminta (feed 1080×1350, persegi, story, banner) dan langsung muncul di chat Pixel sebagai gambar yang bisa diunduh PNG.

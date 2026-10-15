@@ -910,7 +910,7 @@ export function AgentWorkspace({ agentId }) {
                           <>
                             <p>{m.content}</p>
                             <ImageThumbs files={m.meta?.files} onOpen={setViewer} />
-                            <FileChips files={m.meta?.files} onOpen={(f) => f.path && setViewer(f)} />
+                            <FileChips files={m.meta?.files} onOpen={(f) => (f.path ? setViewer(f) : f.url && window.open(f.url, '_blank', 'noopener'))} />
                           </>
                         )}
                         {m.meta?.delegated?.length > 0 && (

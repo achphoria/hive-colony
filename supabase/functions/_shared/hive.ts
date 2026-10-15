@@ -80,30 +80,81 @@ pct adalah 0-100. Ini tidak menutup tugas.
 - Jangan mengirim [[DONE]] kosong atau yang hanya berisi janji.
 - Kalau payload berisi objek task (id, callback_url, token), kamu juga boleh POST JSON ke callback_url: {"action":"task_update","task_id","token","status":"progress"|"done"|"failed","progress":0.4,"note":"...","result":"...","files":[{"url":"https://...","name":"poster.png","type":"image/png"}]}. status done tanpa result ditolak dan tugas menjadi gagal, bukan selesai.`;
 
-// Pixel tidak bisa membuat file gambar sendiri: tugas visualnya dikerjakan Studio Pixel di server.
-export const STUDIO_AGENT = 'visual';
-const STUDIO_RE = /gambar|poster|desain|design|visual|banner|flyer|feed|instagram|\big\b|story|reels|thumbnail|render|logo|ilustrasi|foto|mockup|konten|carousel/i;
-export const isStudioTask = (agent: string, text: string) => agent === STUDIO_AGENT && STUDIO_RE.test(text);
-export const STUDIO_GROK_RULES = `STUDIO PIXEL (wajib):
-- File gambar/poster/desain dibuat otomatis oleh Studio Pixel di server dari kartu tugas, termasuk logo/gambar yang dilampirkan pengguna di chat ini (ditempel asli).
-- Untuk permintaan gambar: kalau brief sudah cukup (atau pengguna menyetujui konsep), langsung akhiri jawaban dengan [[COMMIT]] berisi brief lengkap: ukuran, semua teks persis (judul, subjudul, lokasi, tanggal, CTA), gaya, warna, posisi logo.
-- Jangan bilang kamu tidak bisa merender atau membaca lampiran, dan jangan menulis seolah gambar sudah jadi. Katakan desainnya sedang dibuat Studio Pixel dan hasilnya otomatis muncul di chat ini.`;
+// Gambar/file dari Grok Bot: bot membuat sendiri lalu mengirim URL-nya; Hive menyalinnya ke bucket (URL bot bisa kedaluwarsa).
+export const GROK_FILE_RULES = `GAMBAR & FILE (wajib):
+- Kalau diminta gambar/poster/desain, buat gambarnya dengan alat gambarmu, lalu kirim filenya; jangan hanya menjelaskan konsep.
+- Lampiran pengguna (mis. logo) ada di payload files: [{name, type, url}] (tautan sementara). Pakai lampiran itu apa adanya kalau diminta, misalnya logo ditempel ke poster.
+- Kirim file sebagai daftar files: [{"url":"https://...","name":"poster-stage-iii.png","type":"image/png"}], di meta.files pesan balasanmu atau di callback task_update (status "done"). URL harus https dan bisa diunduh tanpa login. Hive menyalin file itu, jadi URL sementara tidak masalah.
+- Jangan menulis seolah gambar sudah jadi kalau files kosong. Tugas gambar yang ditutup tanpa file dianggap gagal.`;
 
-// tugas visual Pixel dijalankan di invocation agent-chat tersendiri (waktu jalan penuh untuk desain & foto)
-async function requestStudio(a: Db, taskId: string, detail: string, nick: string) {
-  try {
-    const { secret } = await n8nConfig(a);
-    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-hive-secret': secret },
-      body: JSON.stringify({ action: 'studio', task_id: taskId, detail }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (r.status !== 202) throw new Error(`studio_http_${r.status}`);
-  } catch (e) {
-    console.error('studio', String(e));
-    await settleTask(a, { taskId, outcome: 'failed', result: `Studio ${nick} tidak bisa dimulai. Coba lagi nanti.` });
+type ResultFile = { path?: string; url?: string; name?: string; type?: string; size?: number };
+const BUCKET = 'hc-agent-files';
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+const IMPORT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'];
+const PRIVATE_HOST = /^(localhost|127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
+const EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'application/pdf': 'pdf' };
+
+function sniffType(b: Uint8Array) {
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e) return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) return 'image/webp';
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
+  return '';
+}
+
+// File berupa URL (dari bot) diunduh & disimpan di bucket supaya tampil di Ruang Kerja dan tidak kedaluwarsa.
+// Yang gagal diunduh tetap dibiarkan sebagai URL.
+export async function importFiles(a: Db, raw: unknown, folder: string) {
+  const list = normalizeFiles(raw) as ResultFile[];
+  const out: ResultFile[] = [];
+  for (const [n, f] of list.entries()) {
+    if (f.path || !f.url) {
+      out.push(f);
+      continue;
+    }
+    try {
+      const u = new URL(f.url);
+      if (u.protocol !== 'https:' || PRIVATE_HOST.test(u.hostname)) throw new Error('blocked_url');
+      const r = await fetch(u.href, { signal: AbortSignal.timeout(30000) });
+      if (!r.ok) throw new Error(`http_${r.status}`);
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (!buf.length || buf.length > MAX_IMPORT_BYTES) throw new Error('bad_size');
+      const header = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      const type = IMPORT_TYPES.includes(header) ? header : sniffType(buf);
+      if (!type) throw new Error(`bad_type_${header}`);
+      const path = `${folder}/${Date.now()}-${n + 1}.${EXT[type]}`;
+      const { error } = await a.storage.from(BUCKET).upload(path, new Blob([buf], { type }), { contentType: type, upsert: true });
+      if (error) throw new Error(error.message);
+      const base = String(f.name || 'gambar').replace(/\.[a-z0-9]{2,5}$/i, '');
+      out.push({ path, name: `${base}.${EXT[type]}`.slice(0, 120), type, size: buf.length });
+    } catch (e) {
+      console.error('import file', String(e));
+      out.push(f);
+    }
   }
+  return out;
+}
+
+// lampiran untuk bot: tautan sementara (bucket privat), mis. logo yang dipakai bot saat membuat gambar
+type SharedFile = { name: string; type: string; url: string };
+export async function signedFiles(a: Db, files: { path?: string; name?: string; type?: string }[], seconds = 3600) {
+  const out: SharedFile[] = [];
+  for (const f of files.slice(0, 6)) {
+    if (!f?.path) continue;
+    const { data } = await a.storage.from(BUCKET).createSignedUrl(f.path, seconds);
+    if (data?.signedUrl) out.push({ name: String(f.name || 'lampiran'), type: String(f.type || ''), url: data.signedUrl });
+  }
+  return out;
+}
+// gambar yang dilampirkan pengguna di percakapan asal tugas (terbaru dulu, maks. 3)
+async function threadImages(a: Db, threadId: string) {
+  const { data } = await a.from('hc_agent_messages').select('meta').eq('thread_id', threadId).eq('role', 'user').order('created_at', { ascending: false }).limit(16);
+  const imgs = (data ?? [])
+    .flatMap((m: { meta: { files?: ResultFile[] } | null }) => m.meta?.files || [])
+    .filter((f: ResultFile) => f.path && String(f.type || '').startsWith('image/'))
+    .slice(0, 3);
+  return signedFiles(a, imgs, 24 * 3600);
 }
 
 export async function dispatchGrok(o: {
@@ -116,11 +167,12 @@ export async function dispatchGrok(o: {
   persona: string;
   context?: string;
   task?: { id: string; callback_url: string; token: string };
+  files?: SharedFile[];
 }) {
   const creds = grokCredentials(o.agent);
   if (!creds) throw new Error('grokbot_not_configured');
   const persona =
-    o.agent === 'ceo' ? o.persona || '' : `${o.persona || ''}\n\n${GROK_TASK_RULES}${o.agent === STUDIO_AGENT ? `\n\n${STUDIO_GROK_RULES}` : ''}`;
+    o.agent === 'ceo' ? `${o.persona || ''}\n\n${GROK_FILE_RULES}` : `${o.persona || ''}\n\n${GROK_TASK_RULES}\n\n${GROK_FILE_RULES}`;
   const r = await fetch(creds.url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${creds.token}`, 'Content-Type': 'application/json' },
@@ -134,6 +186,7 @@ export async function dispatchGrok(o: {
       persona,
       ...(o.context ? { context: o.context } : {}),
       ...(o.task ? { task: o.task } : {}),
+      ...(o.files?.length ? { files: o.files } : {}), // lampiran pengguna: [{ name, type, url }] (tautan sementara)
     }),
     signal: AbortSignal.timeout(15000),
   });
@@ -178,7 +231,6 @@ export async function busyTask(a: Db, agent: string) {
   return data as { id: string; title: string; created_by: string | null; progress: number | null; progress_note: string | null } | null;
 }
 
-type ResultFile = { path?: string; url?: string; name?: string; type?: string; size?: number };
 
 async function posted(a: Db, threadId: string, taskId: string, kind: string) {
   const { data } = await a.from('hc_agent_messages').select('id').eq('thread_id', threadId).eq('meta->>task_id', taskId).eq('meta->>kind', kind).limit(1);
@@ -237,7 +289,7 @@ export async function settleTask(a: Db, o: { taskId: string; outcome: 'done' | '
     const { data: src } = await a.from('hc_agent_messages').select('thread_id').eq('id', o.sourceMessageId).maybeSingle();
     skipThread = src?.thread_id ?? null;
   }
-  const files = normalizeFiles(o.files ?? []);
+  const files = await importFiles(a, o.files ?? [], `${task.created_by || 'grok'}/grok/${task.id}`);
   const text = String(o.result || '').trim().slice(0, 20000);
   const real = o.outcome === 'done' && hasRealOutput(text, files);
   if (task.col === 'done' && hasRealOutput(String(task.result || ''), task.result_files) && !real) {
@@ -339,11 +391,6 @@ export async function startAgentTask(
   await a.from('hc_task_callbacks').insert({ task_id: t.id });
   await a.from('hc_activity').insert({ kind: 'task', dept: o.dept, text: o.activity.slice(0, 280) });
 
-  if (isStudioTask(o.agent, `${o.title}\n${o.detail}`)) {
-    background(requestStudio(a, t.id, o.detail, o.nick));
-    return t.id as string;
-  }
-
   if (!grok) {
     background(runWorker(a, { agent: o.agent, nick: o.nick, title: o.title, detail: o.detail, taskId: t.id, caller: o.caller }));
     return t.id as string;
@@ -365,6 +412,7 @@ export async function startAgentTask(
   const persona = await compiledPrompt(a, o.agent);
   const { data: prof } = userId ? await a.from('hc_profiles').select('name').eq('id', userId).maybeSingle() : { data: null };
   const task = await callbackFor(a, t.id);
+  const files = o.sourceThreadId ? await threadImages(a, o.sourceThreadId) : [];
   background(
     dispatchGrok({
       agent: o.agent,
@@ -375,6 +423,7 @@ export async function startAgentTask(
       history: [],
       persona,
       ...(task ? { task } : {}),
+      files,
     }).catch(async (e) => {
       if (String(e).includes('grokbot_not_configured')) {
         console.warn('grok secrets missing, fallback n8n', o.agent);

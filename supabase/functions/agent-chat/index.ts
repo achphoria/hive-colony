@@ -14,7 +14,6 @@
 //   POST { action: 'grok_delegate', message_id } + x-hive-secret  -> 202          (balasan Queen mode Grok berisi [[DELEGATE]])
 //   POST { action: 'usage' }                                      -> { used, limit } (kuota pesan harian saya)
 //   POST { action: 'queen_report', delegation_id } + x-hive-secret -> 202         (semua tugas paket Queen selesai: rekap + lampiran)
-//   POST { action: 'studio', task_id, detail } + x-hive-secret     -> 202         (tugas visual Pixel: Studio membuat poster + logo asli + foto AI opsional)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { QUEEN_PERSONA } from '../_shared/queenPersona.ts';
@@ -42,10 +41,12 @@ import {
   releaseStaleTasks,
   settleTask,
   touchTaskProgress,
+  importFiles,
+  signedFiles,
   type Db,
 } from '../_shared/hive.ts';
 import { classifyTaskReply, isEmptyPromise, parseCommit, stripMachineBlocks } from '../_shared/taskProtocol.js';
-import { designPosters, runStudio, type Poster } from '../_shared/studio.ts';
+import { designPosters, type Poster } from '../_shared/studio.ts';
 
 const MAX_HISTORY = 10; // pesan sebelumnya yang ikut dikirim
 const MAX_MESSAGE = 4000;
@@ -207,7 +208,13 @@ async function grokReply(messageId: number) {
   const { data: m } = await admin.from('hc_agent_messages').select('id, thread_id, role, content, meta').eq('id', messageId).maybeSingle();
   if (!m || m.role !== 'agent' || m.meta?.skip) return;
   const { data: t } = await admin.from('hc_agent_threads').select('id, agent_id, user_id, task_id').eq('id', m.thread_id).maybeSingle();
-  if (!t || t.agent_id === 'ceo') return;
+  if (!t) return;
+  // gambar/file dari bot (URL) disalin ke bucket supaya tampil & tidak kedaluwarsa
+  if (Array.isArray(m.meta?.files) && m.meta.files.some((f: { url?: string; path?: string }) => f?.url && !f?.path)) {
+    m.meta = { ...m.meta, files: await importFiles(admin, m.meta.files, `${t.user_id}/grok/${t.id}`) };
+    await admin.from('hc_agent_messages').update({ meta: m.meta }).eq('id', m.id);
+  }
+  if (t.agent_id === 'ceo') return;
   const { nick } = await nickOf(t.agent_id);
   if (t.task_id) {
     const c = classifyTaskReply(String(m.content), m.meta || {});
@@ -492,18 +499,6 @@ Deno.serve(async (req) => {
       background(queenReport(did).catch((e) => console.error('queen_report', String(e))));
       return json({ ok: true, queued: true }, 202);
     }
-    if (b?.action === 'studio') {
-      const tid = String(b?.task_id ?? '');
-      if (!/^[0-9a-f-]{36}$/i.test(tid)) return json({ error: 'bad_request' }, 400);
-      if (!apiKey) return json({ error: 'claude_not_configured' }, 503);
-      background(
-        runStudio(admin, new Anthropic({ apiKey }), tid, String(b?.detail ?? '').slice(0, 8000)).catch(async (e) => {
-          console.error('studio', String(e));
-          await settleTask(admin, { taskId: tid, outcome: 'failed', result: 'Studio Pixel gagal membuat desain. Coba lagi nanti.' });
-        }),
-      );
-      return json({ ok: true, queued: true }, 202);
-    }
     if (b?.action === 'grok_delegate') {
       const mid = Number(b?.message_id);
       if (!Number.isInteger(mid)) return json({ error: 'bad_request' }, 400);
@@ -674,7 +669,8 @@ Deno.serve(async (req) => {
         const { data: meFull } = await sb.from('hc_profiles').select('name, role, primary_dept').eq('id', uid).maybeSingle();
         context = [await colonyData(sb, meFull || { ...me, primary_dept: '-' }, admin, uid), teamBlock(await loadAgents(admin)), me.role === 'viewer' ? 'Pengguna ini viewer: jangan mendelegasikan tugas.' : GROK_DELEGATE_GUIDE].join('\n\n');
       }
-      await dispatchGrok({ agent, threadId, message: full, userName: me.name, messageId: userMsg?.id ?? null, history, persona, context });
+      const shared = files.length ? await signedFiles(admin, files) : [];
+      await dispatchGrok({ agent, threadId, message: full, userName: me.name, messageId: userMsg?.id ?? null, history, persona, context, files: shared });
       await admin.from('hc_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', threadId);
       return json({ thread_id: threadId, reply: '', status: 'pending', meta: { engine: 'grokbot' }, quota: quotaAfter });
     } catch (e) {

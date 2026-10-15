@@ -18,25 +18,27 @@ function save(href, name) {
 
 // pratinjau kecil gambar/poster langsung di dalam pesan
 export function ImageThumbs({ files, onOpen }) {
-  const imgs = (files || []).filter((f) => f.path && isImage(f));
+  const imgs = (files || []).filter((f) => (f.path || f.url) && isImage(f));
   const [urls, setUrls] = useState({});
   useEffect(() => {
     let alive = true;
     imgs.forEach((f) =>
-      fileUrl(f.path).then((u) => {
-        if (alive && u) setUrls((m) => ({ ...m, [f.path]: u }));
-      }),
+      f.path
+        ? fileUrl(f.path).then((u) => {
+            if (alive && u) setUrls((m) => ({ ...m, [f.path]: u }));
+          })
+        : setUrls((m) => ({ ...m, [f.url]: f.url })),
     );
     return () => {
       alive = false;
     };
-  }, [imgs.map((f) => f.path).join('|')]);
+  }, [imgs.map((f) => f.path || f.url).join('|')]);
   if (!imgs.length) return null;
   return (
     <div className="fv-thumbs">
       {imgs.map((f) => (
-        <button key={f.path} onClick={() => onOpen(f)} title={f.name}>
-          {urls[f.path] ? <img src={urls[f.path]} alt={f.name} loading="lazy" /> : <span>Memuat…</span>}
+        <button key={f.path || f.url} onClick={() => (f.path ? onOpen(f) : window.open(f.url, '_blank', 'noopener'))} title={f.name}>
+          {urls[f.path || f.url] ? <img src={urls[f.path || f.url]} alt={f.name} loading="lazy" /> : <span>Memuat…</span>}
         </button>
       ))}
     </div>
