@@ -4,7 +4,7 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 15 Oktober 2026
 
-### Gambar Pixel dari Grok Bot (Studio Pixel dimatikan)
+### Gambar Pixel dari Grok Bot (Studio Pixel dimatikan) (`8bf13dc`)
 - Sesuai keputusan owner, gambar Pixel dibuat **Grok Bot sendiri**. Tugas visual Pixel kembali ke Grok Bot; Studio Pixel dan rencana `XAI_API_KEY` di Supabase dihapus (kunci xAI cukup di bot).
 - **Gambar dari bot otomatis tersimpan**: setiap file berupa URL https di balasan bot (`meta.files`) atau di callback `task_update` diunduh server dan disimpan ke bucket `hc-agent-files`, jadi tampil sebagai pratinjau, bisa diperbesar & **Unduh PNG**, dan tidak hilang walau URL bot kedaluwarsa. Trigger `hc_agent_task_reply` juga memproses pesan bot yang membawa file (migrasi `20261015090000_hc_grok_reply_files.sql`).
 - **Lampiran pengguna ikut ke bot**: payload Grok Bot sekarang berisi `files: [{name, type, url}]` (tautan sementara) untuk lampiran pesan, dan untuk tugas berisi gambar dari percakapan asal (mis. logo).
