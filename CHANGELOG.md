@@ -4,7 +4,7 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 15 Oktober 2026
 
-### Studio Pixel: Pixel benar-benar mengirim gambar
+### Studio Pixel: Pixel benar-benar mengirim gambar (`f95fed7`)
 - Grok Bot hanya bisa membalas teks, jadi Pixel sebelumnya menjanjikan "render" tanpa pernah mengirim file, dan logo yang dilampirkan tidak terbaca.
 - Sekarang setiap **tugas visual Pixel** (dari chat lewat `[[COMMIT]]`, ✅ Jadikan tugas, tugas rutin, atau delegasi Queen) dikerjakan **Studio Pixel** di server (`supabase/functions/_shared/studio.ts`, aksi `studio` di `agent-chat`). Hasilnya **2 varian poster** dalam ukuran yang diminta (feed 1080×1350, persegi, story, banner) dan langsung muncul di chat Pixel sebagai gambar yang bisa diunduh PNG.
 - **Logo/gambar yang dilampirkan pengguna ditempel asli**, tidak digambar ulang AI; logo yang kurang kontras diberi pelat latar. Teks memakai kalimat persis dari brief.
