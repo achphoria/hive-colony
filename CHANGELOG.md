@@ -4,6 +4,15 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 20 Oktober 2026
 
+### Workshop: istilah "tiket" dan tampilan baru
+- Istilah **paket** diganti **tiket** di seluruh Workshop. Tiket bernomor (#1, #2, …) dan bisa dibuka langsung lewat `#/workshop/<nomor>`.
+- Tata letak baru: **daftar tiket** di kiri (saring Semua/Berjalan/Selesai, cari nomor/judul, progres & agent tiap tiket), **Ringkasan koloni** (form tiket baru, angka ringkas, peta koloni dengan legenda) atau **detail tiket** di kanan.
+- Detail tiket: kepala tiket (nomor, status, dibuat, durasi, tugas, tim, progres) dan tab **Rapat** (chat Queen + penugasan), **Kerja** (papan Antre/Bekerja/Selesai/Gagal), **Laporan** (angka, rekap Queen, hasil per agent, lampiran).
+- **Chat Queen** pindah ke laci samping untuk pertanyaan yang tidak membuat tiket.
+- Progres tidak lagi menghitung tugas gagal sebagai kemajuan.
+- Di HP: daftar tiket di bawah form, detail tiket punya tombol "← Semua tiket", peta disembunyikan.
+
+
 ### Hive Colony 2.0: Workshop (`#/workshop`)
 - Halaman baru **Workshop** (tombol 🛠 di rak alat koloni): panggung kerja tim ala Agent Hub dengan tim, login, dan database Hive Colony sendiri. Tidak terhubung ke Agent Hub.
 - Empat babak: **Siaga** (peta koloni: Queen Bea di tengah, 7 divisi, 20 agent; lebah menyala saat bekerja, pudar kalau belum tersambung AI), **Rapat** (chat dengan Queen Bea + rancangan paket), **Kerja** (paket berjalan: roda progres, kartu tugas per agent, peta mini), **Laporan** (rekap Queen, hasil & lampiran per agent, waktu kerja, tugas gagal).

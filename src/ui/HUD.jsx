@@ -736,7 +736,7 @@ function ToolRail({ className = 'panel tool-rail', onPick }) {
         <span aria-hidden="true">⚡</span>
         <em>{saver ? 'Hemat aktif' : 'Mode hemat'}</em>
       </button>
-      {tool('🛠', 'Workshop', () => go('/workshop'), 'Panggung kerja tim: paket kerja Queen Bea, dari rapat sampai laporan')}
+      {tool('🛠', 'Workshop', () => go('/workshop'), 'Meja kerja tim: tiket untuk Queen Bea, dari rapat sampai laporan')}
       {owner && tool('📊', 'Statistik', () => go('/statistik'))}
       {tool('🎬', 'Intro', () => go('/intro'), 'Video perkenalan Hive Colony (±75 detik), siap direkam')}
       {tool('📺', 'Mode TV', () => go('/tv'), 'Mode spectator untuk layar besar')}
