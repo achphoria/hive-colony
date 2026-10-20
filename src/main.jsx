@@ -8,6 +8,7 @@ import './hall/hall2.css';
 import './ui/agents.css';
 import './ui/intro.css';
 import './ui/workshop.css';
+import './ui/video.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
