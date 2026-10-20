@@ -16,6 +16,7 @@ import { MeetingView } from '../hall/MeetingView';
 import { ReportView } from '../hall/ReportView';
 import { ChiefView } from '../hall/ChiefView';
 import { ArchiveView } from '../hall/ArchiveView';
+import { MeetingCalendar } from '../hall/MeetingCalendar';
 
 function useActionError() {
   const [msg, setMsg] = useState('');
@@ -464,7 +465,7 @@ export function HallView() {
         <div className="hall-inner wide">
           {head}
           {tab === 'rencana' && <PlanBoard />}
-          {tab === 'kalender' && <CalendarMonth />}
+          {tab === 'kalender' && (account ? <MeetingCalendar onArchive={() => setTab('arsip')} /> : <CalendarMonth />)}
           {tab === 'persetujuan' && <Approvals />}
           {tab === 'arsip' && <ArchiveView />}
           {tab === 'lobi' && mode === 'meeting' && <MeetingView onLeave={() => setMode('lobby')} onReport={() => setMode('report')} />}

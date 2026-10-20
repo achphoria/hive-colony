@@ -15,6 +15,9 @@
 //        -> (sesi penerima baru bila belum ada) + pull track: { sessionId, token, offer, tracks }
 //   { action: 'renegotiate', meeting_id, sessionId, token, answer } -> { ok }
 //   { action: 'close', meeting_id, sessionId, token, mids, offer? } -> { answer?, tracks }
+//   { action: 'update', meeting_id, sessionId, token, tracks: [{ mid, sessionId, trackName, sig, preferredRid }] }
+//        -> ganti lapisan simulcast yang saya terima (tile kecil / koneksi lemah = resolusi turun)
+//   { action: 'kick', meeting_id, user_id }                          -> owner: keluarkan peserta dari rapat
 //
 // Otorisasi tanpa tabel: setiap sesi SFU diberi token HMAC yang terikat ke (user, rapat, sesi). Hanya
 // pemilik token yang bisa mengubah sesinya. Track orang lain hanya bisa di-pull dengan "sig" yang
@@ -23,7 +26,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
 const SFU = Deno.env.get('CLOUDFLARE_REALTIME_API_URL') || 'https://rtc.live.cloudflare.com/v1'; // bisa diganti untuk uji lokal
 const TURN_TTL_SEC = 4 * 60 * 60; // kredensial TURN: rapat terpanjang yang wajar (maks. Cloudflare 48 jam)
-const TRACK_NAMES = /^(mic|cam|screen)$/;
+const TRACK_NAMES = /^(mic|cam|screen)(-[a-z0-9]{1,8})?$/; // share screen ke-n memakai nama baru
+const RIDS = /^[abc]$/; // lapisan simulcast kamera: a = penuh, b = 1/2, c = 1/4
 const SESSION_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_TRACKS = 32;
 const MAX_SDP = 200_000;
@@ -125,12 +129,25 @@ async function handle(req: Request) {
   const { data: meeting } = await sb.from('hc_meetings').select('id, status').eq('id', meetingId).maybeSingle();
   if (!meeting) throw new HttpError(404, 'bad_meeting');
   if (meeting.status !== 'live') throw new HttpError(409, 'meeting_not_live');
+  // peserta yang sudah dikeluarkan host tidak bisa memakai server video lagi di rapat ini
+  const { data: kicked } = await sb.from('hc_meeting_participants').select('presence_key').eq('meeting_id', meetingId).eq('user_id', uid).not('kicked_at', 'is', null).limit(1);
+  if (kicked?.length) throw new HttpError(403, 'kicked');
 
   const own = async () => {
     const sessionId = sessionIdOf(body?.sessionId);
     if (!same(String(body?.token ?? ''), await ownToken(uid, meetingId, sessionId))) throw new HttpError(403, 'not_your_session');
     return sessionId;
   };
+
+  // track remote yang boleh diambil: sig membuktikan sesi publikasinya didaftarkan untuk rapat ini
+  const remote = async (t: { sessionId?: unknown; trackName?: unknown; sig?: unknown }) => {
+    const pub = sessionIdOf(t?.sessionId);
+    if (typeof t?.trackName !== 'string' || !TRACK_NAMES.test(t.trackName)) throw new HttpError(400, 'bad_track');
+    if (!same(String(t?.sig ?? ''), await pubSig(meetingId, pub))) throw new HttpError(403, 'track_not_in_meeting');
+    return { location: 'remote', sessionId: pub, trackName: t.trackName as string };
+  };
+  const simulcast = (rid: unknown) =>
+    typeof rid === 'string' && RIDS.test(rid) ? { simulcast: { preferredRid: rid, priorityOrdering: 'asciibetical', ridNotAvailable: 'asciibetical' } } : {};
 
   switch (body?.action) {
     case 'ice':
@@ -159,13 +176,7 @@ async function handle(req: Request) {
     case 'pull': {
       const list = Array.isArray(body.tracks) ? body.tracks.slice(0, MAX_TRACKS) : [];
       const tracks = [];
-      for (const t of list) {
-        const pub = sessionIdOf(t?.sessionId);
-        if (typeof t?.trackName !== 'string' || !TRACK_NAMES.test(t.trackName)) throw new HttpError(400, 'bad_track');
-        // sig membuktikan sesi publikasi ini didaftarkan untuk rapat yang sama
-        if (!same(String(t?.sig ?? ''), await pubSig(meetingId, pub))) throw new HttpError(403, 'track_not_in_meeting');
-        tracks.push({ location: 'remote', sessionId: pub, trackName: t.trackName });
-      }
+      for (const t of list) tracks.push({ ...(await remote(t)), ...simulcast(t?.preferredRid) });
       if (!tracks.length) throw new HttpError(400, 'bad_track');
       const sessionId = body.sessionId ? await own() : (await sfu('/sessions/new', 'POST')).sessionId;
       const r = await sfu(`/sessions/${sessionId}/tracks/new`, 'POST', { tracks });
@@ -194,6 +205,47 @@ async function handle(req: Request) {
         ...(offer ? { sessionDescription: offer, force: false } : { force: true }),
       });
       return { answer: r.sessionDescription ?? null, tracks: (r.tracks ?? []).map((t: Record<string, unknown>) => ({ mid: t.mid, error: t.errorCode || null })) };
+    }
+
+    case 'update': {
+      const sessionId = await own();
+      const list = Array.isArray(body.tracks) ? body.tracks.slice(0, MAX_TRACKS) : [];
+      const tracks = [];
+      for (const t of list) {
+        if (typeof t?.mid !== 'string' || !/^\w{1,16}$/.test(t.mid) || !RIDS.test(String(t?.preferredRid))) throw new HttpError(400, 'bad_track');
+        tracks.push({ ...(await remote(t)), mid: t.mid, ...simulcast(t.preferredRid) });
+      }
+      if (!tracks.length) return { tracks: [] };
+      const r = await sfu(`/sessions/${sessionId}/tracks/update`, 'PUT', { tracks });
+      return { tracks: (r.tracks ?? []).map((t: Record<string, unknown>) => ({ mid: t.mid, error: t.errorCode || null })) };
+    }
+
+    case 'kick': {
+      if (prof.role !== 'owner') throw new HttpError(403, 'owner_only');
+      const target = String(body?.user_id ?? '');
+      if (!/^[0-9a-f-]{36}$/.test(target) || target === uid) throw new HttpError(400, 'bad_user');
+      const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+      const { data: rows } = await admin
+        .from('hc_meeting_participants')
+        .update({ kicked_at: new Date().toISOString(), left_at: new Date().toISOString() })
+        .eq('meeting_id', meetingId)
+        .eq('user_id', target)
+        .select('pub_session');
+      if (!rows?.length) {
+        // belum pernah tercatat (mis. baru di layar preview): catat supaya tidak bisa masuk
+        await admin.from('hc_meeting_participants').insert({ meeting_id: meetingId, presence_key: `kicked:${target}`, user_id: target, name: 'Dikeluarkan', kicked_at: new Date().toISOString(), left_at: new Date().toISOString() });
+      }
+      // hentikan paksa semua track yang ia publish, supaya peserta lain langsung berhenti menerimanya
+      let closed = 0;
+      for (const r of rows ?? []) {
+        if (!r.pub_session || !SESSION_RE.test(r.pub_session)) continue;
+        const state = await sfu(`/sessions/${r.pub_session}`, 'GET').catch(() => null);
+        const mids = (state?.tracks ?? []).filter((t: { location?: string; status?: string; mid?: string }) => t.location === 'local' && t.status !== 'inactive' && t.mid).map((t: { mid: string }) => ({ mid: t.mid }));
+        if (!mids.length) continue;
+        await sfu(`/sessions/${r.pub_session}/tracks/close`, 'PUT', { tracks: mids, force: true }).catch(() => null);
+        closed += mids.length;
+      }
+      return { ok: true, closed };
     }
 
     default:

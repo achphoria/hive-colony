@@ -10,7 +10,7 @@ import { AccessPage } from './ui/AccessPage';
 import { StatsPage } from './ui/StatsPage';
 import { PortalPage } from './ui/PortalPage';
 import { WorkshopView } from './ui/WorkshopView';
-import { VideoTestPage } from './ui/VideoTestPage';
+import { VideoMeetingPage } from './ui/VideoMeetingPage';
 import { useSaver } from './sim/saver';
 import { startAgentWatch, stopAgentWatch } from './hall/agentApi';
 import { AvatarCreator } from './ui/AvatarCreator';
@@ -127,7 +127,8 @@ export function App() {
   if (route === '/akses') return <AccessPage />;
   if (route === '/statistik') return <StatsPage />;
   if (route === '/saya') return <PortalPage />;
-  if (route === '/video') return <VideoTestPage />;
+  if (route === '/video') return <VideoMeetingPage />;
+  if (route.startsWith('/rapat/')) return <VideoMeetingPage meetingId={route.split('/')[2]} />;
   if (route === '/workshop' || route.startsWith('/workshop/')) return <WorkshopView ticketNo={route.split('/')[2] || null} />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
