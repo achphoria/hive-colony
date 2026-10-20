@@ -1,0 +1,795 @@
+/* ---------- Workshop (#/workshop): panggung kerja ala Agent Hub, bertema madu ---------- */
+.ws-page {
+  background: radial-gradient(120% 80% at 50% 0%, #fff8e7 0%, #ffecc0 60%, #ffe0a0 100%);
+  padding: 12px 16px 28px;
+}
+.ws-page main {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+.ws-top {
+  max-width: 1500px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ws-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  margin-right: auto;
+}
+.ws-brand b {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 22px;
+}
+.ws-brand span {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.ws-acts {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 251, 241, 0.9);
+  border: 1.5px solid #f1dfb4;
+  border-radius: 999px;
+  padding: 4px;
+}
+.ws-act {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-act em {
+  font-style: normal;
+  font-size: 11px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(201, 138, 0, 0.15);
+}
+.ws-act[aria-current='step'] {
+  background: var(--gold);
+  color: var(--ink);
+}
+.ws-act[aria-current='step'] em {
+  background: #fff8e7;
+}
+
+.ws-panel {
+  background: rgba(255, 251, 241, 0.96);
+  border: 1.5px solid #f1dfb4;
+  border-radius: 18px;
+  padding: 14px;
+  min-width: 0;
+}
+.ws-sec {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--royal);
+  margin: 0 0 8px;
+  display: block;
+}
+.ws-sec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ws-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.ws-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  align-items: center;
+}
+.ws-meta b {
+  color: var(--ink);
+}
+.ws-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 8px 0 0;
+}
+.ws-page .btn {
+  border: 1.5px solid var(--line);
+  background: #fffdf7;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ws-page .btn.sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.ws-page .btn.primary {
+  background: var(--gold);
+  border-color: var(--royal);
+}
+.ws-page .btn.ghost {
+  background: transparent;
+}
+.ws-page .btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.ws-link {
+  border: 0;
+  background: none;
+  color: var(--royal);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+.pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: rgba(201, 138, 0, 0.12);
+  white-space: nowrap;
+}
+.pill.st-running,
+.pill.st-approval {
+  background: var(--gold);
+}
+.pill.st-done {
+  background: #8dbf5a;
+  color: #fff;
+}
+.pill.st-revise {
+  background: #d85a30;
+  color: #fff;
+}
+
+/* ---------- Siaga ---------- */
+.ws-siaga-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ws-siaga-head h1 {
+  font-family: 'Fredoka', sans-serif;
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+.ws-siaga-head p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+.ws-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ws-alert {
+  text-align: left;
+  border: 1.5px solid var(--royal);
+  background: #fff3c4;
+  border-radius: 14px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  max-width: 320px;
+  color: var(--ink);
+}
+.ws-alert.calm {
+  border-color: #f1dfb4;
+  background: #fffdf7;
+}
+.ws-alert small {
+  color: var(--ink-soft);
+}
+.ws-bigmap {
+  padding: 6px;
+}
+.ws-bigmap .ws-map {
+  max-height: calc(100vh - 250px);
+  min-height: 320px;
+}
+.ws-ask {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.ws-ask input,
+.ws-say input {
+  flex: 1;
+  min-width: 200px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #fffdf7;
+  font: inherit;
+  color: var(--ink);
+}
+
+/* ---------- peta ---------- */
+.ws-map {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.ws-edge {
+  fill: none;
+  stroke: rgba(201, 138, 0, 0.25);
+  stroke-width: 1.5;
+}
+.ws-edge.trunk {
+  stroke-width: 3;
+}
+.ws-edge.on {
+  stroke: var(--amber);
+  stroke-dasharray: 8 6;
+  animation: ws-flow 1s linear infinite;
+}
+@keyframes ws-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+.ws-hub path {
+  fill: #fff8e7;
+  stroke: var(--dc);
+  stroke-width: 3;
+}
+.ws-hub.on path {
+  fill: #fff0b8;
+}
+.ws-hub text {
+  text-anchor: middle;
+  font-size: 10px;
+  font-weight: 800;
+  fill: var(--ink);
+}
+.ws-node path {
+  fill: #fffdf7;
+  stroke: var(--royal);
+  stroke-width: 2;
+}
+.ws-node text {
+  text-anchor: middle;
+  fill: var(--ink);
+}
+.ws-nm {
+  font-size: 11px;
+  font-weight: 800;
+}
+.ws-node.st-running path {
+  fill: var(--gold);
+  animation: ws-pulse 1.4s ease-in-out infinite;
+}
+.ws-node.st-approval path {
+  fill: #ffe38a;
+  stroke-dasharray: 4 3;
+}
+.ws-node.st-done path {
+  fill: #c9e4a8;
+  stroke: #6f9e3f;
+}
+.ws-node.st-revise path {
+  fill: #f6b9a0;
+  stroke: #d85a30;
+}
+.ws-node.off {
+  opacity: 0.35;
+}
+.ws-node.out {
+  opacity: 0.55;
+}
+@keyframes ws-pulse {
+  50% {
+    filter: drop-shadow(0 0 6px rgba(255, 140, 26, 0.9));
+  }
+}
+.ws-queen path {
+  fill: #fff3c4;
+  stroke: var(--royal);
+  stroke-width: 3;
+}
+.ws-queen .ring {
+  fill: none;
+  stroke: rgba(245, 183, 0, 0.6);
+  stroke-width: 8;
+  stroke-dasharray: 16 8;
+}
+.ws-queen.busy .ring {
+  animation: ws-flow 1.2s linear infinite;
+}
+.ws-queen text {
+  text-anchor: middle;
+}
+.ws-queen .crown {
+  font-size: 24px;
+}
+
+/* ---------- roda ---------- */
+.ws-dial {
+  width: 132px;
+  height: 132px;
+  flex: none;
+}
+.ws-dial .seg {
+  fill: rgba(201, 138, 0, 0.15);
+  stroke: rgba(201, 138, 0, 0.5);
+  stroke-width: 0.8;
+}
+.ws-dial .seg.st-running,
+.ws-dial .seg.st-approval {
+  fill: var(--gold);
+  animation: ws-pulse 1.4s ease-in-out infinite;
+}
+.ws-dial .seg.st-done {
+  fill: #8dbf5a;
+}
+.ws-dial .seg.st-revise {
+  fill: #d85a30;
+}
+.ws-dial .comb {
+  fill: none;
+  stroke: rgba(201, 138, 0, 0.45);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+.ws-dial .spin.on {
+  animation: ws-spin 12s linear infinite;
+}
+@keyframes ws-spin {
+  to {
+    transform: translate(120px, 120px) rotate(360deg);
+  }
+}
+.ws-dial .core {
+  fill: #fff8e7;
+  stroke: var(--royal);
+  stroke-width: 2;
+}
+.ws-dial .pct {
+  text-anchor: middle;
+  font-size: 26px;
+  font-weight: 800;
+  fill: var(--ink);
+}
+
+/* ---------- Rapat ---------- */
+.ws-view.rapat {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 14px;
+}
+.ws-chat {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 110px);
+  min-height: 460px;
+}
+.ws-msgs {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px 10px;
+}
+.ws-msg {
+  background: #fff3c4;
+  border-radius: 14px 14px 14px 4px;
+  padding: 9px 12px;
+  max-width: 92%;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.ws-msg p {
+  margin: 0 0 6px;
+}
+.ws-msg.me {
+  align-self: flex-end;
+  background: var(--gold);
+  border-radius: 14px 14px 4px 14px;
+}
+.ws-msg.sys {
+  background: #f6e3d9;
+}
+.ws-msg.typing {
+  opacity: 0.7;
+  font-style: italic;
+}
+.ws-msg time {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+.ws-say {
+  display: flex;
+  gap: 8px;
+}
+.ws-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ws-plan-head,
+.ws-strip,
+.ws-lap-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.ws-plan-head h2,
+.ws-strip h1,
+.ws-lap-head h1 {
+  font-family: 'Fredoka', sans-serif;
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+.ws-cast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ws-cast span {
+  font-size: 12.5px;
+  border: 1.5px solid #f1dfb4;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: #fffdf7;
+}
+.ws-cast span.on {
+  background: var(--gold);
+  border-color: var(--royal);
+  font-weight: 700;
+}
+.ws-cast span.off {
+  opacity: 0.45;
+}
+
+/* ---------- kartu tugas ---------- */
+.ws-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.ws-card {
+  background: #fffdf7;
+  border: 1.5px solid #f1dfb4;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-card.st-running {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 183, 0, 0.18);
+}
+.ws-card.st-revise {
+  border-color: #d85a30;
+}
+.ws-card.st-done {
+  border-color: #b9d99a;
+}
+.ws-card .c-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ws-card .c-top div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.ws-card .c-top small {
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+.ws-card .hex {
+  width: 32px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--dc);
+  color: #fff;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+.ws-card .c-task {
+  margin: 0;
+  font-size: 13.5px;
+}
+.ws-card .c-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.ws-card .c-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.c-bar,
+.ws-prog > div {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(201, 138, 0, 0.15);
+  overflow: hidden;
+}
+.c-bar i,
+.ws-prog i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--amber));
+  transition: width 0.6s;
+}
+
+/* ---------- Kerja ---------- */
+.ws-view.kerja {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  gap: 14px;
+}
+.ws-strip {
+  grid-column: 1 / -1;
+}
+.ws-strip-t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-strip-r {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.ws-strip-r select {
+  max-width: 260px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: #fffdf7;
+  font: inherit;
+}
+.ws-prog {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ws-prog > div {
+  flex: 1;
+  height: 10px;
+}
+.ws-prog span {
+  font-weight: 800;
+}
+.ws-line {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.ws-line.info {
+  background: #fff3c4;
+}
+.ws-line.warn {
+  background: #f6e3d9;
+}
+
+/* ---------- Laporan ---------- */
+.ws-lap-t {
+  flex: 1;
+  min-width: 0;
+}
+.ws-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.ws-tiles .ws-panel {
+  display: flex;
+  flex-direction: column;
+}
+.ws-tiles b {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 24px;
+}
+.ws-tiles span {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.ws-tiles .warn {
+  border-color: #d85a30;
+}
+.ws-lap-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 14px;
+}
+.ws-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ws-report {
+  font-size: 14px;
+}
+.ws-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-feed li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.ws-feed li > span:nth-child(2) {
+  flex: 1;
+}
+.ws-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ws-files button {
+  border: 1.5px solid #f1dfb4;
+  background: #fffdf7;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--ink);
+}
+
+/* ---------- modal, toast, koneksi ---------- */
+.ws-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(58, 42, 18, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 50;
+}
+.ws-modal-card {
+  background: #fffbf1;
+  border-radius: 18px;
+  width: min(760px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ws-modal-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1.5px solid #f1dfb4;
+}
+.ws-modal-card header div {
+  display: flex;
+  flex-direction: column;
+}
+.ws-modal-card header small {
+  color: var(--royal);
+  font-weight: 700;
+}
+.ws-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+.ws-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff8e7;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  z-index: 60;
+  max-width: calc(100% - 32px);
+}
+.ws-conn {
+  max-width: 1500px;
+  margin: 0 auto 10px;
+  background: #f6e3d9;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .ws-view.rapat,
+  .ws-view.kerja,
+  .ws-lap-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ws-chat {
+    height: 70vh;
+  }
+  .ws-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ws-strip,
+  .ws-lap-head,
+  .ws-plan-head {
+    flex-wrap: wrap;
+  }
+  .ws-acts {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .ws-act {
+    padding: 7px 8px;
+    font-size: 13.5px;
+  }
+  .ws-act em {
+    display: none;
+  }
+  .ws-dial {
+    width: 84px;
+    height: 84px;
+  }
+  .ws-strip-t,
+  .ws-lap-t,
+  .ws-strip-r {
+    flex-basis: 100%;
+  }
+  .ws-strip-r {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-edge.on,
+  .ws-node.st-running path,
+  .ws-dial .spin.on,
+  .ws-dial .seg,
+  .ws-queen.busy .ring {
+    animation: none;
+  }
+}

@@ -2,6 +2,14 @@
 
 Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bisa diklik di GitHub untuk melihat detail perubahannya.
 
+## 20 Oktober 2026
+
+### Hive Colony 2.0: Workshop (`#/workshop`)
+- Halaman baru **Workshop** (tombol 🛠 di rak alat koloni): panggung kerja tim ala Agent Hub dengan tim, login, dan database Hive Colony sendiri. Tidak terhubung ke Agent Hub.
+- Empat babak: **Siaga** (peta koloni: Queen Bea di tengah, 7 divisi, 20 agent; lebah menyala saat bekerja, pudar kalau belum tersambung AI), **Rapat** (chat dengan Queen Bea + rancangan paket), **Kerja** (paket berjalan: roda progres, kartu tugas per agent, peta mini), **Laporan** (rekap Queen, hasil & lampiran per agent, waktu kerja, tugas gagal).
+- Tiket = paket kerja Queen Bea (`hc_delegations`), langkah = tugas agent (`hc_plan_tasks`). "Mulai paket" meminta Queen membagi pekerjaan ke agent; Queen tetap yang memutuskan siapa mengerjakan apa.
+- Belum ada: tombol hentikan paket dan revisi per tugas (belum ada dukungan di server).
+
 ## 15 Oktober 2026
 
 ### Gambar Pixel dari Grok Bot (Studio Pixel dimatikan) (`8bf13dc`)

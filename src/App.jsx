@@ -9,6 +9,7 @@ import { AgentWorkspace } from './ui/AgentWorkspace';
 import { AccessPage } from './ui/AccessPage';
 import { StatsPage } from './ui/StatsPage';
 import { PortalPage } from './ui/PortalPage';
+import { WorkshopView } from './ui/WorkshopView';
 import { useSaver } from './sim/saver';
 import { startAgentWatch, stopAgentWatch } from './hall/agentApi';
 import { AvatarCreator } from './ui/AvatarCreator';
@@ -125,6 +126,7 @@ export function App() {
   if (route === '/akses') return <AccessPage />;
   if (route === '/statistik') return <StatsPage />;
   if (route === '/saya') return <PortalPage />;
+  if (route === '/workshop') return <WorkshopView />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;
