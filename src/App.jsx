@@ -126,7 +126,7 @@ export function App() {
   if (route === '/akses') return <AccessPage />;
   if (route === '/statistik') return <StatsPage />;
   if (route === '/saya') return <PortalPage />;
-  if (route === '/workshop') return <WorkshopView />;
+  if (route === '/workshop' || route.startsWith('/workshop/')) return <WorkshopView ticketNo={route.split('/')[2] || null} />;
   if (route === '/hall') return <HallView />;
   if (route === '/avatar') return <AvatarCreator />;
   if (route === '/login') return <LoginPage />;
