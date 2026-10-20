@@ -296,7 +296,8 @@ export function WorkshopView() {
   const running = (pkgs || []).filter((p) => p.status === 'running');
   const closed = (pkgs || []).filter((p) => p.status !== 'running');
   const work = running.find((p) => p.id === workId) || running[0] || null;
-  const lap = closed.find((p) => p.id === lapId) || closed[0] || null;
+  // laporan bisa dibuka untuk paket mana pun; default paket terbaru, supaya sama dengan yang tampil di Kerja
+  const lap = (pkgs || []).find((p) => p.id === lapId) || (pkgs || [])[0] || null;
   const mine = (pkgs || []).find((p) => p.threadId === threadId) || null;
 
   // rekap Queen untuk laporan yang dipilih ada di percakapan asal paket itu
@@ -553,11 +554,13 @@ export function WorkshopView() {
       );
     }
   } else {
-    if (!lap) view = <div className="ws-panel ws-empty">Belum ada paket yang selesai. Laporan muncul di sini setelah semua tugas dalam paket selesai.</div>;
+    if (!lap) view = <div className="ws-panel ws-empty">Belum ada paket kerja. Laporan muncul di sini setelah Queen Bea membagi tugas.</div>;
     else {
       const ks = lap.steps;
       const total = ks.reduce((m, k) => Math.max(m, k.min), 0);
       const fails = ks.filter((k) => k.st === 'revise').length;
+      const done = ks.filter((k) => k.st === 'done').length;
+      const open = lap.status === 'running';
       const report = lapMsgs.find((m) => m.meta?.report === lap.id);
       const files = ks.flatMap((k) => k.files.map((f) => ({ ...f, by: k.agent?.nick })));
       view = (
@@ -565,21 +568,22 @@ export function WorkshopView() {
           <div className="ws-panel ws-lap-head">
             <Dial pkg={lap} />
             <div className="ws-lap-t">
-              <span className="ws-sec">Laporan akhir</span>
+              <span className="ws-sec">{open ? 'Laporan sementara · paket masih berjalan' : 'Laporan akhir'}</span>
               <h1>{cleanAsk(lap.request)}</h1>
               <div className="ws-meta">
                 <span>
                   Dibuka <b>{when(lap.createdAt)}</b>
                 </span>
                 <span>
-                  Dilaporkan <b>{when(lap.reportedAt)}</b>
+                  {open ? 'Status' : 'Dilaporkan'} <b>{open ? `${Math.round(progOf(lap) * 100)}% berjalan` : when(lap.reportedAt)}</b>
                 </span>
               </div>
             </div>
             <div className="ws-strip-r">
               <select value={lap.id} onChange={(e) => setLapId(e.target.value)} aria-label="Pilih laporan">
-                {closed.map((p) => (
+                {pkgs.map((p) => (
                   <option key={p.id} value={p.id}>
+                    {p.status === 'running' ? '⏳ ' : ''}
                     {when(p.createdAt)} · {cleanAsk(p.request).slice(0, 50)}
                   </option>
                 ))}
@@ -599,7 +603,7 @@ export function WorkshopView() {
           <div className="ws-tiles">
             <div className="ws-panel">
               <b>
-                {ks.length - fails}/{ks.length}
+                {done}/{ks.length}
               </b>
               <span>Tugas selesai</span>
             </div>
@@ -633,7 +637,7 @@ export function WorkshopView() {
                   )}
                 </div>
               ) : (
-                <div className="ws-empty">{lap.reportedAt ? 'Rekap tidak ditemukan di percakapan paket ini.' : 'Queen Bea belum mengirim rekap untuk paket ini.'}</div>
+                <div className="ws-empty">{open ? 'Queen Bea mengirim rekap otomatis setelah semua tugas di paket ini selesai.' : lap.reportedAt ? 'Rekap tidak ditemukan di percakapan paket ini.' : 'Queen Bea belum mengirim rekap untuk paket ini.'}</div>
               )}
             </div>
             <div className="ws-side">
