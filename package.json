@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/ui/missionBoard.test.js src/hall/taskProtocol.test.js src/hall/grokAgents.test.js && node src/sim/realFinish.test.mjs"
+    "test": "node --test src/ui/missionBoard.test.js src/hall/taskProtocol.test.js src/hall/grokAgents.test.js src/hall/queenWake.test.js && node src/sim/realFinish.test.mjs"
   },
   "dependencies": {
     "@react-three/drei": "9.114.0",

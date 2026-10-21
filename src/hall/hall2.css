@@ -1435,3 +1435,17 @@
   top: 10px;
   right: 10px;
 }
+
+/* rekaman rapat video di Arsip rapat */
+.arc-recs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.arc-video {
+  width: 100%;
+  max-height: 60vh;
+  margin-top: 10px;
+  border-radius: 12px;
+  background: #000;
+}

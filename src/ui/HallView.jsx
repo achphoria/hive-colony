@@ -16,6 +16,8 @@ import { MeetingView } from '../hall/MeetingView';
 import { ReportView } from '../hall/ReportView';
 import { ChiefView } from '../hall/ChiefView';
 import { ArchiveView } from '../hall/ArchiveView';
+import { MeetingCalendar } from '../hall/MeetingCalendar';
+import { useCloudflare } from '../hall/rtc/config';
 
 function useActionError() {
   const [msg, setMsg] = useState('');
@@ -410,9 +412,15 @@ export function HallView() {
   ];
   const zoomed = !!view.zoomed;
 
+  // rapat video Cloudflare dibuka di halaman ruang rapat sendiri (#/rapat/<id>)
+  const joinMeeting = () => {
+    const liveId = useMeeting.getState().liveId;
+    if (useCloudflare && account && liveId) go(`/rapat/${liveId}`);
+    else setMode('meeting');
+  };
   const openAction = (id) => {
     if (id === 'meeting') {
-      if (meetingActive) setMode('meeting');
+      if (meetingActive) joinMeeting();
       else if (!account || account.role === 'owner') setAsking(true);
       return;
     }
@@ -464,7 +472,7 @@ export function HallView() {
         <div className="hall-inner wide">
           {head}
           {tab === 'rencana' && <PlanBoard />}
-          {tab === 'kalender' && <CalendarMonth />}
+          {tab === 'kalender' && (account ? <MeetingCalendar onArchive={() => setTab('arsip')} /> : <CalendarMonth />)}
           {tab === 'persetujuan' && <Approvals />}
           {tab === 'arsip' && <ArchiveView />}
           {tab === 'lobi' && mode === 'meeting' && <MeetingView onLeave={() => setMode('lobby')} onReport={() => setMode('report')} />}
@@ -480,7 +488,7 @@ export function HallView() {
       <HallScene data={data} me={me} dina={dina} mates={mates} call={LOBBY_CALL} view={view} setView={setView} mobile={mobile} />
       <div className="hall-overlay top">
         {head}
-        <MeetingBanner onJoin={() => setMode('meeting')} onArchive={() => setTab('arsip')} />
+        <MeetingBanner onJoin={joinMeeting} onArchive={() => setTab('arsip')} />
       </div>
       {zoomed && (
         <button className="hbtn pri zoom-back" onClick={() => setView(baseView)}>
@@ -496,7 +504,9 @@ export function HallView() {
           onCancel={() => setAsking(false)}
           onStart={async (title) => {
             setAsking(false);
-            if (await useMeeting.getState().start(title)) setMode('meeting');
+            const ok = await useMeeting.getState().start(title);
+            if (typeof ok === 'string') go(`/rapat/${ok}`);
+            else if (ok) setMode('meeting');
           }}
         />
       )}
