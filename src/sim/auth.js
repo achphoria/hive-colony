@@ -107,7 +107,9 @@ export const useAuth = create((set, get) => ({
       get().applyAccount(data);
       return data;
     }
-    const pending = readPending();
+    // diundang lewat email (halaman Employee): kode undangan ikut di metadata akun
+    const meta = get().session?.user?.user_metadata || {};
+    const pending = readPending() || (meta.invite_code ? { code: meta.invite_code, name: meta.name || '' } : null);
     if (pending?.code) {
       const { data: prof, error } = await supabase.rpc('hc_accept_invite', { p_code: pending.code, p_name: pending.name || '' });
       if (!error && prof) {
@@ -155,6 +157,13 @@ export const useAuth = create((set, get) => ({
     const prof = await get().loadAccount();
     if (!prof) throw new Error(get().inviteError || 'Kode undangan tidak valid atau sudah dipakai.');
     return { confirmEmail: false };
+  },
+
+  // karyawan yang masuk lewat link undangan email belum punya password
+  setPassword: async (password) => {
+    const { data, error } = await supabase.auth.updateUser({ password, data: { needs_password: false } });
+    if (error) throw new Error(errText(error));
+    set({ session: { ...get().session, user: data.user } });
   },
 
   acceptInvite: async (code, name) => {

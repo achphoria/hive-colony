@@ -1545,6 +1545,12 @@ body {
 .pa-btn.portal .pa-ic {
   background: linear-gradient(160deg, #e2701b, #b8520f);
 }
+.pa-btn.workshop .pa-ic {
+  background: linear-gradient(160deg, #6f9e3f, #4a7a26);
+}
+.pa-btn.employee .pa-ic {
+  background: linear-gradient(160deg, #4a6fa5, #2f4f80);
+}
 .pa-ic svg {
   width: 20px;
   height: 20px;
@@ -1581,8 +1587,9 @@ body {
   right: 10px;
   bottom: max(10px, env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
   padding: 5px;
   border-radius: 18px;
 }
@@ -1590,7 +1597,8 @@ body {
   flex-direction: column;
   justify-content: center;
   gap: 3px;
-  padding: 6px 4px;
+  padding: 6px 2px;
+  min-width: 0;
 }
 .is-dock .pa-ic {
   width: 30px;
@@ -1602,9 +1610,14 @@ body {
 }
 .is-dock .pa-txt {
   align-items: center;
+  max-width: 100%;
 }
 .is-dock .pa-txt b {
-  font-size: 13px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .is-dock .pa-txt small {
   display: none;
@@ -1918,7 +1931,7 @@ body {
 }
 
 /* tiga tombol utama: ringkas di laptop supaya tidak menabrak bar obrolan di tengah */
-@media (max-width: 1400px) {
+@media (max-width: 1800px) {
   .pa-txt small {
     display: none;
   }

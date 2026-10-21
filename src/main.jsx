@@ -9,6 +9,7 @@ import './ui/agents.css';
 import './ui/intro.css';
 import './ui/workshop.css';
 import './ui/video.css';
+import './ui/employee.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

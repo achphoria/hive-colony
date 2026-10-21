@@ -159,8 +159,8 @@ Owner mengatur agent mana yang boleh dihubungi tiap staff. Staff baru tidak puny
 
 ## SOP staff baru
 
-1. Owner atau kepala divisi membuat kode undangan di **Undang staff** (`#/undang`).
-2. Staff mendaftar di `#/join` dengan kode itu (konfirmasi email kalau diminta).
+1. Owner atau kepala divisi mengisi data karyawan lengkap di **Employee** (`#/employee`): nama lengkap, nama panggilan, gender, tempat & tanggal lahir, foto, email, no. telepon, dan kontak darurat. Lalu tekan **Kirim undangan**.
+2. Karyawan klik link di email undangan: langsung masuk, akun & divisinya aktif otomatis, lalu membuat password. (Email yang sudah punya akun: tombol **Salin link** memberi link `#/join?code=…` untuk dikirim manual.)
 3. Saat pertama kali masuk, staff **wajib menonton video perkenalan** (±80 detik). Selama belum selesai, semua halaman menampilkan intro dan tidak bisa dilewati atau dilompati. Selesai menonton → tombol **Mulai pakai Hive Colony** menyimpan tanda sudah menonton (`hc_profiles.intro_seen_at`, fungsi `hc_mark_intro_seen`).
 4. Staff membuat avatar, lalu membuka **Portal saya** dan **Ruang Kerja**. Agent yang boleh dipakai diatur owner di **Akses agent**.
 
@@ -197,7 +197,7 @@ Di koloni, lebah yang menganggur kebanyakan diam di mejanya dan sesekali istirah
 Tanpa login, Hive Colony berjalan dalam mode demo. Dengan login, data tersimpan di Supabase:
 
 - **Masuk** (`#/login`) dengan email + password. **Daftar** (`#/join?code=…`) hanya bisa memakai kode undangan.
-- **Undang staff** (`#/undang`, khusus owner dan kepala divisi): buat link undangan yang terkunci ke divisi utama, divisi tambahan, peran, dan (opsional) email. Staff tidak bisa memilih divisi atau perannya sendiri.
+- **Employee** (`#/employee`, khusus owner dan kepala divisi; tombol di dock bawah koloni): data karyawan (`hc_employees`, foto di bucket privat `hc-employee-photos`). Kepala divisi hanya melihat & mengundang karyawan divisinya, dengan peran staff/viewer. Undangan lewat Edge Function `employee-invite`: kode undangan terkunci ke email, divisi, dan peran, lalu email "Invite user" Supabase Auth (template `supabase/email-templates/invite.html`). Staff tidak bisa memilih divisi atau perannya sendiri.
 - **Avatar** tersimpan di akun. Staff yang sedang online muncul di taman semua orang, dan joget mereka terlihat realtime (Supabase Realtime Presence).
 - **Hive Hall**: persetujuan, papan rencana, dan log aktivitas manusia tersimpan di database dan berubah live di semua perangkat. Hanya owner dan kepala divisi yang bisa memutuskan persetujuan; viewer hanya bisa melihat.
 

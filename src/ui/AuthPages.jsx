@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { DEPTS } from '../data/hive';
 import { useAuth } from '../sim/auth';
-import { supabase } from '../lib/supabase';
 import { go } from './nav';
 
-const STAFF_DEPTS = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const ROLE_LABEL = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' };
+
 const queryParam = (k) => new URLSearchParams(window.location.hash.split('?')[1] || '').get(k) || '';
 
-function Shell({ title, sub, children }) {
-  const inside = useAuth((s) => !!s.account);
+function Shell({ title, sub, children, noBack }) {
+  const inside = useAuth((s) => !!s.account) && !noBack;
   return (
     <div className="page auth-page">
       <div className="auth-card">
@@ -202,156 +201,46 @@ export function JoinPage() {
   );
 }
 
-export function InvitePage() {
-  const account = useAuth((s) => s.account);
-  const [primary, setPrimary] = useState(account?.role === 'lead' ? account.primary_dept : 'ops');
-  const [extra, setExtra] = useState([]);
-  const [role, setRole] = useState('staff');
-  const [email, setEmail] = useState('');
+// Karyawan yang masuk lewat link undangan email (halaman Employee) belum punya password.
+export function SetPasswordPage() {
+  const { account, setPassword, signOut } = useAuth();
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [list, setList] = useState([]);
-  const [copied, setCopied] = useState('');
-
-  const link = (code) => `${window.location.origin}${window.location.pathname}#/join?code=${code}`;
-  const load = async () => {
-    const { data } = await supabase.from('hc_invites').select('*').order('created_at', { ascending: false }).limit(30);
-    setList(data || []);
-  };
-  useEffect(() => {
-    if (account) load();
-  }, [account]);
-
-  if (!account || !['owner', 'lead'].includes(account.role)) {
-    return (
-      <Shell title="Undang staff" sub="Hanya owner atau kepala divisi yang bisa membuat undangan. Staff baru wajib menonton video perkenalan (±80 detik) saat pertama kali masuk.">
-        <button className="save" onClick={() => go(account ? '/' : '/login')}>
-          {account ? 'Kembali ke koloni' : 'Masuk dulu'}
-        </button>
-      </Shell>
-    );
-  }
-  const isOwner = account.role === 'owner';
-
-  const create = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    if (pw.length < 8) return setError('Password minimal 8 karakter.');
+    if (pw !== pw2) return setError('Kedua password belum sama.');
     setBusy(true);
     setError('');
-    const { error: err } = await supabase.rpc('hc_create_invite', {
-      p_primary_dept: primary,
-      p_depts: extra.filter((d) => d !== primary),
-      p_role: role,
-      p_email: email.trim() || null,
-    });
-    setBusy(false);
-    if (err) setError(err.message);
-    else {
-      setEmail('');
-      load();
-    }
-  };
-  const remove = async (code) => {
-    await supabase.from('hc_invites').delete().eq('code', code);
-    load();
-  };
-  const copy = async (code) => {
     try {
-      await navigator.clipboard.writeText(link(code));
-      setCopied(code);
-      setTimeout(() => setCopied(''), 1500);
-    } catch {
-      setCopied('');
+      await setPassword(pw);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
     }
   };
-
   return (
-    <div className="page">
-      <div className="page-inner">
-        <div className="page-head">
-          <button className="back" onClick={() => go('/')}>
-            ← Kembali ke koloni
-          </button>
-          <div>
-            <h1>Undang staff</h1>
-            <p>Buat link undangan yang terkunci ke divisi dan peran. Staff tidak bisa mengubahnya sendiri.</p>
-          </div>
-        </div>
-        <div className="invite-grid">
-          <form className="creator-form" onSubmit={create}>
-            <div className="field">
-              <div className="field-label">Divisi utama</div>
-              <select value={primary} onChange={(e) => setPrimary(e.target.value)} disabled={!isOwner}>
-                {STAFF_DEPTS.map((d) => (
-                  <option key={d} value={d}>
-                    {DEPTS[d].name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <div className="field-label">Divisi tambahan (opsional)</div>
-              <div className="opts">
-                {STAFF_DEPTS.filter((d) => d !== primary && d !== 'ceo').map((d) => (
-                  <button
-                    type="button"
-                    key={d}
-                    className={`opt${extra.includes(d) ? ' on' : ''}`}
-                    onClick={() => setExtra((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]))}
-                  >
-                    {DEPTS[d].short}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <div className="field-label">Peran</div>
-              <div className="opts">
-                {(isOwner ? ['owner', 'lead', 'staff', 'viewer'] : ['staff', 'viewer']).map((r) => (
-                  <button type="button" key={r} className={`opt${role === r ? ' on' : ''}`} onClick={() => setRole(r)}>
-                    {ROLE_LABEL[r]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <div className="field-label">Kunci ke email (opsional)</div>
-              <input type="text" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@perusahaan.com" />
-              <div className="field-hint">Kalau diisi, hanya email itu yang bisa memakai undangan ini.</div>
-            </div>
-            {error && <div className="error">{error}</div>}
-            <button className="save" disabled={busy}>
-              {busy ? 'Membuat…' : 'Buat link undangan'}
-            </button>
-          </form>
-          <div className="creator-form">
-            <div className="field-label">Undangan terbaru</div>
-            {list.length === 0 && <p className="field-hint">Belum ada undangan.</p>}
-            <div className="invite-list">
-              {list.map((inv) => (
-                <div key={inv.code} className={`invite${inv.used_by ? ' used' : ''}`}>
-                  <div>
-                    <b>{DEPTS[inv.primary_dept]?.short}</b> · {ROLE_LABEL[inv.role]}
-                    {inv.email && <span className="muted"> · {inv.email}</span>}
-                    <div className="field-hint">
-                      {inv.used_by ? `Sudah dipakai ${new Date(inv.used_at).toLocaleDateString('id-ID')}` : `Berlaku sampai ${new Date(inv.expires_at).toLocaleDateString('id-ID')}`}
-                    </div>
-                  </div>
-                  {!inv.used_by && (
-                    <div className="invite-actions">
-                      <button className="opt" onClick={() => copy(inv.code)}>
-                        {copied === inv.code ? 'Tersalin' : 'Salin link'}
-                      </button>
-                      <button className="opt" onClick={() => remove(inv.code)}>
-                        Hapus
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Shell noBack title={`Selamat datang, ${account?.name || 'rekan'}!`} sub="Buat password untuk masuk ke Hive Colony berikutnya. Email login kamu adalah email yang menerima undangan.">
+      <form className="auth-form" onSubmit={submit}>
+        <label>
+          Password baru
+          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" minLength={8} autoFocus />
+        </label>
+        <label>
+          Ulangi password
+          <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" minLength={8} />
+        </label>
+        {error && <div className="error">{error}</div>}
+        <button className="save" disabled={busy}>
+          {busy ? 'Menyimpan…' : 'Simpan password'}
+        </button>
+      </form>
+      <button className="link-btn" onClick={signOut}>
+        Bukan kamu? Keluar
+      </button>
+    </Shell>
   );
 }
