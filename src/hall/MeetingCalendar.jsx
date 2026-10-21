@@ -5,6 +5,11 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 import { MONTH } from '../ui/hallData';
 import { go } from '../ui/nav';
+import { startVideoMeeting } from './rtc/videoMeeting';
+import { useCloudflare } from './rtc/config';
+
+// VIDEO_PROVIDER=livekit: rapat dari jadwal berjalan sebagai rapat suara di lobi Hive Hall
+const openRoom = (id) => go(useCloudflare ? `/rapat/${id}` : '/hall');
 
 const WIB = 7 * 3600e3;
 const wib = (iso) => new Date(new Date(iso).getTime() + WIB); // dibaca dengan getter UTC
@@ -111,15 +116,13 @@ export function MeetingCalendar({ onArchive }) {
   const start = async (ev) => {
     setBusy(true);
     setErr('');
-    const { data, error } = await supabase.from('hc_meetings').insert({ title: ev.title, event_id: ev.id }).select('id').single();
-    if (error) {
+    try {
+      openRoom(await startVideoMeeting(ev.title, ev.id));
+    } catch (e) {
       setBusy(false);
-      setErr(error.code === '23505' ? 'Masih ada rapat lain yang berjalan. Akhiri rapat itu dulu.' : `Gagal membuka rapat: ${error.message}`);
+      setErr(e.message);
       load();
-      return;
     }
-    await supabase.from('hc_meeting_events').update({ meeting_id: data.id }).eq('id', ev.id);
-    go(`/rapat/${data.id}`);
   };
   const remove = async (ev) => {
     if (!window.confirm(`Hapus jadwal "${ev.title}"?`)) return;
@@ -150,7 +153,7 @@ export function MeetingCalendar({ onArchive }) {
           ›
         </button>
         {live && (
-          <button className="hbtn pri mc-live" onClick={() => go(`/rapat/${live.id}`)}>
+          <button className="hbtn pri mc-live" onClick={() => openRoom(live.id)}>
             ● Gabung: {live.title}
           </button>
         )}
@@ -202,8 +205,8 @@ export function MeetingCalendar({ onArchive }) {
           {err && <p className="error">{err}</p>}
           <div className="mc-actions">
             {statusOf(cur) === 'live' && (
-              <button className="hbtn pri" onClick={() => go(`/rapat/${cur.meeting_id}`)}>
-                🎥 Gabung rapat video
+              <button className="hbtn pri" onClick={() => openRoom(cur.meeting_id)}>
+                🎥 Gabung rapat
               </button>
             )}
             {statusOf(cur) && statusOf(cur) !== 'live' && (

@@ -712,7 +712,7 @@
   .vm-strip .vm-tile {
     width: 120px;
   }
-  .vm-head .vm-layout {
+  .vm-head .vm-layout:not(.vm-recbtn) {
     display: none;
   }
 }
@@ -734,5 +734,155 @@
   }
   .vm-tag {
     font-size: 11.5px;
+  }
+}
+
+/* ---------- tahap 3: transkrip, Queen Bea, rekaman ---------- */
+.vm-stage {
+  position: relative;
+}
+.vm-badge.queen {
+  background: rgba(245, 183, 0, 0.16);
+  color: #ffd76a;
+}
+.vm-badge.queen.busy {
+  animation: vm-pulse 1.2s ease-in-out infinite;
+}
+.vm-badge.rec {
+  background: #c4302a;
+  color: #fff;
+  animation: vm-pulse 1.6s ease-in-out infinite;
+}
+@keyframes vm-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.vm-layout.rec {
+  border-color: #c4302a;
+  color: #ffb39c;
+}
+.vm-layout:disabled {
+  opacity: 0.5;
+}
+.vm-rec-err {
+  margin: 0 16px 8px;
+  background: rgba(224, 96, 58, 0.2);
+  color: #ffb39c;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.vm-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 24px));
+  max-height: 40%;
+  overflow-y: auto;
+  background: rgba(15, 12, 6, 0.86);
+  border: 1px solid rgba(245, 183, 0, 0.45);
+  border-radius: 14px;
+  padding: 10px 14px;
+  z-index: 4;
+}
+.vm-caption b {
+  color: var(--vm-gold);
+  font-size: 13px;
+}
+.vm-caption p {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.vm-tabs {
+  display: flex;
+  gap: 4px;
+}
+.vm-tabs button {
+  border: 0;
+  background: none;
+  color: var(--vm-muted);
+  font: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.vm-tabs button[aria-selected='true'] {
+  background: var(--vm-raised);
+  color: var(--vm-text);
+}
+.vm-tx-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--vm-muted);
+  border-bottom: 1px solid var(--vm-line);
+}
+.vm-chip {
+  border: 1px solid var(--vm-line);
+  background: var(--vm-raised);
+  color: var(--vm-text);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vm-chip.on {
+  border-color: rgba(245, 183, 0, 0.6);
+}
+.vm-tx b {
+  font-size: 12.5px;
+}
+.vm-tx time {
+  font-weight: 400;
+  color: var(--vm-muted);
+  margin-left: 4px;
+}
+.vm-tx p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.vm-tx.ceo {
+  border-left: 3px solid var(--vm-gold);
+  padding-left: 8px;
+}
+.vm-tx.ceo b {
+  color: var(--vm-gold);
+}
+.vm-tx.sys {
+  font-size: 12px;
+  color: var(--vm-muted);
+}
+.vm-tx.partial {
+  opacity: 0.6;
+  font-style: italic;
+}
+.vm-page .qb-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.vm-page .qb-sources a {
+  color: #ffd76a;
+}
+@media (max-width: 600px) {
+  .vm-badge.queen {
+    display: none;
+  }
+  .vm-caption p {
+    font-size: 14px;
   }
 }

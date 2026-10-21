@@ -2,6 +2,17 @@
 
 Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bisa diklik di GitHub untuk melihat detail perubahannya.
 
+## 21 Oktober 2026
+
+### Rapat video Cloudflare Realtime (branch `feat/video-cloudflare`, di balik flag)
+- Ruang rapat video `#/rapat/<id>`: layar preview (kamera/mic/speaker), grid responsif, speaker aktif membesar, share screen, chat, daftar peserta, indikator suara & sinyal lemah, sambung ulang otomatis. Host bisa mematikan mic peserta dan mengeluarkannya (ditegakkan server).
+- Edge Function `realtime-session`: satu-satunya jalur ke Cloudflare (kunci tidak pernah ke browser), cek login & akses rapat, sesi/track SFU, kredensial TURN sementara.
+- Hemat bandwidth: simulcast 3 lapis, lapis mengikuti ukuran tile, turun otomatis saat sinyal lemah.
+- Kalender rapat di Hive Hall (`hc_meeting_events`): tiap jadwal membuka rapatnya sendiri; tetap satu rapat berjalan sekaligus.
+- Transkrip live, Queen Bea, dan notulen `meeting-recap` jalan di ruang video; chat ikut jadi bahan notulen.
+- Rekaman opsional (`MEETING_RECORDING=on`): direkam di browser host, diunggah per 5 menit ke bucket privat, bisa diputar di Arsip rapat.
+- Flag `VIDEO_PROVIDER=cloudflare|livekit`; kosong = rapat suara LiveKit seperti sebelumnya. Detail: `docs/VIDEO-CLOUDFLARE.md`.
+
 ## 20 Oktober 2026
 
 ### Workshop: istilah "tiket" dan tampilan baru

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 import { useIsMobile } from '../ui/HUD';
 import { requestRecap } from './meeting';
+import { recordingUrl } from './rtc/recorder';
 
 const STATUS = {
   live: { label: 'Berlangsung', cls: 'live' },
@@ -35,8 +36,47 @@ function momText(m, lines) {
   if (mom.decisions?.length) out.push('', 'Keputusan', ...mom.decisions.map((d) => `- ${d}`));
   if (mom.action_items?.length) out.push('', 'Tindak lanjut', ...mom.action_items.map((a) => `- ${a.task} (PIC: ${a.owner}; tenggat: ${a.due})`));
   if (m.report) out.push('', 'Laporan', m.report);
-  if (lines?.length) out.push('', 'Transkrip', ...lines.map((l) => `[${hm(l.created_at)}] ${l.kind === 'ai' ? 'Queen Bea' : l.speaker_name}: ${l.text}`));
+  if (lines?.length) out.push('', 'Transkrip', ...lines.map((l) => `[${hm(l.created_at)}] ${l.kind === 'ai' ? 'Queen Bea' : l.speaker_name}${l.kind === 'chat' ? ' (chat)' : ''}: ${l.text}`));
   return out.join('\n');
+}
+
+// rekaman rapat video (per bagian 5 menit), diputar dari bucket privat lewat tautan sementara
+function Recordings({ meetingId }) {
+  const [list, setList] = useState(null);
+  const [playing, setPlaying] = useState(null); // { id, url }
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from('hc_meeting_recordings')
+      .select('id, part, path, size_bytes, duration_s, started_at')
+      .eq('meeting_id', meetingId)
+      .order('started_at')
+      .then(({ data, error }) => alive && setList(error ? [] : data || []));
+    return () => {
+      alive = false;
+    };
+  }, [meetingId]);
+  if (!list?.length) return null;
+  const play = async (r) => setPlaying({ id: r.id, url: await recordingUrl(r.path) });
+  const mins = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return (
+    <section className="arc-sec">
+      <h3>🎬 Rekaman</h3>
+      <div className="arc-recs">
+        {list.map((r) => (
+          <button key={r.id} className={`hbtn${playing?.id === r.id ? ' pri' : ''}`} onClick={() => play(r)}>
+            ▶ Bagian {r.part} · {hm(r.started_at)} · {mins(r.duration_s)} · {Math.round(r.size_bytes / 1e6)} MB
+          </button>
+        ))}
+      </div>
+      {playing?.url && (
+        <video key={playing.url} className="arc-video" src={playing.url} controls autoPlay playsInline>
+          <a href={playing.url}>Unduh rekaman</a>
+        </video>
+      )}
+      {playing && !playing.url && <p className="muted">Rekaman tidak bisa dibuka. Coba lagi.</p>}
+    </section>
+  );
 }
 
 function Detail({ m, onBack, isOwner }) {
@@ -75,7 +115,7 @@ function Detail({ m, onBack, isOwner }) {
     setTimeout(() => document.body.classList.remove('print-archive'), 300);
   };
   const st = STATUS[m.status] || STATUS.done;
-  const speech = (lines || []).filter((l) => l.kind === 'speech' || l.kind === 'ai');
+  const speech = (lines || []).filter((l) => l.kind === 'speech' || l.kind === 'ai' || l.kind === 'chat');
 
   return (
     <article className="arc-detail">
@@ -184,6 +224,8 @@ function Detail({ m, onBack, isOwner }) {
         </>
       )}
 
+      <Recordings meetingId={m.id} />
+
       <details className="arc-sec arc-tx" open={m.status !== 'done'}>
         <summary>
           <h3>🎙 Transkrip</h3>
@@ -197,7 +239,7 @@ function Detail({ m, onBack, isOwner }) {
             </div>
           ) : (
             <div key={l.id} className={`tx${l.kind === 'ai' ? ' ceo' : ''}`}>
-              <span className="tx-t">{hm(l.created_at)}</span> <b>{l.kind === 'ai' ? 'Queen Bea' : l.speaker_name}:</b> {l.text}
+              <span className="tx-t">{hm(l.created_at)}</span> <b>{l.kind === 'ai' ? 'Queen Bea' : l.speaker_name}{l.kind === 'chat' ? ' 💬' : ''}:</b> {l.text}
             </div>
           ),
         )}

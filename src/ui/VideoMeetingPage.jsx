@@ -1,11 +1,17 @@
 // Ruang rapat video Cloudflare Realtime: #/rapat/<id rapat> (room per rapat) dan #/video (rapat yang sedang berjalan).
 // Layar preview (pilih kamera/mic/speaker) -> room: grid responsif, speaker aktif membesar, share screen,
 // chat (tersimpan di hc_meeting_lines), daftar peserta, dan kontrol host (matikan mic / keluarkan).
+// Transkrip live + Queen Bea lewat roomAssist; rekaman (flag MEETING_RECORDING) lewat recorder di browser host.
+// Hanya dipakai saat VIDEO_PROVIDER=cloudflare; selain itu rapat berjalan sebagai rapat suara LiveKit di Hive Hall.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 import { createCfCall, listDevices, canShareScreen, canPickSpeaker } from '../hall/rtc/cfCall';
 import { requestRecap } from '../hall/meeting';
+import { useCloudflare, RECORDING_ENABLED } from '../hall/rtc/config';
+import { useRoomAssist, attach as attachAssist, detach as detachAssist, micChanged, onData, ask as askQueen, setAiVoice, canTranscribe } from '../hall/rtc/roomAssist';
+import { createRecorder, canRecord } from '../hall/rtc/recorder';
+import { Sources } from '../hall/ChiefView';
 import { go } from './nav';
 
 const SPEAK_LEVEL = 0.08; // ambang "sedang bicara"
@@ -331,13 +337,87 @@ function PeoplePanel({ tiles, isHost, onMute, onKick }) {
   );
 }
 
-export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, chat, unread, panel, setPanel, onLeave, onEnd, notices }) {
+function TranscriptPanel({ myName }) {
+  const a = useRoomAssist();
+  const [q, setQ] = useState('');
+  const box = useRef(null);
+  useEffect(() => {
+    box.current?.scrollTo({ top: box.current.scrollHeight });
+  }, [a.lines.length, a.partials]);
+  const partials = Object.entries(a.partials).filter(([, p]) => Date.now() - p.at < 6000);
+  return (
+    <>
+      <div className="vm-tx-status">
+        {a.txOn ? '● Transkrip live dari mic Anda' : canTranscribe ? 'Mic mati: ucapan Anda tidak ditranskrip' : 'Browser ini belum bisa mentranskrip (pakai Chrome/Edge)'}
+        <button className={`vm-chip${a.aiVoice ? ' on' : ''}`} onClick={() => setAiVoice(!a.aiVoice)} aria-pressed={a.aiVoice}>
+          {a.aiVoice ? '🔊 Suara Queen' : '🔈 Suara Queen'}
+        </button>
+      </div>
+      <div className="vm-chat" ref={box}>
+        {!a.lines.length && <p className="vm-muted">Transkrip muncul di sini saat ada yang bicara.</p>}
+        {a.lines.map((l) =>
+          l.who === 'system' ? (
+            <div key={l.id} className="vm-tx sys">
+              {l.t} · {l.text}
+            </div>
+          ) : (
+            <div key={l.id} className={`vm-tx${l.who === 'ceo' ? ' ceo' : ''}`}>
+              <b>
+                {l.who === 'ceo' ? '👑 Queen Bea' : l.who === 'me' ? myName : l.name} <time>{l.t}</time>
+              </b>
+              <p>{l.text}</p>
+              {l.sources?.length > 0 && <Sources list={l.sources} />}
+            </div>
+          ),
+        )}
+        {partials.map(([id, p]) => (
+          <div key={`part-${id}`} className="vm-tx partial">
+            <b>{id === 'me' ? myName : p.name}</b>
+            <p>{p.text}…</p>
+          </div>
+        ))}
+      </div>
+      <form
+        className="vm-say"
+        onSubmit={(e) => {
+          e.preventDefault();
+          askQueen(q);
+          setQ('');
+        }}
+      >
+        <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} disabled={a.queenBusy} placeholder={a.queenBusy ? 'Queen Bea sedang berpikir & riset…' : 'Tanya Queen Bea (kosong = minta ringkasan)'} aria-label="Pertanyaan untuk Queen Bea" />
+        <button type="submit" disabled={a.queenBusy}>
+          👑
+        </button>
+      </form>
+    </>
+  );
+}
+
+// jawaban Queen Bea tampil sebagai teks di bawah panggung (juga dibacakan bila "Suara Queen" menyala)
+function QueenCaption() {
+  const caption = useRoomAssist((s) => s.caption);
+  if (!caption) return null;
+  return (
+    <div className="vm-caption" role="status">
+      <b>👑 Queen Bea</b>
+      <p>{caption.text}</p>
+      {caption.sources?.length > 0 && <Sources list={caption.sources} />}
+    </div>
+  );
+}
+
+export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, chat, unread, panel, setPanel, onLeave, onEnd, notices, onMic, rec, onRecord }) {
   const stageRef = useRef(null);
   const size = useSize(stageRef);
   const elapsed = useElapsed(meeting.started_at);
   const [layout, setLayout] = useState('auto'); // auto | grid | speaker
   const [settings, setSettings] = useState(false);
   const isHost = account.role === 'owner';
+  const queenBusy = useRoomAssist((s) => s.queenBusy);
+  const txOn = useRoomAssist((s) => s.txOn);
+  // tanda rekam terlihat semua peserta (dari presence host yang merekam)
+  const recordingBy = rec?.on ? account.name : snap.peers.find((p) => p.rec)?.name;
   const me = { me: true, key: snap.key || 'me', uid: account.id, name: account.name, role: account.role, mic: snap.micOn, cam: snap.camOn, net: snap.net, stream: snap.local, screenStream: snap.screen };
   const tiles = [me, ...snap.peers];
 
@@ -401,6 +481,14 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
           </small>
         </div>
         <SignalBars net={snap.net} />
+        {recordingBy && (
+          <span className="vm-badge rec" title={`Direkam oleh ${recordingBy}`}>
+            ● REC
+          </span>
+        )}
+        <span className={`vm-badge queen${queenBusy ? ' busy' : ''}`} title="Sebut “Queen Bea, …” untuk bertanya">
+          👑 {queenBusy ? 'Berpikir…' : txOn ? 'Mendengarkan' : 'Standby'}
+        </span>
         {snap.state === 'reconnecting' && <span className="vm-badge warn">Menyambung ulang…</span>}
         {snap.net === 'weak' && snap.state === 'on' && <span className="vm-badge warn">Sinyal lemah · kualitas video diturunkan</span>}
         {tiles.length > 2 && !sharer && (
@@ -408,7 +496,13 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
             {mode === 'grid' ? 'Tampilan pembicara' : 'Tampilan grid'}
           </button>
         )}
+        {isHost && onRecord && (
+          <button className={`vm-layout vm-recbtn${rec?.on ? ' rec' : ''}`} onClick={onRecord} disabled={!rec?.on && rec?.uploading}>
+            {rec?.on ? '⏹ Stop rekam' : rec?.uploading ? 'Mengunggah…' : '⏺ Rekam'}
+          </button>
+        )}
       </header>
+      {rec?.error && <div className="vm-rec-err">{rec.error}</div>}
       {notices.length > 0 && (
         <div className="vm-notices" aria-live="polite">
           {notices.map((n) => (
@@ -419,21 +513,35 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
       <div className="vm-body">
         <div className="vm-stage" ref={stageRef}>
           {stage}
+          <QueenCaption />
         </div>
         {panel && (
-          <aside className="vm-panel" aria-label={panel === 'chat' ? 'Chat' : 'Peserta'}>
+          <aside className="vm-panel" aria-label={panel === 'people' ? 'Peserta' : panel === 'tx' ? 'Transkrip' : 'Chat'}>
             <header>
-              <b>{panel === 'chat' ? 'Chat rapat' : `Peserta (${tiles.length})`}</b>
+              {panel === 'people' ? (
+                <b>Peserta ({tiles.length})</b>
+              ) : (
+                <div className="vm-tabs" role="tablist">
+                  <button role="tab" aria-selected={panel === 'chat'} onClick={() => setPanel('chat')}>
+                    Chat{unread > 0 && panel !== 'chat' ? ` · ${unread}` : ''}
+                  </button>
+                  <button role="tab" aria-selected={panel === 'tx'} onClick={() => setPanel('tx')}>
+                    Transkrip & Queen
+                  </button>
+                </div>
+              )}
               <button onClick={() => setPanel(null)} aria-label="Tutup panel">
                 ✕
               </button>
             </header>
-            {panel === 'chat' ? <ChatPanel chat={chat} onSend={(v) => call.sendChat(v)} /> : <PeoplePanel tiles={tiles} isHost={isHost} onMute={mute} onKick={kick} />}
+            {panel === 'chat' && <ChatPanel chat={chat} onSend={(v) => call.sendChat(v)} />}
+            {panel === 'tx' && <TranscriptPanel myName={account.name} />}
+            {panel === 'people' && <PeoplePanel tiles={tiles} isHost={isHost} onMute={mute} onKick={kick} />}
           </aside>
         )}
       </div>
       <nav className="vm-bar" aria-label="Kontrol rapat">
-        <button className={`vm-btn${snap.micOn ? '' : ' off'}`} onClick={() => call.setMic(!snap.micOn)} aria-pressed={snap.micOn} title={snap.micOn ? 'Matikan mic' : 'Nyalakan mic'}>
+        <button className={`vm-btn${snap.micOn ? '' : ' off'}`} onClick={() => onMic(!snap.micOn)} aria-pressed={snap.micOn} title={snap.micOn ? 'Matikan mic' : 'Nyalakan mic'}>
           {Icon.mic(snap.micOn)}
           <span>Mic</span>
         </button>
@@ -446,7 +554,7 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
             🖥<span>{snap.screenOn ? 'Berhenti share' : 'Share'}</span>
           </button>
         )}
-        <button className={`vm-btn${panel === 'chat' ? ' on' : ''}`} onClick={() => setPanel(panel === 'chat' ? null : 'chat')}>
+        <button className={`vm-btn${panel === 'chat' || panel === 'tx' ? ' on' : ''}`} onClick={() => setPanel(panel === 'chat' || panel === 'tx' ? null : 'chat')}>
           💬<span>Chat</span>
           {unread > 0 && <em className="vm-dot">{unread > 9 ? '9+' : unread}</em>}
         </button>
@@ -486,7 +594,7 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
 export function VideoMeetingPage({ meetingId }) {
   const account = useAuth((s) => s.account);
   const uid = useAuth((s) => s.session?.user?.id);
-  const [meeting, setMeeting] = useState(undefined); // undefined = memuat, null = tidak ada
+  const [meeting, setMeeting] = useState(useCloudflare ? undefined : null); // undefined = memuat, null = tidak ada
   const [snap, setSnap] = useState(null);
   const [levels, setLevels] = useState({});
   const [chat, setChat] = useState([]);
@@ -495,7 +603,11 @@ export function VideoMeetingPage({ meetingId }) {
   const [notices, setNotices] = useState([]);
   const [ended, setEnded] = useState('');
   const [sinkId, setSinkId] = useState('');
+  const [rec, setRec] = useState(null); // { on, uploading, parts, error }
   const call = useRef(null);
+  const recorder = useRef(null);
+  const snapRef = useRef(null);
+  snapRef.current = snap;
   const panelRef = useRef(panel);
   panelRef.current = panel;
 
@@ -507,6 +619,7 @@ export function VideoMeetingPage({ meetingId }) {
 
   // rapat yang dibuka: #/rapat/<id>, atau rapat yang sedang berjalan (#/video)
   useEffect(() => {
+    if (!useCloudflare) return undefined;
     let alive = true;
     const q = supabase.from('hc_meetings').select('id, title, started_at, status');
     (meetingId ? q.eq('id', meetingId).maybeSingle() : q.eq('status', 'live').order('started_at', { ascending: false }).limit(1).maybeSingle()).then(({ data }) => {
@@ -535,7 +648,7 @@ export function VideoMeetingPage({ meetingId }) {
   }, [meeting?.id]);
 
   useEffect(() => {
-    if (meeting?.status !== 'live' || !account || !uid) return undefined;
+    if (!useCloudflare || meeting?.status !== 'live' || !account || !uid) return undefined;
     const c = createCfCall({
       meetingId: meeting.id,
       me: { id: uid, name: account.name, role: account.role },
@@ -545,7 +658,11 @@ export function VideoMeetingPage({ meetingId }) {
         if (e.t === 'chat') {
           setChat((list) => (list.some((m) => m.id === e.id) ? list : [...list, e].slice(-300)));
           if (!e.mine && panelRef.current !== 'chat') setUnread((n) => n + 1);
-        } else if (e.t === 'muted') notify(`${e.by} mematikan mic Anda.`);
+        } else if (e.t === 'data') onData(e.msg, e.from);
+        else if (e.t === 'muted') {
+          micChanged(false);
+          notify(`${e.by} mematikan mic Anda.`);
+        }
         else if (e.t === 'joined') notify(`${e.name} bergabung`);
         else if (e.t === 'left') notify(`${e.name} keluar`);
       },
@@ -557,21 +674,86 @@ export function VideoMeetingPage({ meetingId }) {
     window.addEventListener('pagehide', bye);
     return () => {
       window.removeEventListener('pagehide', bye);
+      detachAssist();
+      recorder.current?.stop();
       c.leave();
       call.current = null;
     };
   }, [meeting?.id, meeting?.status, account, uid, notify]);
 
+  // begitu masuk room: transkrip & Queen Bea aktif; keluar / dikeluarkan: berhenti
+  const inRoom = snap?.state === 'on' || snap?.state === 'reconnecting';
+  useEffect(() => {
+    if (!inRoom || !call.current) return undefined;
+    attachAssist(call.current, { meetingId: meeting.id, me: { id: uid, name: account.name } });
+    micChanged(!!snapRef.current?.micOn);
+    return () => detachAssist({ silent: snapRef.current?.state === 'kicked' });
+  }, [inRoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // rekaman / unggahan berjalan: ingatkan sebelum menutup tab
+  useEffect(() => {
+    if (!rec?.on && !rec?.uploading) return undefined;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [rec?.on, rec?.uploading]);
+
   useEffect(() => {
     if (panel === 'chat') setUnread(0);
   }, [panel]);
 
+  const setMic = (on) => {
+    call.current?.setMic(on);
+    micChanged(on);
+  };
+  // rekaman: kanvas gabungan semua tile + campuran suara, dari snapshot terbaru
+  const scene = () => {
+    const sn = snapRef.current;
+    if (!sn) return { tiles: [], screen: null, audio: [] };
+    const tiles = [{ key: 'me', name: account.name, cam: sn.camOn, stream: sn.local }, ...sn.peers.map((p) => ({ key: p.key, name: p.name, cam: p.cam, stream: p.stream }))];
+    const sharer = sn.screen ? { name: account.name, stream: sn.screen } : sn.peers.filter((p) => p.screenStream).map((p) => ({ name: p.name, stream: p.screenStream }))[0] || null;
+    return { tiles, screen: sharer, audio: [sn.local, ...sn.peers.map((p) => p.stream)].filter(Boolean) };
+  };
+  const stopRecording = async () => {
+    const r = recorder.current;
+    if (!r) return;
+    call.current?.setRecording(false);
+    await r.stop();
+    recorder.current = null;
+  };
+  const toggleRecord = async () => {
+    if (recorder.current) {
+      await stopRecording();
+      notify('Rekaman berhenti. Bagian terakhir sedang diunggah ke Arsip rapat.');
+      return;
+    }
+    if (!window.confirm('Mulai merekam? Semua peserta akan melihat tanda REC. Biarkan tab ini tetap terbuka & aktif selama merekam.')) return;
+    try {
+      const r = createRecorder({ meetingId: meeting.id, getScene: scene, onState: setRec });
+      recorder.current = r;
+      r.start();
+      call.current?.setRecording(true);
+    } catch (e) {
+      recorder.current = null;
+      window.alert(`Rekaman tidak bisa dimulai: ${e.message}`);
+    }
+  };
   const leave = async () => {
+    // peserta terakhir yang keluar menutup rapat -> Queen Bea membuat notulen
+    const last = (snapRef.current?.state === 'on' || snapRef.current?.state === 'reconnecting') && !snapRef.current?.peers.length;
+    await stopRecording();
+    detachAssist();
     await call.current?.leave();
+    if (last) await requestRecap(meeting.id);
     go('/hall');
   };
   const end = async () => {
     if (!window.confirm('Akhiri rapat untuk semua peserta? Queen Bea akan membuat notulen dan laporan.')) return;
+    await stopRecording(); // bagian terakhir diunggah dulu, baru rapat ditutup
+    detachAssist();
     await call.current?.leave();
     await requestRecap(meeting.id);
     go('/hall');
@@ -579,7 +761,16 @@ export function VideoMeetingPage({ meetingId }) {
 
   const s = snap || { state: 'idle', peers: [], micOn: true, camOn: true, net: 'good' };
   let body;
-  if (meeting === undefined) body = <div className="vm-center">Memuat rapat…</div>;
+  if (!useCloudflare)
+    body = (
+      <div className="vm-center">
+        <p>Rapat video sedang dinonaktifkan. Rapat berjalan sebagai rapat suara di Hive Hall.</p>
+        <button className="vm-join" onClick={() => go('/hall')}>
+          Ke Hive Hall
+        </button>
+      </div>
+    );
+  else if (meeting === undefined) body = <div className="vm-center">Memuat rapat…</div>;
   else if (!meeting)
     body = (
       <div className="vm-center">
@@ -608,7 +799,27 @@ export function VideoMeetingPage({ meetingId }) {
       </div>
     );
   else if (s.state === 'on' || s.state === 'reconnecting')
-    body = <Room meeting={meeting} account={{ ...account, id: uid }} snap={s} levels={levels} call={call.current} sinkId={sinkId} setSinkId={setSinkId} chat={chat} unread={unread} panel={panel} setPanel={setPanel} onLeave={leave} onEnd={end} notices={notices} />;
+    body = (
+      <Room
+        meeting={meeting}
+        account={{ ...account, id: uid }}
+        snap={s}
+        levels={levels}
+        call={call.current}
+        sinkId={sinkId}
+        setSinkId={setSinkId}
+        chat={chat}
+        unread={unread}
+        panel={panel}
+        setPanel={setPanel}
+        onLeave={leave}
+        onEnd={end}
+        notices={notices}
+        onMic={setMic}
+        rec={rec}
+        onRecord={RECORDING_ENABLED && canRecord ? toggleRecord : null}
+      />
+    );
   else if (s.state === 'error' && s.local === null)
     body = (
       <div className="vm-center">

@@ -2,8 +2,10 @@
 // Menutup rapat Hive Hall lalu Queen Bea (Claude) membuat notulen (MoM) dan laporan dari transkrip.
 //   POST { meeting_id }               -> akhiri rapat yang masih berjalan + buat notulen
 //   POST { meeting_id, retry: true }  -> owner: buat ulang notulen yang gagal
-// Siapa yang boleh mengakhiri: owner kapan saja; staff lain hanya jika ruang suara sudah kosong
-// (dia peserta terakhir / semua sudah pergi). Penulisan memakai service role di server.
+// Siapa yang boleh mengakhiri: owner kapan saja; staff lain hanya jika ruang rapat sudah kosong
+// (dia peserta terakhir / semua sudah pergi): ruang suara LiveKit dan ruang video Cloudflare
+// (hc_meeting_participants) sama-sama dicek. Penulisan memakai service role di server.
+// Secret opsional VIDEO_PROVIDER=cloudflare: LiveKit yang tidak terpasang tidak menghalangi.
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -46,6 +48,20 @@ async function voiceParticipants(): Promise<string[] | null> {
   if (!res.ok) return null;
   const data = await res.json().catch(() => ({}));
   return (data.participants ?? []).map((p: { identity: string }) => p.identity);
+}
+
+// peserta yang masih di ruang video Cloudflare (detak terakhir < 150 detik)
+// deno-lint-ignore no-explicit-any
+async function videoParticipants(admin: any, meetingId: string): Promise<string[]> {
+  const since = new Date(Date.now() - 150 * 1000).toISOString();
+  const { data } = await admin
+    .from('hc_meeting_participants')
+    .select('user_id')
+    .eq('meeting_id', meetingId)
+    .is('left_at', null)
+    .is('kicked_at', null)
+    .gt('last_seen_at', since);
+  return (data ?? []).map((r: { user_id: string }) => r.user_id);
 }
 
 const MOM_SCHEMA = {
@@ -112,8 +128,10 @@ Deno.serve(async (req) => {
   } else {
     if (meeting.status !== 'live') return json({ status: meeting.status });
     if (me.role !== 'owner') {
-      const left = await voiceParticipants();
-      if (left === null || left.some((p) => p !== u.user.id)) return json({ error: 'meeting_still_running' }, 409);
+      const cloudflare = Deno.env.get('VIDEO_PROVIDER') === 'cloudflare';
+      const [voice, video] = await Promise.all([voiceParticipants(), videoParticipants(admin, id)]);
+      const others = (list: string[]) => list.some((p) => p !== u.user.id);
+      if ((voice === null && !cloudflare) || others(voice ?? []) || others(video)) return json({ error: 'meeting_still_running' }, 409);
     }
     const { data: closed } = await admin
       .from('hc_meetings')
@@ -145,7 +163,8 @@ async function summarize(admin: Admin, meeting: { id: string; title: string; sta
     .limit(1500);
   const all = (lines ?? []) as MeetingLine[];
   const participants = [...new Set(all.filter((l) => l.kind !== 'ai').map((l) => l.speaker_name))];
-  const speech = all.filter((l) => l.kind === 'speech' || l.kind === 'ai');
+  // chat dalam rapat ikut jadi bahan notulen (ditandai supaya Queen Bea tahu itu tulisan, bukan ucapan)
+  const speech = all.filter((l) => l.kind === 'speech' || l.kind === 'ai' || l.kind === 'chat');
 
   const finish = async (patch: Record<string, unknown>) => {
     await admin.from('hc_meetings').update({ participants, ...patch }).eq('id', id);
@@ -167,7 +186,7 @@ async function summarize(admin: Admin, meeting: { id: string; title: string; sta
   }
 
   // transkrip dipotong dari belakang supaya muat (~60 ribu karakter)
-  let tx = speech.map((l) => `[${wib(l.created_at)}] ${l.kind === 'ai' ? 'Queen Bea (AI)' : l.speaker_name}: ${l.text}`);
+  let tx = speech.map((l) => `[${wib(l.created_at)}] ${l.kind === 'ai' ? 'Queen Bea (AI)' : l.kind === 'chat' ? `${l.speaker_name} (chat)` : l.speaker_name}: ${l.text}`);
   while (tx.join('\n').length > 60000) tx = tx.slice(1);
   const endMs = meeting.ended_at ? new Date(meeting.ended_at).getTime() : Date.now();
   const durMin = Math.max(1, Math.round((endMs - new Date(meeting.started_at).getTime()) / 60000));

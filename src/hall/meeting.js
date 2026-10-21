@@ -12,6 +12,9 @@ import { useAuth, toAvatarProfile } from '../sim/auth';
 import { buildAnswer, speak } from './ai';
 import { askQueenBea } from './queenBea';
 import { connectVoice, disconnectVoice, setMic, startAudio, publish, startTranscribe, stopTranscribe, canTranscribe, roomStatus } from './voice';
+import { queenCall } from './queenWake';
+import { useCloudflare } from './rtc/config';
+import { videoRoomStatus, startVideoMeeting } from './rtc/videoMeeting';
 
 export const AI_GUESTS = [
   { id: 'ceo', name: 'Queen Bea', role: 'Chief Executive', color: '#F5B700', crown: true },
@@ -80,6 +83,7 @@ function derive() {
   const firstRoom = roomAll.length ? Math.min(...roomAll.map((p) => p.joinedAt || Date.now())) : null;
   useMeeting.setState((s) => ({
     active,
+    liveId: dbLive?.id || null,
     people,
     title: dbLive?.title || host?.title || (s.joined && s.title) || (active ? 'Rapat koloni' : ''),
     startedAt: (dbLive && new Date(dbLive.started_at).getTime()) || host?.startedAt || (s.joined && s.startedAt) || firstRoom,
@@ -89,7 +93,8 @@ function derive() {
 async function pollRoom() {
   if (!channel || document.hidden || !inHall()) return;
   if (useMeeting.getState().joined) return; // saat di meeting, daftar peserta datang langsung dari LiveKit
-  const list = await roomStatus();
+  // rapat video Cloudflare: peserta dari hc_meeting_participants; rapat suara: dari server LiveKit
+  const list = useCloudflare ? (dbLive ? await videoRoomStatus(dbLive.id) : []) : await roomStatus();
   if (!list || !channel) return;
   roomAll = list;
   derive();
@@ -240,6 +245,18 @@ export const useMeeting = create((set, get) => ({
       if (useAuth.getState().account?.role !== 'owner') {
         set({ notice: 'Hanya owner yang bisa memulai meeting.' });
         return false;
+      }
+      if (useCloudflare) {
+        // ruang video Cloudflare: rapat dibuka di sini, lalu Hive Hall membuka #/rapat/<id>
+        try {
+          const id = await startVideoMeeting(t);
+          set({ notice: '' });
+          await loadLive();
+          return id;
+        } catch (e) {
+          set({ notice: e.message });
+          return false;
+        }
       }
       const { data, error } = await supabase.from('hc_meetings').insert({ title: t }).select('id, title, started_at, created_by, status').single();
       if (error && error.code !== '23505') {
@@ -422,28 +439,16 @@ function speakAi(text) {
   if (!speak(text, restore)) restore();
 }
 
-// Queen Bea standby: setiap kalimat saya yang menyebut namanya dianggap panggilan.
-// Pengenal suara sering menulis "Queen" sebagai "kuin"/"quin"/"kwin", jadi semuanya diterima.
-const WAKE = /\b(queen|kuin|quin|quinn|kwin)\b/i;
+// Queen Bea standby: setiap kalimat saya yang menyebut namanya dianggap panggilan (lihat queenWake.js).
 let wakeAt = 0;
 let qbBusyTimer = null;
 function listenForQueen(text) {
   const st = useMeeting.getState();
   if (!st.live || !st.joined) return;
-  let m = text.match(WAKE);
-  // "Queen Bea ..." di mana saja, atau "Queen, ..." di awal kalimat (bukan "queen size bed")
-  if (m) {
-    const named = /^[\s,.:!?-]*(bea|bee|bi|b)\b/i.test(text.slice(m.index + m[0].length));
-    const atStart = text.slice(0, m.index).trim().split(/\s+/).filter(Boolean).length <= 1;
-    if (!named && !atStart) m = null;
-  }
-  if (m) {
-    const rest = text
-      .slice(m.index + m[0].length)
-      .replace(/^[\s,.:!?-]*(bea|bee|bi|b)?\b[\s,.:!?-]*/i, '')
-      .trim();
+  const call = queenCall(text);
+  if (call) {
     // hanya memanggil nama ("Queen Bea?") -> tunggu kalimat berikutnya sebagai pertanyaan
-    if (rest.split(/\s+/).filter(Boolean).length < 3) {
+    if (call.wakeOnly) {
       wakeAt = Date.now();
       return;
     }

@@ -25,6 +25,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # flag rapat: isi di GitHub -> Settings -> Secrets and variables -> Actions -> Variables
+          # VIDEO_PROVIDER=cloudflare (kosong/livekit = rapat suara LiveKit), MEETING_RECORDING=on
+          VITE_VIDEO_PROVIDER: ${{ vars.VIDEO_PROVIDER }}
+          VITE_MEETING_RECORDING: ${{ vars.MEETING_RECORDING }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

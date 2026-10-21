@@ -32,6 +32,7 @@ const CAM_LAYERS = [
   { rid: 'c', scaleResolutionDownBy: 4, maxBitrate: 100_000, maxFramerate: 15 },
 ];
 const RID_ORDER = ['a', 'b', 'c'];
+const DATA_TYPES = new Set(['tx', 'part', 'ai', 'qb']);
 const lower = (rid) => RID_ORDER[Math.min(RID_ORDER.length - 1, RID_ORDER.indexOf(rid) + 1)];
 
 async function api(meetingId, action, payload = {}) {
@@ -120,7 +121,7 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
   let subQueue = queue();
   const midToLoc = new Map(); // mid penerima -> "pubSession/trackName"
   const pulled = new Map(); // "pubSession/trackName" -> { mid, key, trackName, rid }
-  const peers = new Map(); // presenceKey -> { key, uid, name, role, mic, cam, screen, net, pub, stream, screenStream }
+  const peers = new Map(); // presenceKey -> { key, uid, name, role, mic, cam, screen, net, rec, pub, stream, screenStream }
   const wantRid = new Map(); // presenceKey -> lapis yang diinginkan UI ('a' | 'b' | 'c')
   let channel = null;
   let state = 'idle'; // idle | connecting | on | reconnecting | error | left | kicked
@@ -137,6 +138,7 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
   let weakStreak = 0;
   let goodStreak = 0;
   let topLayerOff = false;
+  let recording = false; // host sedang merekam: semua peserta melihat tandanya
 
   const snapshot = () => ({
     state,
@@ -148,7 +150,8 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
     screenOn: !!screen,
     net,
     key,
-    peers: [...peers.values()].map((p) => ({ key: p.key, uid: p.uid, name: p.name, role: p.role, mic: p.mic, cam: p.cam, screen: p.screen, net: p.net, stream: p.stream, screenStream: p.screenStream })),
+    recording,
+    peers: [...peers.values()].map((p) => ({ key: p.key, uid: p.uid, name: p.name, role: p.role, mic: p.mic, cam: p.cam, screen: p.screen, net: p.net, rec: p.rec, stream: p.stream, screenStream: p.screenStream })),
   });
   const emit = () => onChange?.(snapshot());
   const fail = (e) => {
@@ -479,6 +482,7 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
     cam: camOn,
     screen: !!screen,
     net,
+    rec: recording,
     pub: pub && { sessionId: pub.sessionId, sig: pub.sig, tracks: pub.tracks },
   });
 
@@ -515,6 +519,8 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
     if (!m || typeof m !== 'object') return;
     const from = [...peers.values()].find((p) => p.uid === m.from);
     if (m.t === 'chat' && typeof m.text === 'string') onEvent?.({ t: 'chat', id: m.id, name: String(m.name || from?.name || 'Staff').slice(0, 60), uid: m.from, text: m.text.slice(0, 1000), at: m.at || Date.now() });
+    // transkrip, jawaban Queen Bea, dll. diteruskan ke pemakai (roomAssist)
+    if (DATA_TYPES.has(m.t)) onEvent?.({ t: 'data', msg: m, from: { uid: m.from, key: from?.key || null, name: from?.name || 'Peserta' } });
     // perintah host hanya dituruti dari peserta yang tercatat sebagai owner
     if (m.target !== me.id || from?.role !== 'owner') return;
     if (m.t === 'mute' && micOn) {
@@ -556,6 +562,7 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
             cam: m.cam !== false,
             screen: !!m.screen,
             net: m.net || 'good',
+            rec: !!m.rec,
             pub: m.pub,
             stream: prev?.stream || null,
             screenStream: prev?.screenStream || null,
@@ -723,6 +730,14 @@ export function createCfCall({ meetingId, me, onChange, onLevels, onEvent }) {
     async loadChat() {
       const { data } = await supabase.from('hc_meeting_lines').select('id, speaker_id, speaker_name, text, created_at').eq('meeting_id', meetingId).eq('kind', 'chat').order('created_at').limit(200);
       return (data || []).map((r) => ({ t: 'chat', id: `db-${r.id}`, name: r.speaker_name, uid: r.speaker_id, text: r.text, at: new Date(r.created_at).getTime(), mine: r.speaker_id === me.id }));
+    },
+    // pesan ke semua peserta lain (transkrip, jawaban Queen Bea) lewat broadcast kanal rapat
+    broadcast(payload) {
+      send(payload);
+    },
+    setRecording(on) {
+      recording = !!on;
+      announce();
     },
     // host: matikan mic peserta (peserta tetap bisa menyalakan lagi, seperti Zoom)
     mutePeer(uid) {
