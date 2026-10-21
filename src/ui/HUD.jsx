@@ -677,30 +677,45 @@ function MissionBoard({ className = 'panel board', onPick }) {
   );
 }
 
-// dua pintu utama, dibuat mencolok
+// ikon garis untuk tiga pintu utama (seragam, bukan emoji)
+const PA_ICONS = {
+  hall: 'M3 10h18M5 10v8M9.7 10v8M14.3 10v8M19 10v8M3 20h18M12 3l9 5H3z',
+  work: 'M4 5h16v11H9l-5 4zM8 9.5h8M8 12.5h5',
+  portal: 'M4 4h5v16H4zM10 4h5v10h-5zM16 4h4v6h-4z',
+};
+function PaIcon({ name }) {
+  return (
+    <span className="pa-ic" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d={PA_ICONS[name]} />
+      </svg>
+    </span>
+  );
+}
+
+// tiga pintu utama dalam satu dock; Hive Hall paling menonjol
 function PrimaryActions({ className = 'primary-actions', onPick }) {
   const nav = (path) => {
     onPick?.();
     go(path);
   };
+  const items = [
+    ['hall', '/hall', 'Hive Hall', 'Rapat & Queen Bea'],
+    ['work', '/agent', 'Ruang Kerja', 'Chat & tugas agent'],
+    ['portal', '/saya', 'Portal saya', 'Kanban & tugas'],
+  ];
   return (
-    <div className={className}>
-      <button className="pa-btn hall" onClick={() => nav('/hall')}>
-        <span aria-hidden="true">🏛</span>
-        <b>Hive Hall</b>
-        <small>Rapat & Queen Bea</small>
-      </button>
-      <button className="pa-btn work" onClick={() => nav('/agent')}>
-        <span aria-hidden="true">💬</span>
-        <b>Ruang Kerja</b>
-        <small>Chat & tugas agent</small>
-      </button>
-      <button className="pa-btn portal" onClick={() => nav('/saya')}>
-        <span aria-hidden="true">🙋</span>
-        <b>Portal saya</b>
-        <small>Kanban, tugas & rapat</small>
-      </button>
-    </div>
+    <nav className={className} aria-label="Pintu utama">
+      {items.map(([id, path, title, sub]) => (
+        <button key={id} className={`pa-btn ${id}`} onClick={() => nav(path)}>
+          <PaIcon name={id} />
+          <span className="pa-txt">
+            <b>{title}</b>
+            <small>{sub}</small>
+          </span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
