@@ -2,6 +2,14 @@
 
 Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bisa diklik di GitHub untuk melihat detail perubahannya.
 
+## 22 Oktober 2026
+
+### Employee menggantikan "Undang", Workshop pindah ke dock
+- Dock bawah koloni: **Hive Hall · Ruang Kerja · Workshop · Portal saya · Employee** (Employee khusus owner & kepala divisi). Workshop tidak lagi di rak alat; tombol "Undang" di kartu akun dihapus.
+- Halaman **Employee** (`#/employee`): data karyawan wajib lengkap (nama lengkap, panggilan, gender, TTL, foto, email, telepon, kontak darurat), penempatan divisi & peran, status Belum diundang / Diundang / Aktif.
+- **Kirim undangan** ke email karyawan (Edge Function `employee-invite`, template `invite.html`). Karyawan klik link → masuk, akun aktif otomatis, lalu membuat password.
+- Migrasi `20261022090000_hc_employees.sql`: tabel `hc_employees` + bucket privat `hc-employee-photos`.
+
 ## 21 Oktober 2026
 
 ### Rapat video Cloudflare Realtime (branch `feat/video-cloudflare`, di balik flag)

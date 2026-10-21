@@ -173,11 +173,6 @@ function AccountChip() {
           {ROLE_LABEL[account.role]} · {online} rekan online
         </span>
       </div>
-      {['owner', 'lead'].includes(account.role) && (
-        <button className="acct-btn" onClick={() => go('/undang')}>
-          Undang
-        </button>
-      )}
       <button className="acct-btn ghost" onClick={signOut}>
         Keluar
       </button>
@@ -505,11 +500,6 @@ function AccountPanel({ onPick }) {
         <button className="acct-btn ghost" onClick={() => nav('/hall')}>
           Hive Hall
         </button>
-        {account && ['owner', 'lead'].includes(account.role) && (
-          <button className="acct-btn ghost" onClick={() => nav('/undang')}>
-            Undang staff
-          </button>
-        )}
         {session && (
           <button
             className="acct-btn ghost danger"
@@ -682,6 +672,8 @@ const PA_ICONS = {
   hall: 'M3 10h18M5 10v8M9.7 10v8M14.3 10v8M19 10v8M3 20h18M12 3l9 5H3z',
   work: 'M4 5h16v11H9l-5 4zM8 9.5h8M8 12.5h5',
   portal: 'M4 4h5v16H4zM10 4h5v10h-5zM16 4h4v6h-4z',
+  workshop: 'M14.5 4.5a4 4 0 0 0-5 5L4 15l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.4 2.4-2.6-.4-.4-2.6z',
+  employee: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.2 3.2 0 0 1 0 6.2M18 14.5c1.9.8 3 2.8 3 5.5',
 };
 function PaIcon({ name }) {
   return (
@@ -693,24 +685,28 @@ function PaIcon({ name }) {
   );
 }
 
-// tiga pintu utama dalam satu dock; Hive Hall paling menonjol
+// pintu utama dalam satu dock; Hive Hall paling menonjol. Employee khusus owner & kepala divisi.
 function PrimaryActions({ className = 'primary-actions', onPick }) {
+  const account = useAuth((s) => s.account);
   const nav = (path) => {
     onPick?.();
     go(path);
   };
   const items = [
-    ['hall', '/hall', 'Hive Hall', 'Rapat & Queen Bea'],
-    ['work', '/agent', 'Ruang Kerja', 'Chat & tugas agent'],
-    ['portal', '/saya', 'Portal saya', 'Kanban & tugas'],
+    ['hall', '/hall', 'Hive Hall', 'Rapat & Queen Bea', 'Hall'],
+    ['work', '/agent', 'Ruang Kerja', 'Chat & tugas agent', 'Kerja'],
+    ['workshop', '/workshop', 'Workshop', 'Tiket tim', 'Workshop'],
+    ['portal', '/saya', 'Portal saya', 'Kanban & tugas', 'Portal'],
+    ...(account && ['owner', 'lead'].includes(account.role) ? [['employee', '/employee', 'Employee', 'Data & undangan', 'Employee']] : []),
   ];
+  const dock = className.includes('is-dock'); // HP: label pendek supaya tidak terpotong
   return (
     <nav className={className} aria-label="Pintu utama">
-      {items.map(([id, path, title, sub]) => (
-        <button key={id} className={`pa-btn ${id}`} onClick={() => nav(path)}>
+      {items.map(([id, path, title, sub, short]) => (
+        <button key={id} className={`pa-btn ${id}`} onClick={() => nav(path)} aria-label={title}>
           <PaIcon name={id} />
           <span className="pa-txt">
-            <b>{title}</b>
+            <b>{dock ? short : title}</b>
             <small>{sub}</small>
           </span>
         </button>
@@ -751,7 +747,6 @@ function ToolRail({ className = 'panel tool-rail', onPick }) {
         <span aria-hidden="true">⚡</span>
         <em>{saver ? 'Hemat aktif' : 'Mode hemat'}</em>
       </button>
-      {tool('🛠', 'Workshop', () => go('/workshop'), 'Meja kerja tim: tiket untuk Queen Bea, dari rapat sampai laporan')}
       {owner && tool('📊', 'Statistik', () => go('/statistik'))}
       {tool('🎬', 'Intro', () => go('/intro'), 'Video perkenalan Hive Colony (±75 detik), siap direkam')}
       {tool('📺', 'Mode TV', () => go('/tv'), 'Mode spectator untuk layar besar')}
