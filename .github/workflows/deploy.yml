@@ -26,9 +26,10 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # flag rapat: isi di GitHub -> Settings -> Secrets and variables -> Actions -> Variables
-          # VIDEO_PROVIDER=cloudflare (kosong/livekit = rapat suara LiveKit), MEETING_RECORDING=on
-          VITE_VIDEO_PROVIDER: ${{ vars.VIDEO_PROVIDER }}
+          # flag rapat: bawaan = rapat video Cloudflare. Kembali ke rapat suara LiveKit: isi repo variable
+          # VIDEO_PROVIDER=livekit (Settings -> Secrets and variables -> Actions -> Variables) lalu Run workflow.
+          # MEETING_RECORDING=on menyalakan tombol rekam.
+          VITE_VIDEO_PROVIDER: ${{ vars.VIDEO_PROVIDER || 'cloudflare' }}
           VITE_MEETING_RECORDING: ${{ vars.MEETING_RECORDING }}
       - uses: actions/upload-pages-artifact@v3
         with:

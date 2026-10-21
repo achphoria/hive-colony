@@ -12,11 +12,11 @@ Pengganti LiveKit untuk rapat Hive Hall: Cloudflare Realtime SFU (meneruskan aud
 
 | Di mana | Nama | Nilai |
 |---|---|---|
-| GitHub → Settings → Secrets and variables → Actions → **Variables** | `VIDEO_PROVIDER` | `cloudflare` = rapat video Cloudflare. Kosong / `livekit` = rapat suara LiveKit seperti sebelumnya. |
+| GitHub → Settings → Secrets and variables → Actions → **Variables** | `VIDEO_PROVIDER` | Kosong = rapat video Cloudflare (bawaan deploy). `livekit` = rapat suara LiveKit seperti sebelumnya. |
 | idem | `MEETING_RECORDING` | `on` = host bisa merekam rapat video. Kosong = tombol rekam tidak ada. |
 | Supabase → Edge Functions → Secrets | `VIDEO_PROVIDER` | `cloudflare` (disarankan). Supaya notulen otomatis saat peserta terakhir keluar tetap jalan walau secret LiveKit nanti dihapus. |
 
-Flag frontend dibaca saat build (GitHub Actions), jadi setelah mengubahnya jalankan ulang workflow **Deploy ke GitHub Pages** (Actions → Run workflow). Kembali ke LiveKit = kosongkan `VIDEO_PROVIDER` lalu jalankan ulang workflow. Dengan flag kosong, `#/rapat/<id>` menampilkan "rapat video sedang dinonaktifkan" dan kalender membuka rapat suara di lobi Hive Hall.
+Flag frontend dibaca saat build (GitHub Actions), jadi setelah mengubahnya jalankan ulang workflow **Deploy ke GitHub Pages** (Actions → Run workflow). Kembali ke LiveKit = isi variable `VIDEO_PROVIDER` dengan `livekit` lalu jalankan ulang workflow. Build lokal (`npm run dev`) tanpa env tetap LiveKit. Dengan flag `livekit`, `#/rapat/<id>` menampilkan "rapat video sedang dinonaktifkan" dan kalender membuka rapat suara di lobi Hive Hall.
 
 ## Yang perlu dipasang
 
