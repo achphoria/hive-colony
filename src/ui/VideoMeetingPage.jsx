@@ -13,6 +13,7 @@ import { useRoomAssist, attach as attachAssist, detach as detachAssist, micChang
 import { createRecorder, canRecord } from '../hall/rtc/recorder';
 import { Sources } from '../hall/ChiefView';
 import { go } from './nav';
+import { confirmDialog, alertDialog } from './dialog';
 
 const SPEAK_LEVEL = 0.08; // ambang "sedang bicara"
 const SPEAKER_HOLD_MS = 2000; // speaker aktif tidak langsung berganti saat jeda bicara
@@ -435,7 +436,12 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
   const onQuality = useCallback((k, rid) => call.setQuality(k, rid), [call]);
   const mute = (t) => call.mutePeer(t.uid);
   const kick = (t) => {
-    if (window.confirm(`Keluarkan ${t.name} dari rapat? Ia tidak bisa masuk lagi ke rapat ini.`)) call.kickPeer(t.uid).catch((e) => window.alert(e.message));
+    confirmDialog({
+      title: `Keluarkan ${t.name}?`,
+      message: 'Video dan suaranya langsung dihentikan, dan ia tidak bisa masuk lagi ke rapat ini.',
+      confirmLabel: 'Keluarkan',
+      tone: 'danger',
+    }).then((ok) => ok && call.kickPeer(t.uid).catch((e) => alertDialog({ title: 'Gagal mengeluarkan peserta', message: e.message, tone: 'error' })));
   };
   const tile = (t, extra = {}) => <Tile key={t.key} t={t} level={levels[t.me ? 'me' : t.key] || 0} onQuality={onQuality} isHost={isHost} onMute={mute} onKick={kick} {...extra} />;
 
@@ -467,7 +473,7 @@ export function Room({ meeting, account, snap, levels, call, sinkId, setSinkId, 
       if (snap.screenOn) await call.stopScreen();
       else await call.startScreen();
     } catch (e) {
-      if (e?.name !== 'NotAllowedError') window.alert(e.message || 'Share screen gagal.');
+      if (e?.name !== 'NotAllowedError') alertDialog({ title: 'Share screen gagal', message: e.message || 'Coba lagi, atau pilih jendela/tab lain untuk dibagikan.', tone: 'error' });
     }
   };
 
@@ -730,7 +736,14 @@ export function VideoMeetingPage({ meetingId }) {
       notify('Rekaman berhenti. Bagian terakhir sedang diunggah ke Arsip rapat.');
       return;
     }
-    if (!window.confirm('Mulai merekam? Semua peserta akan melihat tanda REC. Biarkan tab ini tetap terbuka & aktif selama merekam.')) return;
+    const ok = await confirmDialog({
+      title: 'Mulai merekam rapat?',
+      message: 'Semua peserta akan melihat tanda ● REC. Rekaman tersimpan di Arsip rapat per bagian 5 menit.',
+      detail: 'Biarkan tab ini tetap terbuka dan aktif selama merekam supaya videonya tidak patah-patah.',
+      confirmLabel: 'Mulai rekam',
+      tone: 'rec',
+    });
+    if (!ok) return;
     try {
       const r = createRecorder({ meetingId: meeting.id, getScene: scene, onState: setRec });
       recorder.current = r;
@@ -738,7 +751,7 @@ export function VideoMeetingPage({ meetingId }) {
       call.current?.setRecording(true);
     } catch (e) {
       recorder.current = null;
-      window.alert(`Rekaman tidak bisa dimulai: ${e.message}`);
+      alertDialog({ title: 'Rekaman tidak bisa dimulai', message: e.message, tone: 'error' });
     }
   };
   const leave = async () => {
@@ -751,7 +764,13 @@ export function VideoMeetingPage({ meetingId }) {
     go('/hall');
   };
   const end = async () => {
-    if (!window.confirm('Akhiri rapat untuk semua peserta? Queen Bea akan membuat notulen dan laporan.')) return;
+    const ok = await confirmDialog({
+      title: 'Akhiri rapat untuk semua peserta?',
+      message: 'Semua peserta akan keluar dari ruang rapat. Queen Bea lalu menyusun notulen dan laporan di Arsip rapat.',
+      confirmLabel: 'Akhiri rapat',
+      tone: 'end',
+    });
+    if (!ok) return;
     await stopRecording(); // bagian terakhir diunggah dulu, baru rapat ditutup
     detachAssist();
     await call.current?.leave();

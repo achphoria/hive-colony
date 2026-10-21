@@ -16,6 +16,7 @@ import {
   deleteRoutine,
   runRoutineNow,
 } from '../hall/agentApi';
+import { confirmDialog } from './dialog';
 
 const DAYS = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 const wibLabel = (iso) => {
@@ -164,7 +165,8 @@ function SkillList({ items, kind, canTrain, agent, reload }) {
                 <button onClick={() => setEditing(s.id)}>✏️ Ubah</button>
                 <button
                   onClick={async () => {
-                    if (!window.confirm(`Hapus ${label} "${s.name}"?`)) return;
+                    const ok = await confirmDialog({ title: `Hapus ${label} “${s.name}”?`, message: 'Agent tidak lagi memakai ini di jawaban berikutnya.', confirmLabel: 'Hapus', tone: 'danger' });
+                    if (!ok) return;
                     await deleteSkill(s.id);
                     reload();
                   }}
@@ -465,7 +467,8 @@ export function RoutinePanel({ agent, nick, canTrain }) {
                 <button onClick={() => setEditing(r.id)}>✏️ Ubah</button>
                 <button
                   onClick={async () => {
-                    if (!window.confirm(`Hapus tugas rutin "${r.title}"?`)) return;
+                    const ok = await confirmDialog({ title: `Hapus tugas rutin “${r.title}”?`, message: 'Jadwal ini berhenti dan tidak dijalankan lagi.', confirmLabel: 'Hapus', tone: 'danger' });
+                    if (!ok) return;
                     await deleteRoutine(r.id);
                     reload();
                   }}

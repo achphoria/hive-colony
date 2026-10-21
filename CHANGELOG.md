@@ -4,6 +4,11 @@ Catatan perubahan per tahap, terbaru di atas. Tanggal dalam WIB. Kode commit bis
 
 ## 22 Oktober 2026
 
+### Dialog Hive Colony menggantikan popup browser
+- Semua popup bawaan browser (`confirm`, `alert`, `prompt`; 14 tempat di 6 file) diganti dialog bergaya Hive Colony (`src/ui/dialog.jsx`): judul + penjelasan + tombol berlabel aksinya, tombol merah & fokus awal di Batal untuk aksi yang menghapus/mengakhiri, Esc untuk batal, lembar bawah di HP.
+- Link undangan Employee: dialog "Salin link" dengan tombol Salin, bukan kotak prompt.
+- Satu-satunya yang tetap bawaan browser: peringatan "Keluar dari situs?" saat menutup tab selama rekaman (tidak bisa diubah situs mana pun).
+
 ### Employee menggantikan "Undang", Workshop pindah ke dock
 - Dock bawah koloni: **Hive Hall · Ruang Kerja · Workshop · Portal saya · Employee** (Employee khusus owner & kepala divisi). Workshop tidak lagi di rak alat; tombol "Undang" di kartu akun dihapus.
 - Halaman **Employee** (`#/employee`): data karyawan wajib lengkap (nama lengkap, panggilan, gender, TTL, foto, email, telepon, kontak darurat), penempatan divisi & peran, status Belum diundang / Diundang / Aktif.
