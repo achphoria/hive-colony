@@ -4,6 +4,7 @@ import { canTranscribe } from './voice';
 import { Sources } from './ChiefView';
 import { useAuth } from '../sim/auth';
 import { useHive } from '../sim/store';
+import { confirmDialog } from '../ui/dialog';
 
 const ROLE_LABEL = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' };
 
@@ -276,8 +277,14 @@ export function MeetingView({ onLeave, onReport }) {
         {m.live && account?.role === 'owner' && (
           <button
             className="hbtn danger solid"
-            onClick={() => {
-              if (window.confirm('Akhiri rapat untuk semua peserta? Queen Bea akan membuat notulen dan laporan.')) m.endForAll();
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: 'Akhiri rapat untuk semua peserta?',
+                message: 'Semua peserta akan keluar dari rapat. Queen Bea lalu menyusun notulen dan laporan di Arsip rapat.',
+                confirmLabel: 'Akhiri rapat',
+                tone: 'end',
+              });
+              if (ok) m.endForAll();
             }}
           >
             ⏹<span className="lbl"> Akhiri rapat</span>

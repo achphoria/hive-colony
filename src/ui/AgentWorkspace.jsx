@@ -34,6 +34,7 @@ import {
 } from '../hall/agentApi';
 import { RateButtons, ScoreBadge, SkillPanel, RoutinePanel } from './AgentTraining';
 import { useConversation } from './useConversation';
+import { confirmDialog, promptDialog } from './dialog';
 import { FileViewer, ImageThumbs } from './FileViewer';
 import { go } from './nav';
 import { imageUrlsIn, stripMachineBlocks } from '../../supabase/functions/_shared/taskProtocol.js';
@@ -757,7 +758,7 @@ export function AgentWorkspace({ agentId }) {
                           aria-label="Ganti judul percakapan"
                           title="Ganti judul"
                           onClick={async () => {
-                            const title = window.prompt('Judul percakapan', t.title);
+                            const title = await promptDialog({ title: 'Ganti judul percakapan', defaultValue: t.title, maxLength: 120, placeholder: 'Judul percakapan' });
                             if (!title || title === t.title) return;
                             await updateThread(t.id, { title }).catch((e) => setError(e.message));
                             loadThreads(agent).then(setThreads);
@@ -772,7 +773,8 @@ export function AgentWorkspace({ agentId }) {
                         className="aw-del"
                         aria-label="Hapus percakapan"
                         onClick={async () => {
-                          if (!window.confirm('Hapus percakapan ini?')) return;
+                          const ok = await confirmDialog({ title: 'Hapus percakapan ini?', message: `“${t.title}” beserta semua pesannya dihapus permanen.`, confirmLabel: 'Hapus', tone: 'danger' });
+                          if (!ok) return;
                           await deleteThread(t.id);
                           if (t.id === threadId) {
                             openThread(null);
@@ -1196,7 +1198,8 @@ export function AgentWorkspace({ agentId }) {
                           {(r.user_id === uid || access.owner) && (
                             <button
                               onClick={async () => {
-                                if (!window.confirm('Hapus hasil ini?')) return;
+                                const ok = await confirmDialog({ title: 'Hapus hasil tersimpan?', message: `“${r.title}” dihapus dari Hasil tersimpan.`, confirmLabel: 'Hapus', tone: 'danger' });
+                                if (!ok) return;
                                 await deleteResult(r.id);
                                 loadResults(agent).then(setResults);
                               }}

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 import { DEPTS } from '../data/hive';
 import { go } from './nav';
+import { confirmDialog, copyDialog } from './dialog';
 
 const STAFF_DEPTS = ['ceo', 'cx', 'ops', 'it', 'mkt', 'fin', 'prod', 'hr'];
 const ROLE_LABEL = { owner: 'Owner', lead: 'Kepala divisi', staff: 'Staff', viewer: 'Viewer' };
@@ -400,7 +401,13 @@ export function EmployeePage() {
   };
 
   const remove = async (emp) => {
-    if (!window.confirm(`Hapus data ${emp.full_name}? Akun yang sudah aktif tidak ikut terhapus.`)) return;
+    const ok = await confirmDialog({
+      title: `Hapus data ${emp.full_name}?`,
+      message: 'Data pribadi dan fotonya dihapus permanen. Akun Hive Colony yang sudah aktif tidak ikut terhapus.',
+      confirmLabel: 'Hapus data',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await supabase.from('hc_employees').delete().eq('id', emp.id);
     if (emp.photo_path) await supabase.storage.from(BUCKET).remove([emp.photo_path]);
     load();
@@ -412,7 +419,7 @@ export function EmployeePage() {
       await navigator.clipboard.writeText(link);
       say('Link undangan disalin.');
     } catch {
-      window.prompt('Salin link undangan ini:', link);
+      copyDialog({ title: 'Salin link undangan', message: 'Kirim link ini ke karyawan lewat WhatsApp atau email biasa.', value: link });
     }
   };
 

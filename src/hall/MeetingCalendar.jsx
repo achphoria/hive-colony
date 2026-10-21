@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../sim/auth';
 import { MONTH } from '../ui/hallData';
 import { go } from '../ui/nav';
+import { confirmDialog } from '../ui/dialog';
 import { startVideoMeeting } from './rtc/videoMeeting';
 import { useCloudflare } from './rtc/config';
 
@@ -125,7 +126,8 @@ export function MeetingCalendar({ onArchive }) {
     }
   };
   const remove = async (ev) => {
-    if (!window.confirm(`Hapus jadwal "${ev.title}"?`)) return;
+    const ok = await confirmDialog({ title: `Hapus jadwal “${ev.title}”?`, message: 'Jadwal ini hilang dari kalender semua staff.', confirmLabel: 'Hapus jadwal', tone: 'danger' });
+    if (!ok) return;
     await supabase.from('hc_meeting_events').delete().eq('id', ev.id);
     setSel(null);
     load();
